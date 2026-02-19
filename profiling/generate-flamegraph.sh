@@ -4,7 +4,7 @@ set -o pipefail
 
 WAIT_SECONDS=5
 RECORD_SECONDS=5
-USE_EU_STACK=true # true or false
+USE_EU_STACK=false # true or false
 UNWIND_METHOD=fp # dwarf or fp (frame pointer) 
 export DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
 
@@ -21,25 +21,20 @@ fi
 if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then 
         PID=$1
+    elif [[ $1 == steam && ! -z $(pidof steam) ]]; then 
+        pstree -aspT $(pidof steam)
+        read -p "Input steam game PID: " PID
     else 
-        "$@" >$HOME/steam-logs-original.txt 2>&1 & 
+        "$@" >$HOME/profiling-logs.txt 2>&1 & 
         PID=$!
-        echo "Detached target process $PID"
-    fi 
-    STEAM_PID=$PID 
-    while (( STEAM_PID > 1 )) && [[ $(readlink -f /proc/$STEAM_PID/exe 2>/dev/null) != */steam* ]]; do 
-        STEAM_PID=$(awk '/^PPid:/{print $2}' /proc/$STEAM_PID/status)
-    done 
-    if (( STEAM_PID > 1 )); then
-        pstree -aspT $PID 
-        #read -p "Input the game's real PID: " PID
+        echo "Detached process $PID"
     fi 
     
     # install debug symbols for PID
     if [[ ! -f /tmp/$(cat /proc/$PID/comm)-dbgsym-installed && ! -z $(which find-dbgsym-packages) ]]; then 
+        echo "Installing debug symbols for process $PID..."
         find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' | while read -r pkg; do
-            #sudo apt install -y $pkg 
-            echo $pkg 
+            sudo apt install -y $pkg && echo -e "    - $pkg\t[OK]" || echo -e "    - $pkg\t[FAILED]"
         done
         touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
     fi 
@@ -84,6 +79,6 @@ fi
 
 # wait for direct child to exit
 [[ ! -z ${PID-} && -d /proc/$PID && $(awk '{print $4}' /proc/$PID/stat 2>/dev/null) -eq $$ ]] && {
-    echo "Wait for child $PID to exit"
+    echo "Wait for process $PID to exit"
     wait $PID 
 }
