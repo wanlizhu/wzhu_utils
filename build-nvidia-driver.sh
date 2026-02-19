@@ -9,6 +9,7 @@ NV_TARGET_ARCH=$(uname -m | sed 's/x86_64/amd64/g')
 NV_TARGET_NAME=
 NV_BUILD_TYPE=develop
 NV_BUILD_JOBS=-j$(nproc)
+NV_VERBOSE=
 
 while (( $# )); do 
     case $1 in 
@@ -45,15 +46,20 @@ function unix_build_nvmake() {
         --devrel $NV_SOURCE/devrel/SDK/inc/GL \
         nvmake \
         NV_COLOR_OUTPUT=1 \
-        NV_GUARDWORD=0 \
         NV_COMPRESS_THREADS=$(nproc) \
+        NV_STRIP=0 \
+        NV_UNIX_CHECK_DEBUG_INFO=0 \
+        NV_GUARDWORD=0 \
         NV_MANGLE_SYMBOLS=0 \
+        NV_SYMBOLS=1 \
+        NV_FRAME_POINTER=1 \
         NV_TRACE_CODE=$([[ $NV_BUILD_TYPE == release ]] && echo 0 || echo 1) \
-        $NV_TARGET_OS $NV_TARGET_ARCH $NV_TARGET_NAME $NV_BUILD_TYPE $NV_BUILD_JOBS "$@" 
+        $NV_TARGET_OS $NV_TARGET_ARCH $NV_TARGET_NAME $NV_BUILD_TYPE $NV_BUILD_JOBS $NV_VERBOSE "$@" 
 }
 
 if ! unix_build_nvmake; then
     echo "Rebuild with option -j1"
     NV_BUILD_JOBS=-j1
+    NV_VERBOSE=verbose
     unix_build_nvmake || exit $?
 fi 
