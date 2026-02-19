@@ -34,7 +34,7 @@ if [[ ! -z $1 ]]; then
     if [[ ! -f /tmp/$(cat /proc/$PID/comm)-dbgsym-installed && ! -z $(which find-dbgsym-packages) ]]; then 
         echo "Installing debug symbols for process $PID..."
         find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' | while read -r pkg; do
-            sudo apt install -y $pkg && echo -e "    - $pkg\t[OK]" || echo -e "    - $pkg\t[FAILED]"
+            sudo apt install -y $pkg 
         done
         touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
     fi 
