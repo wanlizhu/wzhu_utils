@@ -9,53 +9,44 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 # patch ~/.bashrc
-[[ -z $(cat ~/.bashrc | grep nsight_systems) ]] && echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep P4PORT) ]] && echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep P4USER) ]] && echo "export P4USER=wanliz" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep P4CLIENT) ]] && echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep P4ROOT) ]] && echo "export P4ROOT=$HOME/sw" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep P4IGNORE) ]] && echo "export P4IGNORE=$HOME/.p4ignore" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep __GL_SYNC_TO_VBLANK) ]] && echo "export __GL_SYNC_TO_VBLANK=0" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep vblank_mode) ]] && echo "export vblank_mode=0" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep NVM_GTLAPI_TOKEN) ]] && echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep 'nsys-ui()') ]] && echo '
-if command -v nsys-ui >/dev/null 2>&1; then
-    nsys-ui() {
-        if [[ $XDG_SESSION_TYPE == wayland || -n $WAYLAND_DISPLAY ]]; then
-            QT_QPA_PLATFORM=xcb QT_OPENGL=desktop command nsys-ui "$@"
-        else
-            command nsys-ui "$@"
-        fi
-    }
-fi
-' >>~/.bashrc
-[[ -z $(cat ~/.bashrc | grep 'list-login-sessions()') ]] && echo '
+if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
+    echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
+fi 
+if [[ ! -f ~/nvidia-profiling.sh ]]; then 
+    echo '#!/bin/bash' >~/nvidia-profiling.sh
+    echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
+    echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
+    echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+    echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
+    echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
+    echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
+    echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
+    echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
+    echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
+    cat >>~/nvidia-profiling.sh <<'EOF'
 list-login-sessions() {
-    printf '%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n' "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
-    loginctl list-sessions --no-legend | while read -r sid uid user seat tty state idle _; do
-    type=$(loginctl show-session "$sid" -p Type --value)
-    printf '%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n' "$sid" "$uid" "$user" "$seat" "$tty" "$state" "$idle" "$type"
+    printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
+    loginctl list-sessions --no-legend | 
+    while read -r sid uid user seat tty state idle _; do
+        type=$(loginctl show-session $sid -p Type --value)
+        printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "$sid" "$uid" "$user" "$seat" "$tty" "$state" "$idle" "$type"
     done
 }
-' >>~/.bashrc
-
-# set kernel params
-find_modprobe_param() {
-    while IFS= read -r conf_file; do 
-        [[ ! -f $conf_file ]] && continue 
-        if grep -Fq -- "$1" $conf_file; then 
-            echo $conf_file
-        fi 
-    done < <(find /etc/modprobe.d -type f)
+get_login_session_type() {
+    local active_sid
+    active_sid=$(
+        while read -r session; do
+            seat=$(loginctl show-session $session -p Seat --value)
+            state=$(loginctl show-session $session -p State --value)
+            if [[ $seat == seat0 && $state == active ]]; then
+                echo $session
+                return 0
+            fi
+        done < <(loginctl list-sessions --no-legend | awk '{print $1}')
+        return 1
+  ) || return 1
+  loginctl show-session $active_sid -p Type --value
 }
-modprobe_param_changed=false
-[[ -z $(find_modprobe_param "NVreg_RestrictProfilingToAdminUsers=0") ]] && echo 'options nvidia NVreg_RegistryDwords="RmProfilerFeature=0x1" NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf && modprobe_param_changed=true
-[[ -z $(find_modprobe_param "nvidia-drm modeset=1") ]] && echo 'options nvidia-drm modeset=1' | sudo tee /etc/modprobe.d/nvidia-drm.conf && modprobe_param_changed=true
-if [[ $modprobe_param_changed == true ]]; then 
-    sudo update-initramfs -u -k all 
-fi 
-
-# install missing packages
 find_or_install() {
     if (( $# )); then
         while (( $# )); do 
@@ -69,6 +60,23 @@ find_or_install() {
         done
     fi 
 }
+EOF
+fi 
+source ~/.bashrc  
+
+# set kernel params
+if [[ ! -f /etc/modprobe.d/nvidia-profiling.conf ]]; then
+    echo 'options nvidia NVreg_RegistryDwords="RmProfilerFeature=0x1" NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf >/dev/null
+    echo 'options nvidia-drm modeset=1' | sudo tee -a /etc/modprobe.d/nvidia-profiling.conf >/dev/null
+    sudo update-initramfs -u -k all 
+fi 
+if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
+    echo 'kernel.perf_event_paranoid = 0' | sudo tee /etc/sysctl.d/99-profiling.conf >/dev/null
+    echo 'kernel.kptr_restrict = 0' | sudo tee -a /etc/sysctl.d/99-profiling.conf >/dev/null
+    sudo sysctl -p /etc/sysctl.d/99-profiling.conf
+fi 
+
+# install missing packages
 find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file
 [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]] && echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
@@ -83,23 +91,20 @@ if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then
     dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  find_or_install
 fi 
 
-# enable gnome remote desktop 
-if ! sudo ss -ltnp | grep -qE ':3389\b'; then 
-    find_or_install gnome-remote-desktop openssl
+# enable gnome remote desktop for wayland
+if [[ $(get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':3389\b'; then 
+    find_or_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
     cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
     cert_key=$cert_dir/rdp-tls.key
     cert_crt=$cert_dir/rdp-tls.crt
-
     sudo install -d -m 0700 $cert_dir
     sudo chown -R gnome-remote-desktop:gnome-remote-desktop /var/lib/gnome-remote-desktop/.local
-
     if [[ ! -s $cert_key || ! -s $cert_crt ]]; then 
         sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout $cert_key -out $cert_crt -days 3650 -subj "/CN=$(hostname -f)"
         sudo chmod 0600 $cert_key
         sudo chmod 0644 $cert_crt
         sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
     fi 
-
     sudo openssl x509 -in $cert_crt -noout >/dev/null || echo "Bad certificate"
     sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
     sudo grdctl --system rdp set-tls-key $cert_key
@@ -116,4 +121,3 @@ if ! sudo ss -ltnp | grep -qE ':3389\b'; then
         sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
     }
 fi 
-find_or_install remmina remmina-plugin-rdp freerdp2-x11
