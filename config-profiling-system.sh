@@ -4,9 +4,15 @@ set -o pipefail
 
 # enable passwordless sudo 
 if ! sudo -n true 2>/dev/null; then 
-    echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
+    echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
     sudo chmod 0440 /etc/sudoers.d/99-$(id -un)-nopasswd
+    sudo visudo -cf /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
 fi
+
+# disable firewall 
+if systemctl is-active ufw >/dev/null 2>&1; then
+    sudo ufw disable 
+fi 
 
 # patch ~/.bashrc
 if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
@@ -24,7 +30,7 @@ if [[ ! -f ~/nvidia-profiling.sh ]]; then
     echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
     echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
     cat >>~/nvidia-profiling.sh <<'EOF'
-list-login-sessions() {
+zhu_list_login_sessions() {
     printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
     loginctl list-sessions --no-legend | 
     while read -r sid uid user seat tty state idle _; do
@@ -32,7 +38,7 @@ list-login-sessions() {
         printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "$sid" "$uid" "$user" "$seat" "$tty" "$state" "$idle" "$type"
     done
 }
-get_login_session_type() {
+zhu_get_login_session_type() {
     local active_sid
     active_sid=$(
         while read -r session; do
@@ -47,7 +53,7 @@ get_login_session_type() {
   ) || return 1
   loginctl show-session $active_sid -p Type --value
 }
-find_or_install() {
+zhu_install() {
     if (( $# )); then
         while (( $# )); do 
             dpkg -s $1 &>/dev/null || sudo apt install -y $1 
@@ -59,6 +65,31 @@ find_or_install() {
             dpkg -s $pkg &>/dev/null || sudo apt install -y $pkg
         done
     fi 
+}
+zhu_mount() {
+    local remote_dir=$1
+    local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
+    sudo mkdir -p $local_dir
+    sudo mount -t nfs $remote_dir $local_dir 
+    findmnt -T $local_dir
+}
+zhu_mount_permanent() {
+    local remote_dir=$1
+    local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
+    local fstab_line="$remote_dir $local_dir nfs soft,intr,nofail,x-systemd.automount,x-systemd.device-timeout=10s,_netdev 0 0"
+    if ! findmnt -rn -o TARGET | grep -qxF $local_dir; then
+        sudo awk -v mnt=$local_dir '{
+    norm=$0
+    sub(/^[[:space:]]*(#[[:space:]]*)*/, "", norm)
+    n=split(norm, f, /[[:space:]]+/)
+    if (n >= 2 && f[2] == mnt) next
+    print
+  }' /etc/fstab | sudo tee /etc/fstab >/dev/null
+        sudo mkdir -p $local_dir
+        echo "$fstab_line" | sudo tee -a /etc/fstab >/dev/null
+    fi
+    sudo mount -a
+    findmnt -T $local_dir
 }
 EOF
 fi 
@@ -76,24 +107,27 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
     sudo sysctl -p /etc/sysctl.d/99-profiling.conf
 fi 
 
-# install missing packages
-find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file
-[[ ! -f /etc/apt/sources.list.d/ddebs.sources ]] && echo "Types: deb
+# install required packages
+if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
+    echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
 Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
 Components: main restricted universe multiverse
-Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources && sudo apt update && sudo apt upgrade 
-find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang
+Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
+    sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+fi 
+sudo apt update && sudo apt upgrade 
+zhu_install debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools nfs-common
 
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
-    find_or_install libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  find_or_install
+    zhu_install libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
+    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  zhu_install
 fi 
 
 # enable gnome remote desktop for wayland
-if [[ $(get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':3389\b'; then 
-    find_or_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+if [[ $(zhu_get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':3389\b'; then 
+    zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
     cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
     cert_key=$cert_dir/rdp-tls.key
     cert_crt=$cert_dir/rdp-tls.crt
@@ -120,4 +154,14 @@ if [[ $(get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':33
         sudo systemctl status gnome-remote-desktop.service --no-pager
         sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
     }
+fi
+
+# enable ssh server
+if ! systemctl is-active ssh || !systemctl is-enabled ssh; then 
+    zhu_install openssh-server 
+    sudo systemctl enable ssh 
+    sudo systemctl start ssh
 fi 
+
+# mount data dirs
+zhu_mount_permanent linuxqa:/qa/people /mnt/linuxqa
