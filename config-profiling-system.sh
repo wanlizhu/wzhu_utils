@@ -179,7 +179,7 @@ if [[ $(zhu_get_login_session_type) == wayland ]]; then
 fi
 
 # enable ssh server
-if ! systemctl is-active ssh || !systemctl is-enabled ssh; then 
+if ! systemctl is-active ssh || ! systemctl is-enabled ssh; then 
     zhu_install openssh-server 
     sudo systemctl enable ssh 
     sudo systemctl start ssh
