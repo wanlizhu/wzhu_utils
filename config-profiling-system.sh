@@ -90,24 +90,6 @@ zhu_mount() {
     sudo mount -t nfs $remote_dir $local_dir 
     findmnt -T $local_dir
 }
-zhu_mount_permanent() {
-    local remote_dir=$1
-    local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
-    local fstab_line="$remote_dir $local_dir nfs soft,intr,nofail,x-systemd.automount,x-systemd.device-timeout=10s,_netdev 0 0"
-    if ! findmnt -rn -o TARGET | grep -qxF $local_dir; then
-        sudo awk -v mnt=$local_dir '{
-    norm=$0
-    sub(/^[[:space:]]*(#[[:space:]]*)*/, "", norm)
-    n=split(norm, f, /[[:space:]]+/)
-    if (n >= 2 && f[2] == mnt) next
-    print
-  }' /etc/fstab | sudo tee /etc/fstab >/dev/null
-        sudo mkdir -p $local_dir
-        echo "$fstab_line" | sudo tee -a /etc/fstab >/dev/null
-    fi
-    sudo mount -a
-    findmnt -T $local_dir
-}
 EOF
 fi 
 source ~/.bashrc  
@@ -199,4 +181,4 @@ if ! systemctl is-active ssh || !systemctl is-enabled ssh; then
 fi 
 
 # mount data dirs
-zhu_mount_permanent linuxqa:/qa/people /mnt/linuxqa
+zhu_mount linuxqa:/qa/people /mnt/linuxqa
