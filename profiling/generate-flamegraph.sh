@@ -2,7 +2,7 @@
 # for steam launch options: gnome-terminal -- bash -lc '$HOME/wanliz_tools/profiling/generate-flamegraph.sh %command% > $HOME/steam-logs.txt'
 set -o pipefail 
 
-WAIT_SECONDS=5
+WAIT_SECONDS=3
 RECORD_SECONDS=5
 USE_EU_STACK=false # true or false
 UNWIND_METHOD=fp # dwarf or fp (frame pointer) 
