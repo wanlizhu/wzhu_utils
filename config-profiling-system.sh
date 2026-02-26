@@ -54,16 +54,24 @@ zhu_get_login_session_type() {
   loginctl show-session $active_sid -p Type --value
 }
 zhu_install() {
+    local required_pkgs=()
+    local failed_pkgs=()
     if (( $# )); then
-        while (( $# )); do 
-            dpkg -s $1 &>/dev/null || sudo apt install -y $1 
-            shift 
-        done 
+        required_pkgs=("$@")
     else # read from stdin
         while IFS= read -r pkg; do
             [[ -z $pkg ]] && continue
-            dpkg -s $pkg &>/dev/null || sudo apt install -y $pkg
+            required_pkgs+=("$pkg")
         done
+    fi 
+    for pkg in "${required_pkgs[@]}"; do 
+        dpkg -s $pkg &>/dev/null && continue 
+        sudo apt install -y $pkg || failed_pkgs+=("$pkg")
+    done 
+    if (( ${#failed_pkgs[@]} )); then
+        for pkg in "${failed_pkgs[@]}"; do 
+            
+        done 
     fi 
 }
 zhu_mount() {
@@ -129,11 +137,13 @@ fi
 if [[ $(zhu_get_login_session_type) == wayland ]]; then
     # wayland: install gamescope
     if [[ -z $(which gamescope) ]]; then 
-        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev
+        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev libxtst-dev libxres-dev libxmu-dev libdrm-dev libeis-dev libsystemd-dev libxkbcommon-dev libcap-dev libepoll-shim-dev libsdl2-dev libavif-dev libpixman-1-dev libseat-dev libinput-dev libxcb-composite0-dev libxcb-ewmh-dev libglm-dev libxcb-icccm4-dev libxcb-res0-dev libdisplay-info-dev libxcb-errors-dev libstb-dev libepoll-shim-dev libstd-dev 
         pushd $HOME >/dev/null  
         git clone --recursive https://github.com/ValveSoftware/gamescope.git 
         cd gamescope
-        git checkout --recurse-submodules 3.16.20
+        if [[ $(lsb_release -rs) == 24.04 ]]; then 
+            git checkout --recurse-submodules 3.14.24
+        fi 
         git submodule update --init --recursive
         meson setup build 
         ninja -C build
