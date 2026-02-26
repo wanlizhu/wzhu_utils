@@ -79,7 +79,7 @@ zhu_install() {
                 sudo apt -f install -y
                 popd >/dev/null 
             ;;
-            echo "Todo: fallback build of $pkg"
+            *) echo "Todo: fallback build of $pkg" ;;
         done 
     fi 
 }
