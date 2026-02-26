@@ -117,7 +117,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
 sudo apt update && sudo apt upgrade 
-zhu_install debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools nfs-common
+zhu_install debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common 
 
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
@@ -125,35 +125,51 @@ if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then
     dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  zhu_install
 fi 
 
-# enable gnome remote desktop for wayland
-if [[ $(zhu_get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':3389\b'; then 
-    zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
-    cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
-    cert_key=$cert_dir/rdp-tls.key
-    cert_crt=$cert_dir/rdp-tls.crt
-    sudo install -d -m 0700 $cert_dir
-    sudo chown -R gnome-remote-desktop:gnome-remote-desktop /var/lib/gnome-remote-desktop/.local
-    if [[ ! -s $cert_key || ! -s $cert_crt ]]; then 
-        sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout $cert_key -out $cert_crt -days 3650 -subj "/CN=$(hostname -f)"
-        sudo chmod 0600 $cert_key
-        sudo chmod 0644 $cert_crt
-        sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
+# config wayland
+if [[ $(zhu_get_login_session_type) == wayland ]]; then
+    # wayland: install gamescope
+    if [[ -z $(which gamescope) ]]; then 
+        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev
+        pushd $HOME >/dev/null  
+        git clone --recursive https://github.com/ValveSoftware/gamescope.git 
+        cd gamescope
+        git checkout --recurse-submodules 3.16.20
+        git submodule update --init --recursive
+        meson setup build 
+        ninja -C build
+        sudo meson install -C build 
+        popd >/dev/null 
     fi 
-    sudo openssl x509 -in $cert_crt -noout >/dev/null || echo "Bad certificate"
-    sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
-    sudo grdctl --system rdp set-tls-key $cert_key
-    sudo grdctl --system rdp set-tls-cert $cert_crt
-    sudo grdctl --system rdp set-credentials wanliz zhujie
-    sudo grdctl --system rdp enable
-    sudo ufw disable || sudo ufw allow 3389/tcp 
-    sudo systemctl daemon-reload
-    sudo systemctl restart gnome-remote-desktop.service
-    sudo grdctl --system status
-    sudo ss -ltnp | grep -E ':3389\b' || {
-        echo "RDP server is not listening on TCP/3389"
-        sudo systemctl status gnome-remote-desktop.service --no-pager
-        sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
-    }
+    # wayland: enable gnome remote desktop
+    if ! sudo ss -ltnp | grep -qE ':3389\b'; then
+        zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+        cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
+        cert_key=$cert_dir/rdp-tls.key
+        cert_crt=$cert_dir/rdp-tls.crt
+        sudo install -d -m 0700 $cert_dir
+        sudo chown -R gnome-remote-desktop:gnome-remote-desktop /var/lib/gnome-remote-desktop/.local
+        if [[ ! -s $cert_key || ! -s $cert_crt ]]; then 
+            sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout $cert_key -out $cert_crt -days 3650 -subj "/CN=$(hostname -f)"
+            sudo chmod 0600 $cert_key
+            sudo chmod 0644 $cert_crt
+            sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
+        fi 
+        sudo openssl x509 -in $cert_crt -noout >/dev/null || echo "Bad certificate"
+        sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
+        sudo grdctl --system rdp set-tls-key $cert_key
+        sudo grdctl --system rdp set-tls-cert $cert_crt
+        sudo grdctl --system rdp set-credentials wanliz zhujie
+        sudo grdctl --system rdp enable
+        sudo ufw disable || sudo ufw allow 3389/tcp 
+        sudo systemctl daemon-reload
+        sudo systemctl restart gnome-remote-desktop.service
+        sudo grdctl --system status
+        sudo ss -ltnp | grep -E ':3389\b' || {
+            echo "RDP server is not listening on TCP/3389"
+            sudo systemctl status gnome-remote-desktop.service --no-pager
+            sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
+        }
+    fi 
 fi
 
 # enable ssh server
