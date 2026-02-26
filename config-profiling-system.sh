@@ -17,6 +17,10 @@ fi
 # patch ~/.bashrc
 if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
     echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
+fi
+if [[ -f ~/nvidia-profiling.sh ]]; then 
+    read -p "Overwrite existing ~/nvidia-profiling.sh? [Y/n]: " overwrite
+    [[ -z $overwrite || $overwrite == y ]] && sudo rm -rf ~/nvidia-profiling.sh
 fi 
 if [[ ! -f ~/nvidia-profiling.sh ]]; then 
     echo '#!/bin/bash' >~/nvidia-profiling.sh
