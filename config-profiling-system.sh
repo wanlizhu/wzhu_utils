@@ -70,6 +70,15 @@ zhu_install() {
     done 
     if (( ${#failed_pkgs[@]} )); then
         for pkg in "${failed_pkgs[@]}"; do 
+            libxcb-errors*) 
+                pushd /tmp >/dev/null 
+                baseurl=http://archive.ubuntu.com/ubuntu/pool/universe/x/xcb-util-errors
+                wget -O libxcb-errors0.deb     $baseurl/libxcb-errors0_1.0.1-4build1_amd64.deb
+                wget -O libxcb-errors-dev.deb  $baseurl/libxcb-errors-dev_1.0.1-4build1_amd64.deb
+                sudo dpkg -i libxcb-errors0.deb libxcb-errors-dev.deb
+                sudo apt -f install -y
+                popd >/dev/null 
+            ;;
             echo "Todo: fallback build of $pkg"
         done 
     fi 
@@ -137,7 +146,7 @@ fi
 if [[ $(zhu_get_login_session_type) == wayland ]]; then
     # wayland: install gamescope
     if [[ -z $(which gamescope) ]]; then 
-        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev libxtst-dev libxres-dev libxmu-dev libdrm-dev libeis-dev libsystemd-dev libxkbcommon-dev libcap-dev libepoll-shim-dev libsdl2-dev libavif-dev libpixman-1-dev libseat-dev libinput-dev libxcb-composite0-dev libxcb-ewmh-dev libglm-dev libxcb-icccm4-dev libxcb-res0-dev libdisplay-info-dev libxcb-errors-dev libstb-dev libepoll-shim-dev libstd-dev 
+        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev libxtst-dev libxres-dev libxmu-dev libdrm-dev libeis-dev libsystemd-dev libxkbcommon-dev libcap-dev libepoll-shim-dev libsdl2-dev libavif-dev libpixman-1-dev libseat-dev libinput-dev libxcb-composite0-dev libxcb-ewmh-dev libglm-dev libxcb-icccm4-dev libxcb-res0-dev libdisplay-info-dev libxcb-errors-dev libstb-dev libepoll-shim-dev libstd-dev libbenchmark-dev
         pushd $HOME >/dev/null  
         git clone --recursive https://github.com/ValveSoftware/gamescope.git 
         cd gamescope
@@ -145,8 +154,8 @@ if [[ $(zhu_get_login_session_type) == wayland ]]; then
             git checkout --recurse-submodules 3.14.24
         fi 
         git submodule update --init --recursive
-        meson setup build 
-        ninja -C build
+        meson setup build --buildtype=release --reconfigure 
+        meson compile -C build
         sudo meson install -C build 
         popd >/dev/null 
     fi 
