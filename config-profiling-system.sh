@@ -70,7 +70,7 @@ zhu_install() {
     done 
     if (( ${#failed_pkgs[@]} )); then
         for pkg in "${failed_pkgs[@]}"; do 
-            
+            echo "Todo: fallback build of $pkg"
         done 
     fi 
 }
