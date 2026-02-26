@@ -90,6 +90,9 @@ zhu_mount() {
     sudo mount -t nfs $remote_dir $local_dir 
     findmnt -T $local_dir
 }
+zhu_steam_pstree() {
+    pstree -aspT $(pidof steam)
+}
 EOF
 fi 
 source ~/.bashrc  
