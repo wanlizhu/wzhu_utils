@@ -97,7 +97,7 @@ zhu_steam_pstree() {
 }
 EOF
 fi 
-source ~/.bashrc  
+source ~/nvidia-profiling.sh
 
 # set kernel params
 if [[ ! -f /etc/modprobe.d/nvidia-profiling.conf ]]; then
