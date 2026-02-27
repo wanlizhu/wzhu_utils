@@ -19,21 +19,19 @@ if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then
     echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
 fi
 if [[ -f ~/nvidia-profiling.sh ]]; then 
-    read -p "Overwrite existing ~/nvidia-profiling.sh? [Y/n]: " overwrite
-    [[ -z $overwrite || $overwrite == y ]] && sudo rm -rf ~/nvidia-profiling.sh
+    sudo mv -f ~/nvidia-profiling.sh /tmp/nvidia-profiling.sh.old 
 fi 
-if [[ ! -f ~/nvidia-profiling.sh ]]; then 
-    echo '#!/bin/bash' >~/nvidia-profiling.sh
-    echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
-    echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-    echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
-    echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
-    echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
-    echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
-    echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
-    echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
-    echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
-    cat >>~/nvidia-profiling.sh <<'EOF'
+echo '#!/bin/bash' >~/nvidia-profiling.sh
+echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
+echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
+echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
+echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
+echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
+echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
+echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
+cat >>~/nvidia-profiling.sh <<'EOF'
 zhu_list_login_sessions() {
     printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
     loginctl list-sessions --no-legend | 
@@ -92,11 +90,6 @@ zhu_install() {
 zhu_mount() {
     local remote_dir=$1
     local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
-<<<<<<< HEAD
-    sudo mkdir -p $local_dir
-    sudo mount -t nfs $remote_dir $local_dir 
-    findmnt -T $local_dir
-=======
     if ! findmnt -rn -T $local_dir >/dev/null; then
         sudo mkdir -p $local_dir
         sudo mount -t nfs $remote_dir $local_dir 
@@ -105,10 +98,8 @@ zhu_mount() {
 }
 zhu_steam_pstree() {
     pstree -aspT $(pidof steam)
->>>>>>> db201b81f7f7d9adcd8ba0d859e84092b882b760
 }
 EOF
-fi 
 source ~/nvidia-profiling.sh
 
 # set kernel params
@@ -141,38 +132,8 @@ if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then
     dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  zhu_install
 fi 
 
-<<<<<<< HEAD
-# enable gnome remote desktop for wayland
-if [[ $(zhu_get_login_session_type) == wayland ]] && ! sudo ss -ltnp | grep -qE ':3389\b'; then 
-    zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11 libwayland-server0
-    cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
-    cert_key=$cert_dir/rdp-tls.key
-    cert_crt=$cert_dir/rdp-tls.crt
-    sudo install -d -m 0700 $cert_dir
-    sudo chown -R gnome-remote-desktop:gnome-remote-desktop /var/lib/gnome-remote-desktop/.local
-    if [[ ! -s $cert_key || ! -s $cert_crt ]]; then 
-        sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout $cert_key -out $cert_crt -days 3650 -subj "/CN=$(hostname -f)"
-        sudo chmod 0600 $cert_key
-        sudo chmod 0644 $cert_crt
-        sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
-=======
 # config wayland
 if [[ $(zhu_get_login_session_type) == wayland ]]; then
-    # wayland: install gamescope
-    if [[ -z $(which gamescope) ]]; then 
-        zhu_install libwayland-dev wayland-protocols libpipewire-0.3-dev libx11-xcb-dev libxcb1-dev libx11-dev libxdamage-dev libxcomposite-dev libxcursor-dev libxxf86vm-dev libxtst-dev libxres-dev libxmu-dev libdrm-dev libeis-dev libsystemd-dev libxkbcommon-dev libcap-dev libepoll-shim-dev libsdl2-dev libavif-dev libpixman-1-dev libseat-dev libinput-dev libxcb-composite0-dev libxcb-ewmh-dev libglm-dev libxcb-icccm4-dev libxcb-res0-dev libdisplay-info-dev libxcb-errors-dev libstb-dev libepoll-shim-dev libstd-dev libbenchmark-dev
-        pushd $HOME >/dev/null  
-        git clone --recursive https://github.com/ValveSoftware/gamescope.git 
-        cd gamescope
-        if [[ $(lsb_release -rs) == 24.04 ]]; then 
-            git checkout --recurse-submodules 3.14.24
-        fi 
-        git submodule update --init --recursive
-        meson setup build --buildtype=release --reconfigure 
-        meson compile -C build
-        sudo meson install -C build 
-        popd >/dev/null 
-    fi 
     # wayland: enable gnome remote desktop
     if ! sudo ss -ltnp | grep -qE ':3389\b'; then
         zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
@@ -202,7 +163,6 @@ if [[ $(zhu_get_login_session_type) == wayland ]]; then
             sudo systemctl status gnome-remote-desktop.service --no-pager
             sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
         }
->>>>>>> db201b81f7f7d9adcd8ba0d859e84092b882b760
     fi 
 fi
 
