@@ -2,12 +2,11 @@
 # for steam launch options: gnome-terminal -- bash -lc '$HOME/wanliz_tools/profiling/generate-flamegraph.sh %command% > $HOME/steam-logs.txt'
 set -o pipefail 
 
-export DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
+WAIT_SECONDS=5
+RECORD_SECONDS=5
 USE_EU_STACK=false # true or false
 UNWIND_METHOD=fp # dwarf or fp (frame pointer) 
-WAIT_SECONDS=0
-RECORD_SECONDS=10
-RECORD_FREQ=max # max or num in Hz
+export DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
 
 if ! sudo -n true 2>/dev/null; then 
     echo "NOPASSWD is NOT enabled for $(id -un)"
@@ -68,7 +67,7 @@ else # per process recording
         done 
     else
         sudo rm -rf /tmp/perf.data $HOME/perf.svg 
-        sudo --preserve-env=DEBUGINFOD_URLS perf record -p $PID -F $RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
+        sudo --preserve-env=DEBUGINFOD_URLS perf record -p $PID -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
     fi 
 fi 
 
