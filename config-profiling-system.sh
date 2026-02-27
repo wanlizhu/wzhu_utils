@@ -102,6 +102,7 @@ if [[ $(list-login-session.sh -t0) == wayland ]]; then
         sudo ufw disable || sudo ufw allow 3389/tcp 
         sudo systemctl daemon-reload
         sudo systemctl restart gnome-remote-desktop.service
+        echo "Wait for 3 seconds" && sleep 3
         sudo grdctl --system status
         sudo ss -ltnp | grep -E ':3389\b' || {
             echo "RDP server is not listening on TCP/3389"

@@ -8,6 +8,17 @@ UNWIND_METHOD=dwarf # dwarf or fp (frame pointer)
 INSTALL_DEBUG_SYMBOL=true 
 export DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
 
+while (( $# )); do 
+    case $1 in 
+        -wait=*) WAIT_SECONDS=${1#-wait=} ;;
+        -record=*) RECORD_SECONDS=${1#-record=} ;;
+        -unwind=*) UNWIND_METHOD=${1#-unwind=} ;;
+        -dbgsym=*) INSTALL_DEBUG_SYMBOL=${1#-dbgsym=} ;;
+        *) break ;;
+    esac 
+    shift 
+done 
+
 if ! sudo -n true 2>/dev/null; then 
     echo "NOPASSWD is NOT enabled for $(id -un)"
     echo "Aborting"
@@ -54,17 +65,18 @@ if (( WAIT_SECONDS > 0 )); then
 fi 
 
 if [[ -z $1 ]]; then # system-wide recording
+    echo "System-wide recording is scheduled for $RECORD_SECONDS seconds"
     sudo rm -rf /tmp/perf.data $HOME/perf.svg 
     sudo --preserve-env=DEBUGINFOD_URLS perf record -a -F $RECORD_FREQ -e sched:sched_switch -e sched:sched_wakeup  -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS
 else # per process recording
     pstree -aspT $PID 
     pidstat -t -p $PID
-    echo "Recording PID $PID for $RECORD_SECONDS seconds..."
+    echo "Recording PID $PID for $RECORD_SECONDS seconds"
     sudo rm -rf /tmp/perf.data $HOME/perf.svg 
     sudo --preserve-env=DEBUGINFOD_URLS perf record -p $PID -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
 fi 
 
-# flamegraph post process /tmp/perf.data
+# flamegraph post process for /tmp/perf.data
 if [[ -f /tmp/perf.data ]]; then 
     sudo --preserve-env=DEBUGINFOD_URLS perf script -i /tmp/perf.data >/tmp/perf.txt
     chmod 666 /tmp/perf.txt
