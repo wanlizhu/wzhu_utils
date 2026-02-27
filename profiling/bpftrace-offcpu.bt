@@ -1,0 +1,70 @@
+#!/usr/bin/env bpftrace
+
+/*
+  Input (passed via -v):
+    pid        (required) target tgid
+    duration   (required) seconds to run
+    dso        (required) absolute path to DSO containing symbol
+    symbol     (required) symbol to scope to
+
+  Output (folded, per-thread):
+    tid<TAB>frameA;frameB;...<SPACE>blocked_us
+*/
+
+BEGIN
+{
+  printf("bpftrace-offcpu: pid=%d duration=%d dso=%s symbol=%s\n", pid, duration, str(dso), str(symbol));
+  @secs = 0;
+}
+
+uprobe:dso:symbol
+/pid == pid/
+{
+  @depth[tid] = @depth[tid] + 1;
+}
+
+uretprobe:dso:symbol
+/pid == pid && @depth[tid]/
+{
+  @depth[tid] = @depth[tid] - 1;
+  if (@depth[tid] <= 0) delete(@depth[tid]);
+}
+
+/* switched out while in-scope: remember time + user stack */
+tracepoint:sched:sched_switch
+/args->prev_pid && @depth[args->prev_pid]/
+{
+  $t = args->prev_pid;
+  @t0[$t] = nsecs;
+  @u0[$t] = ustack;
+}
+
+/* switched in: attribute delta to the stack captured at switch-out */
+tracepoint:sched:sched_switch
+/args->next_pid && @t0[args->next_pid]/
+{
+  $t = args->next_pid;
+  $dt_us = (nsecs - @t0[$t]) / 1000;
+
+  @offcpu[$t, @u0[$t]] = sum($dt_us);
+
+  delete(@t0[$t]);
+  delete(@u0[$t]);
+}
+
+interval:s:1
+{
+  @secs = @secs + 1;
+  if (@secs >= duration) exit();
+}
+
+END
+{
+  /* Print in a parse-friendly format */
+  printf("=== folded begin ===\n");
+  foreach ([t, st] in @offcpu) {
+    /* bpftrace prints stacks as "[a, b, c]"; we rely on wrapper to normalize */
+    printf("%d\t%s %lld\n", t, st, @offcpu[t, st]);
+  }
+  printf("=== folded end ===\n");
+}

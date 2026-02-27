@@ -48,6 +48,20 @@ if [[ ! -z $1 ]]; then
             touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
         fi 
     fi 
+
+    # find dso path for specified symbol
+    if [[ -z $SCOPED_DSO ]]; then 
+        awk '{ print $6 }' /proc/$PID/maps 2>/dev/null | grep -E '^/' | sort -u | grep -E '\.so(\.|$)|/[^/]+$' | while read -r dso; do
+            nm -D --defined-only $dso 2>/dev/null | awk '{ print $3 }' | grep -qx $SCOPED_SYMBOL || continue
+            SCOPED_DSO=$dso
+            echo "Found $SCOPED_SYMBOL in $SCOPED_DSO"
+        done
+        if [[ -z $SCOPED_DSO ]]; then 
+            echo "Failed to find $SCOPED_SYMBOL in /proc/$PID/maps"
+            echo "Aborting"
+            exit 1
+        fi 
+    fi 
 else
     echo "System-wide offcpu recording is not supported"
     echo "Aborting"
