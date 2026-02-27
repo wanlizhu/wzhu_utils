@@ -2,10 +2,9 @@
 # for steam launch options: gnome-terminal -- bash -lc '$HOME/wanliz_tools/profiling/generate-flamegraph.sh %command% > $HOME/steam-logs.txt'
 set -o pipefail 
 
-WAIT_SECONDS=3
+WAIT_SECONDS=5
 RECORD_SECONDS=5
-USE_EU_STACK=false # true or false
-UNWIND_METHOD=fp # dwarf or fp (frame pointer) 
+UNWIND_METHOD=dwarf # dwarf or fp (frame pointer) 
 export DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
 
 if ! sudo -n true 2>/dev/null; then 
@@ -51,17 +50,8 @@ if [[ -z $1 ]]; then # system-wide recording
 else # per process recording
     pstree -aspT $PID 
     echo "Recording PID $PID for $RECORD_SECONDS seconds..."
-    if [[ $USE_EU_STACK == true ]]; then 
-        SECONDS=0
-        sudo rm -rf /tmp/eu-stack.data $HOME/eu-stack.svg 
-        while kill -0 $PID 2>/dev/null; do 
-            sudo eu-stack -p $PID >>/tmp/eu-stack.data
-            (( SECONDS >= RECORD_SECONDS )) && break 
-        done 
-    else
-        sudo rm -rf /tmp/perf.data $HOME/perf.svg 
-        sudo --preserve-env=DEBUGINFOD_URLS perf record -p $PID -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
-    fi 
+    sudo rm -rf /tmp/perf.data $HOME/perf.svg 
+    sudo --preserve-env=DEBUGINFOD_URLS perf record -p $PID -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
 fi 
 
 # post process /tmp/perf.data
