@@ -24,7 +24,7 @@ fi
 echo '#!/bin/bash' >~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
 echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
@@ -32,61 +32,6 @@ echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
 cat >>~/nvidia-profiling.sh <<'EOF'
-zhu_list_login_sessions() {
-    printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
-    loginctl list-sessions --no-legend | 
-    while read -r sid uid user seat tty state idle _; do
-        type=$(loginctl show-session $sid -p Type --value)
-        printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "$sid" "$uid" "$user" "$seat" "$tty" "$state" "$idle" "$type"
-    done
-}
-zhu_get_login_session_type() {
-    local active_sid
-    active_sid=$(
-        while read -r session; do
-            seat=$(loginctl show-session $session -p Seat --value)
-            state=$(loginctl show-session $session -p State --value)
-            if [[ $seat == seat0 && $state == active ]]; then
-                echo $session
-                return 0
-            fi
-        done < <(loginctl list-sessions --no-legend | awk '{print $1}')
-        return 1
-  ) || return 1
-  loginctl show-session $active_sid -p Type --value
-}
-zhu_install() {
-    local required_pkgs=()
-    local failed_pkgs=()
-    if (( $# )); then
-        required_pkgs=("$@")
-    else # read from stdin
-        while IFS= read -r pkg; do
-            [[ -z $pkg ]] && continue
-            required_pkgs+=("$pkg")
-        done
-    fi 
-    for pkg in "${required_pkgs[@]}"; do 
-        dpkg -s $pkg &>/dev/null && continue 
-        sudo apt install -y $pkg || failed_pkgs+=("$pkg")
-    done 
-    if (( ${#failed_pkgs[@]} )); then
-        for pkg in "${failed_pkgs[@]}"; do 
-            case $pkg in 
-                libxcb-errors*) 
-                    pushd /tmp >/dev/null 
-                    baseurl=http://archive.ubuntu.com/ubuntu/pool/universe/x/xcb-util-errors
-                    wget -O libxcb-errors0.deb     $baseurl/libxcb-errors0_1.0.1-4build1_amd64.deb
-                    wget -O libxcb-errors-dev.deb  $baseurl/libxcb-errors-dev_1.0.1-4build1_amd64.deb
-                    sudo dpkg -i libxcb-errors0.deb libxcb-errors-dev.deb
-                    sudo apt -f install -y
-                    popd >/dev/null 
-                ;;
-                *) echo "Todo: fallback build of $pkg" ;;
-            esac
-        done 
-    fi 
-}
 zhu_mount() {
     local remote_dir=$1
     local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
@@ -124,19 +69,19 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
 sudo apt update && sudo apt upgrade 
-zhu_install debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof 
+install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof 
 
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
-    zhu_install libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  zhu_install
+    install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
+    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
 fi 
 
 # config wayland
-if [[ $(zhu_get_login_session_type) == wayland ]]; then
+if [[ $(list-login-session.sh -t0) == wayland ]]; then
     # wayland: enable gnome remote desktop
     if ! sudo ss -ltnp | grep -qE ':3389\b'; then
-        zhu_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+        install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
         cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
         cert_key=$cert_dir/rdp-tls.key
         cert_crt=$cert_dir/rdp-tls.crt
@@ -168,7 +113,7 @@ fi
 
 # enable ssh server
 if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
-    zhu_install openssh-server 
+    install-pkg.sh openssh-server 
     sudo systemctl enable ssh 
     sudo systemctl start ssh
 fi 
