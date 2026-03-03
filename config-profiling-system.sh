@@ -68,7 +68,7 @@ Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
-sudo apt update && sudo apt upgrade 
+sudo apt update && sudo apt upgrade -y
 install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof 
 
 # install amd gpu drivers 

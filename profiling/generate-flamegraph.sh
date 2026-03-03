@@ -20,7 +20,7 @@ while (( $# )); do
 done 
 
 if ! sudo -n true 2>/dev/null; then 
-    echo "NOPASSWD is NOT enabled for $(id -un)"
+    echo "Error: NOPASSWD is NOT enabled for $(id -un)"
     echo "Aborting"
     exit 1
 fi 
@@ -82,9 +82,3 @@ if [[ -f /tmp/perf.data ]]; then
     chmod 666 /tmp/perf.txt
     cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg && echo "Generated $HOME/perf.svg" && sudo mv /tmp/perf.data /tmp/perf.data.old 
 fi 
-
-# wait for direct child to exit
-[[ ! -z ${PID-} && -d /proc/$PID && $(awk '{print $4}' /proc/$PID/stat 2>/dev/null) -eq $$ ]] && {
-    echo "Wait for process $PID to exit"
-    wait $PID 
-}
