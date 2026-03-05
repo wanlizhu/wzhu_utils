@@ -121,8 +121,8 @@ fi
 
 # mount data dirs
 if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-    nvidia-vpn.sh 
-fi 
+    nvidia-vpn.sh
+fi
 zhu_mount linuxqa:/qa/people /mnt/linuxqa
 
 echo "FINISHED"
