@@ -35,11 +35,8 @@ cat >>~/nvidia-profiling.sh <<'EOF'
 zhu_mount() {
     local remote_dir=$1
     local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
-    if ! findmnt -rn -T $local_dir >/dev/null; then
-        sudo mkdir -p $local_dir
-        sudo mount -t nfs $remote_dir $local_dir 
-        findmnt -T $local_dir
-    fi 
+    sudo mkdir -p $local_dir
+    sudo mount -t nfs $remote_dir $local_dir && findmnt -T $local_dir
 }
 zhu_steam_pstree() {
     pstree -aspT $(pidof steam)
