@@ -2,6 +2,7 @@
 
 set -o pipefail 
 
+NAME_PREFIX=
 WAIT_SECONDS=0
 RECORD_SECONDS=5
 SCOPED_SYMBOL= 
@@ -10,6 +11,7 @@ INSTALL_DEBUG_SYMBOL=true
 
 while (( $# )); do 
     case $1 in 
+        -name=*) NAME_PREFIX=${1#-name=} ;;
         -wait=*) WAIT_SECONDS=${1#-wait=} ;;
         -record=*) RECORD_SECONDS=${1#-record=} ;;
         -symbol=*) SCOPED_SYMBOL=${1#-symbol=} ;;
@@ -63,7 +65,7 @@ COMM=$(cat /proc/$PID/comm 2>/dev/null)
 pstree -aspT $PID 
 pidstat -t -p $PID
 echo "Target PID/TGID is $PID"
-sudo rm -rf /tmp/bpftrace-offcpu.txt $HOME/bpftrace-offcpu/
+sudo rm -rf /tmp/bpftrace.offcpu.txt $HOME/bpftrace.offcpu.d/
 
 # find the real dso contains symbol impl
 if [[ -z $SCOPED_DSO ]]; then 
@@ -99,7 +101,7 @@ if [[ -z $SCOPED_DSO ]]; then
 fi 
 echo "Recording $SCOPED_SYMBOL in $SCOPED_DSO for $RECORD_SECONDS seconds"
 
-tmp_bt_file=/tmp/bpftrace-offcpu.bt
+tmp_bt_file=/tmp/bpftrace.offcpu.bt
 cat >$tmp_bt_file <<'BT_END'
 #!/usr/bin/env bpftrace
 tracepoint:sched:sched_switch
@@ -132,7 +134,7 @@ END
 BT_END
 echo "BEGIN"                                                                               >>$tmp_bt_file
 echo "{"                                                                                   >>$tmp_bt_file
-echo "    printf(\"bpftrace-offcpu: target_pid=%d duration=%d dso=%s symbol=%s\\n\", $PID, $RECORD_SECONDS, \"$SCOPED_DSO\", \"$SCOPED_SYMBOL\");" >>$tmp_bt_file
+echo "    printf(\"bpftrace.offcpu: target_pid=%d duration=%d dso=%s symbol=%s\\n\", $PID, $RECORD_SECONDS, \"$SCOPED_DSO\", \"$SCOPED_SYMBOL\");" >>$tmp_bt_file
 echo "    @secs = 0;"                                                                      >>$tmp_bt_file
 echo "    @offcpu_total_us = 0;"                                                           >>$tmp_bt_file
 echo "    @hit_total = 0;"                                                                 >>$tmp_bt_file
@@ -159,11 +161,11 @@ echo "{"                                                                        
 echo "    printf(\"status: secs=%d/%d target_pid=%d offcpu_total_us=%lld hit_total=%lld\\n\", @secs, $RECORD_SECONDS, $PID, @offcpu_total_us, @hit_total);" >>$tmp_bt_file
 echo "    exit();"                                                                         >>$tmp_bt_file
 echo "}"                                                                                   >>$tmp_bt_file
-sudo bpftrace $tmp_bt_file >/tmp/bpftrace-offcpu.txt
+sudo bpftrace $tmp_bt_file >/tmp/bpftrace.offcpu.txt
 
-# flamegraph post process for /tmp/bpftrace-offcpu.txt
-if [[ -f /tmp/bpftrace-offcpu.txt ]]; then 
-    mkdir -p $HOME/bpftrace-offcpu/
+# flamegraph post process for /tmp/bpftrace.offcpu.txt
+if [[ -f /tmp/bpftrace.offcpu.txt ]]; then 
+    mkdir -p $HOME/bpftrace.offcpu.d/
     awk '
     /^=== folded begin ===$/ { inside=1; next }
     /^=== folded end ===$/   { flush(); exit }
@@ -230,18 +232,21 @@ if [[ -f /tmp/bpftrace-offcpu.txt ]]; then
         if ($0 ~ /\]:[[:space:]]*[0-9]+[[:space:]]*$/) flush()
         next
     }
-' /tmp/bpftrace-offcpu.txt > /tmp/bpftrace-offcpu.folded
+' /tmp/bpftrace.offcpu.txt > /tmp/bpftrace.offcpu.folded
 
-    if [[ -s /tmp/bpftrace-offcpu.folded ]]; then 
-        cut -f1 /tmp/bpftrace-offcpu.folded | sort -nu | while read -r TID; do 
-            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace-offcpu.folded | flamegraph.pl >$HOME/bpftrace-offcpu/pid$PID-tid$TID.svg && echo "Generated $HOME/bpftrace-offcpu/pid$PID-tid$TID.svg"
+    if [[ -s /tmp/bpftrace.offcpu.folded ]]; then 
+        cut -f1 /tmp/bpftrace.offcpu.folded | sort -nu | while read -r TID; do 
+            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace.offcpu.folded | flamegraph.pl >$HOME/bpftrace.offcpu.d/pid$PID-tid$TID.svg && echo "Generated $HOME/bpftrace.offcpu.d/pid$PID-tid$TID.svg"
         done 
+        if [[ ! -z $NAME_PREFIX ]]; then 
+            sudo mv -f $HOME/bpftrace.offcpu.d $HOME/$NAME_PREFIX.bpftrace.offcpu.d
+        fi 
     else
-        echo "Error: /tmp/bpftrace-offcpu.folded is empty"
+        echo "Error: /tmp/bpftrace.offcpu.folded is empty"
         echo "Aborting"
         exit 1
     fi 
 else
-    echo "Error: /tmp/bpftrace-offcpu.txt is missing"
+    echo "Error: /tmp/bpftrace.offcpu.txt is missing"
     exit 1
 fi 

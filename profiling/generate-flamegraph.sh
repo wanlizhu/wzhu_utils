@@ -92,7 +92,7 @@ if [[ -f /tmp/perf.data ]]; then
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf-system-wide.svg && echo "Generated $HOME/perf-system-wide.svg"
     else
         # 2) generate all-threads combined svg 
-        mkdir -p $HOME/perf.svg.d
+        mkdir -p $HOME/perf.svg.d/
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/perf-all-threads.svg && echo "Generated $HOME/perf.svg.d/perf-all-threads.svg"
         # 3) generate per-thread svgs  
         if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
