@@ -122,8 +122,8 @@ if [[ -f /tmp/perf.data ]]; then
                     tid=${file#/tmp/perf-tid}
                     tid=${tid%.txt}
                     [[ $tid == unknown ]] && continue
-                    cat $file | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/perf-tid$tid.svg
-                    echo "Generated $HOME/perf.svg.d/perf-tid$tid.svg"
+                    cat $file | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/tid$tid.svg
+                    echo "Generated $HOME/perf.svg.d/tid$tid.svg"
                 done
             fi
         fi 

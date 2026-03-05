@@ -242,7 +242,7 @@ if [[ -f /tmp/bpftrace.offcpu.txt ]]; then
 
     if [[ -s /tmp/bpftrace.offcpu.folded ]]; then 
         cut -f1 /tmp/bpftrace.offcpu.folded | sort -nu | while read -r TID; do 
-            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace.offcpu.folded | flamegraph.pl >$HOME/bpftrace.offcpu.d/pid$PID.tid$TID.svg && echo "Generated $HOME/bpftrace.offcpu.d/pid$PID.tid$TID.svg"
+            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace.offcpu.folded | flamegraph.pl >$HOME/bpftrace.offcpu.d/tid$TID.svg && echo "Generated $HOME/bpftrace.offcpu.d/tid$TID.svg"
         done 
         if [[ ! -z $NAME_PREFIX ]]; then 
             sudo mv -f $HOME/bpftrace.offcpu.d $HOME/$NAME_PREFIX.bpftrace.offcpu.d
