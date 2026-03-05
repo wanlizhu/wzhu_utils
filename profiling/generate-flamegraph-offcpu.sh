@@ -22,10 +22,21 @@ while (( $# )); do
     shift 
 done 
 
+if [[ -z $SCOPED_SYMBOL ]]; then 
+    echo "Error: missing option -symbol=***"
+    echo "Aborting"
+    exit 1
+fi 
+
 if ! sudo -n true 2>/dev/null; then 
     echo "Error: NOPASSWD is NOT enabled for $(id -un)"
     echo "Aborting"
     exit 1
+fi 
+
+if (( WAIT_SECONDS > 0 )); then 
+    echo "Wait $WAIT_SECONDS seconds before recording"
+    sleep $WAIT_SECONDS
 fi 
 
 if [[ ! -z $1 ]]; then
@@ -54,11 +65,6 @@ else
     echo "Error: system-wide offcpu recording is not supported"
     echo "Aborting"
     exit 1
-fi 
-
-if (( WAIT_SECONDS > 0 )); then 
-    echo "Wait $WAIT_SECONDS seconds before recording"
-    sleep $WAIT_SECONDS
 fi 
 
 COMM=$(cat /proc/$PID/comm 2>/dev/null)
@@ -99,7 +105,7 @@ if [[ -z $SCOPED_DSO ]]; then
         SCOPED_DSO=$(echo "$candidates" | head -n1)
     fi
 fi 
-echo "Recording $SCOPED_SYMBOL in $SCOPED_DSO for $RECORD_SECONDS seconds"
+echo "Recording $SCOPED_SYMBOL in $SCOPED_DSO for $RECORD_SECONDS seconds ..."
 
 tmp_bt_file=/tmp/bpftrace.offcpu.bt
 cat >$tmp_bt_file <<'BT_END'
@@ -236,10 +242,11 @@ if [[ -f /tmp/bpftrace.offcpu.txt ]]; then
 
     if [[ -s /tmp/bpftrace.offcpu.folded ]]; then 
         cut -f1 /tmp/bpftrace.offcpu.folded | sort -nu | while read -r TID; do 
-            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace.offcpu.folded | flamegraph.pl >$HOME/bpftrace.offcpu.d/pid$PID-tid$TID.svg && echo "Generated $HOME/bpftrace.offcpu.d/pid$PID-tid$TID.svg"
+            awk -F'\t' -v tid=$TID '$1==tid { print $2 }' /tmp/bpftrace.offcpu.folded | flamegraph.pl >$HOME/bpftrace.offcpu.d/pid$PID.tid$TID.svg && echo "Generated $HOME/bpftrace.offcpu.d/pid$PID.tid$TID.svg"
         done 
         if [[ ! -z $NAME_PREFIX ]]; then 
             sudo mv -f $HOME/bpftrace.offcpu.d $HOME/$NAME_PREFIX.bpftrace.offcpu.d
+            echo "Renamed output dir to $HOME/$NAME_PREFIX.bpftrace.offcpu.d"
         fi 
     else
         echo "Error: /tmp/bpftrace.offcpu.folded is empty"

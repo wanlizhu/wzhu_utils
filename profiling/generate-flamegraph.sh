@@ -130,7 +130,7 @@ if [[ -f /tmp/perf.data ]]; then
 
         if [[ ! -z $NAME_PREFIX ]]; then 
             sudo mv -f $HOME/perf.svg.d $HOME/$NAME_PREFIX.perf.svg.d
-            echo "Renamed output folder to $HOME/$NAME_PREFIX.perf.svg.d"
+            echo "Renamed output dir to $HOME/$NAME_PREFIX.perf.svg.d"
         fi 
     fi 
 fi 
