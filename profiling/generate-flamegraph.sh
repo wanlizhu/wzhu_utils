@@ -2,6 +2,7 @@
 
 set -o pipefail 
 
+NAME_PREFIX=
 WAIT_SECONDS=0
 RECORD_SECONDS=5
 RECORD_FREQ=1000
@@ -12,6 +13,7 @@ unset PID COMM
 
 while (( $# )); do 
     case $1 in 
+        -name=*) NAME_PREFIX=${1#-name=} ;;
         -wait=*) WAIT_SECONDS=${1#-wait=} ;;
         -record=*) RECORD_SECONDS=${1#-record=} ;;
         -freq=*) RECORD_FREQ=${1#-freq=} ;;
@@ -78,7 +80,7 @@ fi
 
 # the perf recording starts here 
 echo "Recording for $RECORD_SECONDS seconds ..."
-sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") -F $RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
+sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") --freq=$RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
 
 # flamegraph post process for /tmp/perf.data
 if [[ -f /tmp/perf.data ]]; then 
@@ -124,6 +126,11 @@ if [[ -f /tmp/perf.data ]]; then
                     echo "Generated $HOME/perf.svg.d/perf-tid$tid.svg"
                 done
             fi
+        fi 
+
+        if [[ ! -z $NAME_PREFIX ]]; then 
+            sudo mv -f $HOME/perf.svg.d $HOME/$NAME_PREFIX.perf.svg.d
+            echo "Renamed output folder to $HOME/$NAME_PREFIX.perf.svg.d"
         fi 
     fi 
 fi 
