@@ -32,15 +32,6 @@ echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
 cat >>~/nvidia-profiling.sh <<'EOF'
-zhu_mount() {
-    local remote_dir=$1
-    local local_dir=$([[ -z $2 ]] && echo /mnt/$(basename $1) || echo $2)
-    sudo mkdir -p $local_dir
-    sudo mount -t nfs $remote_dir $local_dir && findmnt -T $local_dir
-}
-zhu_steam_pstree() {
-    pstree -aspT $(pidof steam)
-}
 EOF
 source ~/nvidia-profiling.sh
 
@@ -118,8 +109,13 @@ fi
 
 # mount data dirs
 if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-    nvidia-vpn.sh
+    read -p "Reconnect to nvidia vpn? [Y/n]: " recon
+    [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
 fi
-zhu_mount linuxqa:/qa/people /mnt/linuxqa
+if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+    [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
+    [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
+    [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+fi 
 
 echo "FINISHED"
