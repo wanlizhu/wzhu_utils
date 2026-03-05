@@ -45,9 +45,7 @@ if (( WAIT_SECONDS > 0 )); then
     sleep $WAIT_SECONDS
 fi 
 
-if [[ -z $1 ]]; then
-    echo "System-wide recording is scheduled for $RECORD_SECONDS seconds" 
-else
+if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then 
         PID=$1
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then 
@@ -76,10 +74,10 @@ else
 
     pstree -aspT $PID 
     pidstat -t -p $PID
-    echo "Recording PID $PID for $RECORD_SECONDS seconds"
 fi 
 
 # the perf recording starts here 
+echo "Recording for $RECORD_SECONDS seconds ..."
 sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") -F $RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS 
 
 # flamegraph post process for /tmp/perf.data
