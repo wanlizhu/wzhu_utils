@@ -69,6 +69,17 @@ while (( $# )); do
             ' bash {} +
             exit 
         ;;
+        info)
+            nvidia_module_version=$(modinfo nvidia | grep ^version | awk '{print $2}')
+            echo "Nvidia module version: $nvidia_module_version"
+            for branch in $NV_SOURCE/branch/*; do 
+                nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $branch/drivers/common/inc/nvUnixVersion.h 2>/dev/null | awk '{print $3}' | sed 's/"//g')
+                pending_changes=$(p4 opened $branch/... 2>/dev/null | grep -q 'change [0-9]')
+                pending_changes=$([[ -z $pending_changes ]] && echo || echo "(pending changes)")
+                echo "    - branch/$(basename $branch): $nvidia_source_version $pending_changes"
+            done 
+            exit 
+        ;;
         *) break ;;
     esac 
     shift 

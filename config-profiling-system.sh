@@ -14,6 +14,14 @@ if systemctl is-active ufw >/dev/null 2>&1; then
     sudo ufw disable 
 fi 
 
+# disable apparmor
+if [[ $(cat /sys/module/apparmor/parameters/enabled) == Y ]]; then 
+    if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
+        echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
+    fi
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+fi 
+
 # patch ~/.bashrc
 if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
     echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
