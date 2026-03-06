@@ -2,14 +2,52 @@
 
 set -o pipefail 
 
-NV_SOURCE=$HOME/sw
+function unix_build_nvmake() {
+    local root=$1
+    local arch=$2 
+    local buildtype=$3
+    local buildjobs=$4
+    shift 4
+    $root/tools/linux/unix-build/unix-build \
+        --unshare-namespaces \
+        --tools  $root/tools \
+        --devrel $root/devrel/SDK/inc/GL \
+        nvmake \
+        NV_COLOR_OUTPUT=1 \
+        NV_GUARDWORD= \
+        NV_WARNINGS_AS_ERRORS= \
+        NV_COMPRESS_THREADS=$(nproc) \
+        NV_FAST_PACKAGE_COMPRESSION=zstd \
+        NV_STRIP=0 \
+        NV_UNIX_CHECK_DEBUG_INFO=0 \
+        NV_MANGLE_SYMBOLS= \
+        NV_SYMBOLS=1 \
+        NV_SECURITY=0 \
+        NV_LTCG=0 \
+        NV_FRAME_POINTER=$([[ $buildtype == release ]] && echo 0 || echo 1) \
+        NV_TRACE_CODE=$([[ $buildtype == release ]] && echo 0 || echo 1) \
+        linux $arch $buildtype $buildjobs "$@" && return 0
+    [[ $buildjobs == -j1 && $1 == verbose ]] && return 1
+    unix_build_nvmake $root $arch $buildtype -j1 verbose
+}
+
+if [[ -f makefile.nvmk ]]; then
+    if [[ -d drivers ]]; then 
+        NV_SOURCE=$(realpath $(pwd)/../..)
+    elif [[ -f opengl.nvmk ]]; then 
+        NV_SOURCE=$(realpath $(pwd)/../../../..)
+    fi 
+elif [[ -d $HOME/wzhu_p4sw ]]; then 
+    NV_SOURCE=$HOME/wzhu_p4sw
+else
+    echo "~/wzhu_p4sw/ doesn't exist"
+    echo "Aborting"
+    exit 1
+fi 
 NV_BRANCH=r595_00
-NV_TARGET_OS=linux
 NV_TARGET_ARCH=$(uname -m | sed 's/x86_64/amd64/g')
 NV_BUILD_TYPE=develop
 NV_BUILD_JOBS=-j$(nproc)
-NV_VERBOSE=
-NV_OTHERS=
 
 while (( $# )); do 
     case $1 in 
@@ -17,10 +55,19 @@ while (( $# )); do
         debug|release|develop) NV_BUILD_TYPE=$1 ;;
         -j[0-9]*) NV_BUILD_JOBS=$1 ;; 
         ppp) 
-            $0 $NV_BUILD_JOBS $NV_BUILD_TYPE amd64 drivers dist || exit 1
-            $0 $NV_BUILD_JOBS $NV_BUILD_TYPE x86 drivers dist || exit 1
-            NV_OTHERS=post-process-packages 
-            NV_BUILD_JOBS=-j1
+            unix_build_nvmake $NV_SOURCE amd64 $NV_BUILD_TYPE $NV_BUILD_JOBS &&
+            unix_build_nvmake $NV_SOURCE x86   $NV_BUILD_TYPE $NV_BUILD_JOBS &&
+            unix_build_nvmake $NV_SOURCE amd64 $NV_BUILD_TYPE -j1 post-process-packages 
+            exit
+        ;;
+        restore)
+            sudo find /lib/$(uname -m)-linux-gnu -type f -name '*.backup' -exec bash -c '
+                for path; do 
+                    mv -f $path ${path%.backup}
+                    echo "Restored ${path%.backup}"
+                done 
+            ' bash {} +
+            exit 
         ;;
         *) break ;;
     esac 
@@ -28,7 +75,9 @@ while (( $# )); do
 done 
 
 if [[ ! -f makefile.nvmk ]]; then 
-    cd $NV_SOURCE/branch/$NV_BRANCH || exit 1
+    echo "The current dir has no makefile.nvmk"
+    echo "Aborting"
+    exit 1
 fi 
 
 source /etc/os-release 
@@ -39,28 +88,19 @@ if [[ $ID == ubuntu && ${VERSION_ID%%.*} -ge 24 ]]; then
     fi 
 fi 
 
-function unix_build_nvmake() {
-    $NV_SOURCE/tools/linux/unix-build/unix-build \
-        --unshare-namespaces \
-        --tools  $NV_SOURCE/tools \
-        --devrel $NV_SOURCE/devrel/SDK/inc/GL \
-        nvmake \
-        NV_COLOR_OUTPUT=1 \
-        NV_WARNINGS_AS_ERRORS=0 \
-        NV_COMPRESS_THREADS=$(nproc) \
-        NV_FAST_PACKAGE_COMPRESSION=1 \
-        NV_STRIP=0 \
-        NV_UNIX_CHECK_DEBUG_INFO=0 \
-        NV_GUARDWORD=0 \
-        NV_MANGLE_SYMBOLS=0 \
-        NV_SYMBOLS=1 \
-        NV_FRAME_POINTER=$([[ $NV_BUILD_TYPE == release ]] && echo 0 || echo 1) \
-        NV_TRACE_CODE=$([[ $NV_BUILD_TYPE == release ]] && echo 0 || echo 1) \
-        $NV_TARGET_OS $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_BUILD_JOBS $NV_VERBOSE $NV_OTHERS "$@" 
-}
+unix_build_nvmake $NV_SOURCE $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_BUILD_JOBS "$@" || exit 1
+nvidia_module_version=$(modinfo nvidia | grep ^version | awk '{print $2}')
+nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
 
-if ! unix_build_nvmake; then
-    NV_BUILD_JOBS=-j1
-    NV_VERBOSE=verbose
-    unix_build_nvmake || exit $?
+if [[ $nvidia_module_version == $nvidia_source_version ]]; then 
+    if [[ -f opengl.nvmk && -e /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.$nvidia_source_version ]]; then 
+        read -p "Replace libnvidia-glcore.so.$nvidia_source_version on local system? [Y/n]: " replace
+        if [[ -z $replace || $replace == y ]]; then 
+            if [[ ! -f /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.${nvidia_source_version}.backup ]]; then 
+                sudo cp /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.$nvidia_source_version /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.${nvidia_source_version}.backup
+                echo "Generated /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.${nvidia_source_version}.backup"
+            fi 
+            sudo cp -v --remove-destination _out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/libnvidia-glcore.so /lib/$(uname -m)-linux-gnu/libnvidia-glcore.so.$nvidia_source_version 
+        fi 
+    fi 
 fi 

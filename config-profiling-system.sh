@@ -24,11 +24,11 @@ fi
 echo '#!/bin/bash' >~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
 echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
-echo "export P4ROOT=$HOME/sw" >>~/nvidia-profiling.sh
+echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
 cat >>~/nvidia-profiling.sh <<'EOF'
@@ -57,7 +57,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
 sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y 
-install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils
+install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
@@ -108,14 +108,18 @@ if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/nu
 fi 
 
 # mount data dirs
-if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-    read -p "Reconnect to nvidia vpn? [Y/n]: " recon
-    [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
-fi
-if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-    [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
-    [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
-    [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
+    echo "WSL doesn't support NFS mounting"
+else 
+    if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+        read -p "Reconnect to nvidia vpn? [Y/n]: " recon
+        [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
+    fi
+    if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+        [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
+        [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
+        [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+    fi 
 fi 
 
 echo "FINISHED"
