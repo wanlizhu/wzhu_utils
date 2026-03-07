@@ -17,38 +17,46 @@ install_local_file() {
     sudo chmod +x $file 2>/dev/null 
     
 expect - "$file" --ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd <<'EOF'
-    set timeout -1
-    spawn sudo {*}$argv 
-    expect_before {
-        -re {Multiple kernel module types are available} {
-            expect -re {Please select your response by number or name:}
-            send "MIT/GPL\r"
-            exp_continue
-        }
-        -re {There appears to already be a driver installed on your system} {
-            expect -re {Please select your response by number or name:}
-            send "Continue installation\r"
-            exp_continue
-        }
-        -re {Please review the message provided by the maintainer of this alternate installation method} {
-            expect -re {Please select your response by number or name:}
-            send "Continue installation\r"
-            exp_continue
-        }
-        -re {Install NVIDIA's 32-bit compatibility libraries\?} {
-            send "y\r"
-            exp_continue
-        }
-        -re {Would you like to register the kernel module sources with DKMS\?} {
-            send "y\r"
-            exp_continue
-        }
-        -re {Would you like to run the nvidia-xconfig utility to automatically update your X configuration file} {
-            send "y\r"
-            exp_continue
+    set timeout 600
+    spawn sudo {*}$argv
+    set pending_choice ""
+    while 1 {
+        expect {
+            -re {Multiple kernel module types are available} {
+                set pending_choice "MIT/GPL"
+            }
+            -re {There appears to already be a driver installed on your system} {
+                set pending_choice "Continue installation"
+            }
+            -re {Please review the message provided by the maintainer of this alternate installation method} {
+                set pending_choice "Continue installation"
+            }
+            -re {Please select your response by number or name:} {
+                if {$pending_choice eq ""} {
+                    send_user "\nERROR: unexpected numbered prompt\n"
+                    exit 2
+                }
+                send "$pending_choice\r"
+                set pending_choice ""
+            }
+            -re {Install NVIDIA's 32-bit compatibility libraries\?} {
+                send "y\r"
+            }
+            -re {Would you like to register the kernel module sources with DKMS\?} {
+                send "y\r"
+            }
+            -re {Would you like to run the nvidia-xconfig utility to automatically update your X configuration file} {
+                send "y\r"
+            }
+            eof {
+                break
+            }
+            timeout {
+                send_user "\nERROR: timed out waiting for installer\n"
+                exit 3
+            }
         }
     }
-    expect eof
     catch wait result
     set status [lindex $result 3]
     exit $status
