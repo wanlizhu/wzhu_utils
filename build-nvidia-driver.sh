@@ -9,8 +9,9 @@ function unix_build_nvmake() {
         return 1
     fi 
 
-    source /etc/os-release 
-    if [[ $ID == ubuntu && ${VERSION_ID%%.*} -ge 24 ]]; then 
+    local os_id=$(source /etc/os-release && echo $ID)
+    local os_version_id=$(source /etc/os-release && echo $VERSION_ID)
+    if [[ $os_id == ubuntu && ${os_version_id%%.*} -ge 24 ]]; then 
         if [[ $(sysctl -n kernel.apparmor_restrict_unprivileged_userns) != 0 ]]; then 
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -99,7 +100,7 @@ function post_build_install_dso() {
                 if ! ssh $targethost "[[ -f /lib/${system_arch}-linux-gnu/$name.${nvidia_source_version}.backup ]]"; then 
                     ssh -t $targethost "sudo cp /lib/${system_arch}-linux-gnu/$name.$nvidia_source_version /lib/${system_arch}-linux-gnu/$name.${nvidia_source_version}.backup"
                 fi 
-                rsync -Pah $workdir/_out/Linux_${arch}_${buildtype}/$name $targethost:/tmp/$name && ssh -t $targethost "sudo cp -v --remove-destination /tmp/$name /lib/${remote_arch}-linux-gnu/$name.$nvidia_source_version" && return 0 
+                rsync -Pah $workdir/_out/Linux_${arch}_${buildtype}/$name $targethost:/tmp/$name && ssh -t $targethost "sudo cp -v --remove-destination /tmp/$name /lib/${system_arch}-linux-gnu/$name.$nvidia_source_version" && return 0 
             fi 
         else
             echo "Nvidia module version ($nvidia_module_version on $targethost) and source version ($nvidia_source_version) doesn't match, replacement skipped"
@@ -128,16 +129,41 @@ fi
 NV_BRANCH=r595_00
 NV_TARGET_ARCH=$(uname -m | sed 's/x86_64/amd64/g')
 NV_BUILD_TYPE=develop
+POST_BUILD_INSTALL=
 
 while (( $# )); do 
     case $1 in 
         x86|amd64|aarch64) NV_TARGET_ARCH=$1 ;;
         debug|release|develop) NV_BUILD_TYPE=$1 ;;
+        install) POST_BUILD_INSTALL=1 ;;
         ppp)
             shift  
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE drivers dist -j$(nproc) &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH x86   $NV_BUILD_TYPE drivers dist -j$(nproc) &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE post-process-packages 
+            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
+            unix_build_nvmake $NV_SOURCE $NV_BRANCH x86   $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
+            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE post-process-packages "$@" && {
+                run_installer=no
+                if [[ $POST_BUILD_INSTALL == 1 ]]; then 
+                    read -p "Run Nvidia drivers installer now? [Y/n]: " run_installer
+                fi 
+                if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
+                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
+                    install-nvidia-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version.run 
+                fi 
+            }
+            exit
+        ;;
+        dist)
+            shift  
+            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" && {
+                run_installer=no
+                if [[ $POST_BUILD_INSTALL == 1 ]]; then 
+                    read -p "Run Nvidia drivers installer now? [Y/n]: " run_installer
+                fi 
+                if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
+                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
+                    install-nvidia-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version-internal.run 
+                fi 
+            }
             exit
         ;;
         opengl)
@@ -154,8 +180,11 @@ while (( $# )); do
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
             cd $NV_SOURCE/branch/$NV_BRANCH/drivers && 
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" NV_BUILD_MODULES=egl && {
-                read -p "Install Nvidia OpenGL UMD(s) now? [Y/n]: " install_umds
-                if [[ -z $install_umds || $install_umds == y ]]; then 
+                install_umds=no
+                if [[ $POST_BUILD_INSTALL == 1 ]]; then 
+                    read -p "Install Nvidia OpenGL UMD(s) now? [Y/n]: " install_umds
+                fi 
+                if [[ -z $install_umds || $install_umds == [Yy] ]]; then 
                     read -e -i $([[ -f /tmp/remote ]] && cat /tmp/remote || echo localhost) -p "Target host IP: " target_host 
                     target_host=${target_host:-localhost}
                     echo $target_host >/tmp/remote 
@@ -194,7 +223,7 @@ while (( $# )); do
             shift 
             sudo find /lib/$(uname -m)-linux-gnu -type f -name '*.backup' -exec bash -c '
                 for path; do 
-                    mv -f $path ${path%.backup}
+                    mv -f "$path" "${path%.backup}"
                     echo "Restored ${path%.backup}"
                 done 
             ' bash {} +
@@ -204,12 +233,14 @@ while (( $# )); do
             shift 
             nvidia_module_version=$(modinfo nvidia | grep ^version | awk '{print $2}')
             echo "Nvidia module version: $nvidia_module_version"
-            for branch in $NV_SOURCE/branch/*; do 
-                nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $branch/drivers/common/inc/nvUnixVersion.h 2>/dev/null | awk '{print $3}' | sed 's/"//g')
-                pending_changes=$(p4 opened $branch/... 2>/dev/null | grep 'change [0-9]')
+            shopt -s nullglob
+            for branch_path in $NV_SOURCE/branch/*; do 
+                nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $branch_path/drivers/common/inc/nvUnixVersion.h 2>/dev/null | awk '{print $3}' | sed 's/"//g')
+                pending_changes=$(p4 opened $branch_path/... 2>/dev/null | grep 'change [0-9]')
                 pending_changes=$([[ -z $pending_changes ]] && echo || echo "(pending changes)")
-                echo "    - branch/$(basename $branch): $nvidia_source_version $pending_changes"
+                echo "    - branch/$(basename $branch_path): $nvidia_source_version $pending_changes"
             done 
+            shopt -u nullglob
             exit 
         ;;
         sync)
@@ -230,10 +261,10 @@ while (( $# )); do
             fi 
             p4 clean -a -I $(pwd)/... 
             p4 sync $(pwd)/... 
-            for subdir in $(find $NV_SOURCE -mindepth 1 -maxdepth 1 -type d -print); do 
+            while IFS= read -r subdir; do
                 [[ $(basename $subdir) == branch ]] && continue 
                 p4 sync $subdir/... 
-            done 
+            done < <(find $NV_SOURCE -mindepth 1 -maxdepth 1 -type d -print)
             exit 
         ;;
         *) break ;;
