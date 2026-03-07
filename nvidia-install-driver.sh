@@ -27,8 +27,8 @@ install_local_file() {
     local file=$1 
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
     sudo systemctl isolate multi-user
-    sudo systemctl stop nvidia-persistenced || sudo nvidia-smi -pm 0
-    sudo modprobe -r $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') || sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia
+    sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 
+    sudo modprobe -r $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') || sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia  
     [[ ! -z $file && -f $file ]] && sudo chmod +x $file && sudo $file --ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && sudo nvidia-smi -pm 1 
     sudo systemctl isolate graphical
 }
