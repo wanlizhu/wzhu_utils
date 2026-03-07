@@ -62,7 +62,6 @@ function unix_build_nvmake() {
     fi 
 
     ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" || {
-        [[ $SKIP_RETRY_ON_FAIL == 1 ]] && return 1
         # retry with -j1 (to stop at the first error) and verbose options
         ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" verbose -j1 || return 1
     }
@@ -115,11 +114,9 @@ fi
 NV_BRANCH=r595_00
 NV_TARGET_ARCH=$(uname -m | sed 's/x86_64/amd64/g')
 NV_BUILD_TYPE=develop
-SKIP_RETRY_ON_FAIL=
 
 while (( $# )); do 
     case $1 in 
-        once) SKIP_RETRY_ON_FAIL=1 ;;
         x86|amd64|aarch64) NV_TARGET_ARCH=$1 ;;
         debug|release|develop) NV_BUILD_TYPE=$1 ;;
         ppp)
@@ -143,20 +140,35 @@ while (( $# )); do
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
             cd $NV_SOURCE/branch/$NV_BRANCH/drivers && 
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" NV_BUILD_MODULES=egl && {
-                read -p "Install Nvidia OpenGL UMD(s) to local system? [Y/n]: " install
-                if [[ -z $install || $install == y ]]; then 
-                    echo -e "\nNvidia OpenGL UMD(s) installed:" >/tmp/log 
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL libnvidia-glcore.so && echo "    - libnvidia-glcore.so" >>/tmp/log
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/unix/tls/Linux-elf libnvidia-tls.so && echo "    - libnvidia-tls.so" >>/tmp/log
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build libnvidia-eglcore.so && echo "    - libnvidia-eglcore.so" >>/tmp/log
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi libnvidia-glsi.so && echo "    - libnvidia-glsi.so" >>/tmp/log 
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX_nvidia.so && echo "    - libGLX_nvidia.so" >>/tmp/log 
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX.so && echo "    - libGLX.so" >>/tmp/log # optional
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL_nvidia.so && echo "    - libEGL_nvidia.so" >>/tmp/log
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL.so && echo "    - libEGL.so" >>/tmp/log # optional 
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2_nvidia.so && echo "    - libGLESv2_nvidia.so" >>/tmp/log
-                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2.so && echo "    - libGLESv2.so" >>/tmp/log # optional 
-                    cat /tmp/log 
+                read -p "Install Nvidia OpenGL UMD(s) to local system? [Y/n]: " install_umds
+                if [[ -z $install_umds || $install_umds == y ]]; then 
+                    echo -e "\nNvidia OpenGL UMD(s) installed:" >/tmp/nvidia-umds.log 
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL libnvidia-glcore.so && echo "    - libnvidia-glcore.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/unix/tls/Linux-elf libnvidia-tls.so && echo "    - libnvidia-tls.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build libnvidia-eglcore.so && echo "    - libnvidia-eglcore.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi libnvidia-glsi.so && echo "    - libnvidia-glsi.so" >>/tmp/nvidia-umds.log 
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX_nvidia.so && echo "    - libGLX_nvidia.so" >>/tmp/nvidia-umds.log 
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX.so && echo "    - libGLX.so" >>/tmp/nvidia-umds.log # optional
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL_nvidia.so && echo "    - libEGL_nvidia.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL.so && echo "    - libEGL.so" >>/tmp/nvidia-umds.log # optional 
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2_nvidia.so && echo "    - libGLESv2_nvidia.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2.so && echo "    - libGLESv2.so" >>/tmp/nvidia-umds.log # optional 
+                    cat /tmp/nvidia-umds.log 
+                else
+                    echo -e "\nNvidia OpenGL UMD(s) compiled:"
+                    echo "    - libnvidia-glcore.so"
+                    echo "    - libnvidia-tls.so"
+                    echo "    - libnvidia-eglcore.so"
+                    echo "    - libnvidia-glsi.so"
+                    if [[ -f $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/libGLX_nvidia.so ]]; then 
+                        echo "    - libGLX_nvidia.so"
+                        echo "    - libEGL_nvidia.so"
+                        echo "    - libGLESv2_nvidia.so"
+                    else
+                        echo "    - libGLX.so"
+                        echo "    - libEGL.so"
+                        echo "    - libGLESv2.so"
+                    fi 
                 fi 
             }
             exit 
