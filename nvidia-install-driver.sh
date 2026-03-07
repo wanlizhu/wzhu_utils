@@ -6,6 +6,7 @@ install_local_file() {
     local file=$1 
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
     [[ -z $file || ! -e $file ]] && return 1
+    [[ -z $(which expect) ]] && sudo apt install -y expect 
     sudo systemctl isolate multi-user
     sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 
     sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia  
