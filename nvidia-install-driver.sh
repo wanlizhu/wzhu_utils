@@ -51,7 +51,7 @@ expect - "$file" --ui=none --accept-license --disable-nouveau --no-cc-version-ch
     catch wait result
     set status [lindex $result 3]
     exit $status
-EOF 
+EOF
 
     status=$?
     sudo nvidia-smi -pm 1 
