@@ -2,6 +2,14 @@
 
 set -o pipefail 
 
+NO_INSTALL=
+while (( $# )); do 
+    case $1 in 
+        -noinstall) NO_INSTALL=1 ;; 
+    esac 
+    shift 
+done 
+
 # enable passwordless sudo 
 if ! sudo -n true 2>/dev/null; then 
     echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
@@ -19,6 +27,7 @@ if [[ $(cat /sys/module/apparmor/parameters/enabled) == Y ]]; then
     if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
         echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
     fi
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 fi 
 
@@ -39,6 +48,7 @@ echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
 echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
+echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
 cat >>~/nvidia-profiling.sh <<'EOF'
 EOF
 source ~/nvidia-profiling.sh
@@ -55,22 +65,31 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
     sudo sysctl -p /etc/sysctl.d/99-profiling.conf
 fi 
 
-# install required packages
-if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
-    echo "Types: deb
+if [[ -z $NO_INSTALL ]]; then 
+    # install required packages
+    if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
+        echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
 Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
 Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
-    sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
-fi 
-sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y 
-install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
+        sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+    fi 
+    sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y 
+    install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
-# install amd gpu drivers 
-if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
-    install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
+    # install amd gpu drivers 
+    if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
+        install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
+        dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
+    fi 
+fi 
+
+# enable ssh server
+if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
+    install-pkg.sh openssh-server 
+    sudo systemctl enable ssh 
+    sudo systemctl start ssh
 fi 
 
 # config wayland
@@ -107,13 +126,6 @@ if [[ $(list-login-session.sh -t0) == wayland ]]; then
         }
     fi 
 fi
-
-# enable ssh server
-if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
-    install-pkg.sh openssh-server 
-    sudo systemctl enable ssh 
-    sudo systemctl start ssh
-fi 
 
 # mount data dirs
 if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
