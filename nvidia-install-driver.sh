@@ -78,4 +78,3 @@ if [[ -z $1 || -f $1 ]]; then
 elif [[ $1 =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
     install_version_build "$@"
 fi 
-
