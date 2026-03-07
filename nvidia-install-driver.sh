@@ -5,11 +5,58 @@ set -o pipefail
 install_local_file() {
     local file=$1 
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
+    [[ -z $file || ! -e $file ]] && return 1
     sudo systemctl isolate multi-user
     sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 
-    sudo modprobe -r $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') || sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia  
-    [[ ! -z $file && -f $file ]] && sudo chmod +x $file && sudo $file --ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && sudo nvidia-smi -pm 1 
+    sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia  
+    sleep 2
+    if [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]]; then 
+        sudo modprobe -r $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') 
+    fi 
+    sudo chmod +x $file 2>/dev/null 
+    
+expect - "$file" --ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd <<'EOF'
+    set timeout -1
+    spawn sudo {*}$argv 
+    expect_before {
+        -re {Multiple kernel module types are available} {
+            expect -re {Please select your response by number or name:}
+            send "MIT/GPL\r"
+            exp_continue
+        }
+        -re {There appears to already be a driver installed on your system} {
+            expect -re {Please select your response by number or name:}
+            send "Continue installation\r"
+            exp_continue
+        }
+        -re {Please review the message provided by the maintainer of this alternate installation method} {
+            expect -re {Please select your response by number or name:}
+            send "Continue installation\r"
+            exp_continue
+        }
+        -re {Install NVIDIA's 32-bit compatibility libraries\?} {
+            send "y\r"
+            exp_continue
+        }
+        -re {Would you like to register the kernel module sources with DKMS\?} {
+            send "y\r"
+            exp_continue
+        }
+        -re {Would you like to run the nvidia-xconfig utility to automatically update your X configuration file} {
+            send "y\r"
+            exp_continue
+        }
+    }
+    expect eof
+    catch wait result
+    set status [lindex $result 3]
+    exit $status
+EOF 
+
+    status=$?
+    sudo nvidia-smi -pm 1 
     sudo systemctl isolate graphical
+    return $status
 }
 
 install_version_build() {
