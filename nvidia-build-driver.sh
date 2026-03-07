@@ -147,7 +147,7 @@ while (( $# )); do
                 fi 
                 if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
                     nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
-                    install-nvidia-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version.run 
+                    nvidia-install-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version.run 
                 fi 
             }
             exit
@@ -161,7 +161,7 @@ while (( $# )); do
                 fi 
                 if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
                     nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
-                    install-nvidia-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version-internal.run 
+                    nvidia-install-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version-internal.run 
                 fi 
             }
             exit
