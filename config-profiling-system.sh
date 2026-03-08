@@ -92,8 +92,17 @@ if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/nu
     sudo systemctl start ssh
 fi 
 
-# config wayland
-if [[ $(list-login-session.sh -t0) == wayland ]]; then
+# enable remote login 
+if [[ $(list-login-session.sh -t0) == x11 ]]; then
+    # x11: enable x11vnc 
+    if ! ss -ltnp | grep -E "LISTEN.+:5900\b" >/dev/null; then
+        [[ -z $(which x11vnc) ]] && sudo apt install -y x11vnc 
+        screen -dmS 'x11vnc-server' bash -c 'x11vnc -display :0 -auth guess -forever -loop -shared -noxdamage -repeat >/tmp/x11vnc.log 2>&1' 
+        sleep 3
+        screen -ls | grep -F x11vnc-server 
+        ss -ltnp | grep -E "LISTEN.+:5900\b"
+    fi 
+elif [[ $(list-login-session.sh -t0) == wayland ]]; then
     # wayland: enable gnome remote desktop
     if ! sudo ss -ltnp | grep -qE ':3389\b'; then
         install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11

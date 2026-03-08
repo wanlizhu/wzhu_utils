@@ -10,7 +10,7 @@ install_local_file() {
     sudo systemctl isolate multi-user
     sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 
     sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia  
-    sleep 2
+    sleep 3
     if [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]]; then 
         sudo modprobe -r $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') 
     fi 
