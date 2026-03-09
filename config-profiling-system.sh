@@ -49,6 +49,7 @@ echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export NVM_GTLAPI_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjNlMGZkYWU4LWM5YmUtNDgwOS1iMTQ3LTJiN2UxNDAwOTAwMyIsInNlY3JldCI6IndEUU1uMUdyT1RaY0Z0aHFXUThQT2RiS3lGZ0t5NUpaalU3QWFweUxGSmM9In0.Iad8z1fcSjA6P7SHIluppA_tYzOGxGv4koMyNawvERQ'" >>~/nvidia-profiling.sh 
 echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
+echo "gsync() { pushd ~/wzhu_utils; git add .; git commit -m s; git pull; git push; popd; }" >>~/nvidia-profiling.sh 
 cat >>~/nvidia-profiling.sh <<'EOF'
 EOF
 source ~/nvidia-profiling.sh
