@@ -73,10 +73,12 @@ URIs: http://ddebs.ubuntu.com/
 Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
 Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
-        sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+        install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
     fi 
     sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y 
-    install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym linux-image-$(uname -r)-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
+    echo "Interrupt with ctrl-c if it takes too long to finish"
+    install-pkg.sh linux-image-$(uname -r)-dbgsym
+    install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
     # install amd gpu drivers 
     if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
