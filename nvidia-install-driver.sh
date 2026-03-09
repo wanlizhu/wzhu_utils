@@ -22,8 +22,12 @@ install_local_file() {
     # remove apt-based nvidia packaged 
     nvidia_packages=$(dpkg -l | awk '/^(ii|rc)[[:space:]]+(nvidia|libnvidia|linux-modules-nvidia|xserver-xorg-video-nvidia)/ { print $2 }')
     if [[ ! -z $nvidia_packages ]]; then
-        sudo apt purge -y $nvidia_packages
-        sudo apt autoremove -y
+        echo "$nvidia_packages"
+        read -p "Uninstall these apt-based nvidia packages? [Y/n]: " uninstall
+        if [[ -z $uninstall || $uninstall == [Yy] ]]; then 
+            sudo apt purge -y $nvidia_packages
+            sudo apt autoremove -y
+        fi 
     fi
 
 expect - "$file" --ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd <<'EOF'
