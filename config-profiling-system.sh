@@ -10,12 +10,12 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 # disable firewall 
-if [[ ! -z $(sudo ufw status | grep inactive) ]]; then
+if [[ -z $(sudo ufw status | grep inactive) ]]; then
     sudo ufw disable 
 fi 
 
 # disable apparmor
-if [[ ! -z $(sysctl kernel.apparmor_restrict_unprivileged_userns | grep " = 0") ]]; then 
+if [[ -z $(sysctl kernel.apparmor_restrict_unprivileged_userns | grep " = 0") ]]; then 
     if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
         echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
         echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null 
