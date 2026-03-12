@@ -43,7 +43,13 @@ fi
 if [[ -z $1 || -f $1 ]]; then 
     install_local_file $(realpath $1)
 else 
-    sudo -iu root -- bash -lic "/mnt/linuxqa/nvt.sh drivers $@" 
+    if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+        read -p "Reconnect to nvidia vpn? [Y/n]: " recon
+        [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
+    fi
+    if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+        sudo -iu root -- bash -lic "/mnt/linuxqa/nvt.sh drivers $@" 
+    fi 
 fi 
 
 if [[ -f /tmp/cmd ]]; then 
