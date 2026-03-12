@@ -72,7 +72,7 @@ if [[ ! -z $(apt list --upgradable 2>/dev/null | sed '1d') ]]; then
 fi  
 install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
     build-essential cmake git ninja-build pkg-config meson clang \
-    vim net-tools mesa-utils vulkan-tools libvulkan-dev \
+    vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
     btop htop sysprof pciutils nfs-common openssh-server \
     libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
