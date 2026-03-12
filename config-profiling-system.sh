@@ -77,6 +77,11 @@ install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
     libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
+# config git env 
+git config --global user.email >/dev/null 2>&1 || git config --global user.email zhu.wanli@icloud.com
+git config --global user.name >/dev/null 2>&1 || git config --global user.name "Wanli Zhu"
+git config --global pull.rebase >/dev/null 2>&1 || git config --global pull.rebase false
+
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
     install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
