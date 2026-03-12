@@ -27,14 +27,17 @@ if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then
     echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
 fi
 echo '#!/bin/bash' >~/nvidia-profiling.sh
-echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
-echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:$HOME/wzhu_utils/testcase:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m):/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
 echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
 echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
+echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
+echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
 echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
 echo "pp() { pushd ~/wzhu_utils; git add .; git commit -m s && git pull && git push; popd; }" >>~/nvidia-profiling.sh
 cat >>~/nvidia-profiling.sh <<'EOF'
