@@ -15,14 +15,12 @@ if [[ -z $(sudo ufw status | grep inactive) ]]; then
 fi 
 
 # disable apparmor
-if [[ -z $(sysctl kernel.apparmor_restrict_unprivileged_userns | grep " = 0") ]]; then 
-    if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
-        echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
-        echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null 
-    fi
+if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
+    echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
+    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null 
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-fi 
+fi
 
 # patch ~/.bashrc
 if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
@@ -38,6 +36,7 @@ echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
 echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
+echo "pp() { pushd ~/wzhu_utils; git add .; git commit -m s && git pull && git push; popd; }" >>~/nvidia-profiling.sh
 cat >>~/nvidia-profiling.sh <<'EOF'
 EOF
 source ~/nvidia-profiling.sh
@@ -68,7 +67,7 @@ if [[ ! -z $(apt list --upgradable 2>/dev/null | sed '1d') ]]; then
     sudo apt upgrade -y
     sudo apt autoremove -y
 fi  
-install-pkg.sh linux-image-$(uname -r)-dbgsym debian-goodies libc6-dbg libstdc++6-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
+install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym build-essential cmake git ninja-build pkg-config meson clang vim mesa-utils vulkan-tools libvulkan-dev nfs-common btop htop sysprof pciutils libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
 # install amd gpu drivers 
 if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
@@ -112,7 +111,7 @@ elif [[ $(list-login-session.sh -t0) == wayland ]]; then
         sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
         sudo grdctl --system rdp set-tls-key $cert_key
         sudo grdctl --system rdp set-tls-cert $cert_crt
-        sudo grdctl --system rdp set-credentials wanliz zhujie
+        sudo grdctl --system rdp set-credentials wzhu zhujie
         sudo grdctl --system rdp enable
         sudo ufw disable || sudo ufw allow 3389/tcp 
         sudo systemctl daemon-reload
@@ -139,9 +138,11 @@ else
         [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
         [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
         [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+    else
+        echo "NOT inside nvidia domain, skip NFS mounting"
     fi 
 fi 
 
+printf '\n'
 printf 'CPU: %s [RAM: %s, CLK: %.1f GHz]\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" "$(free -h | awk '/^Mem:/ {print $2}')" "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)"
 printf 'GPU: %s\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//')"
-printf 'FINISHED\n'
