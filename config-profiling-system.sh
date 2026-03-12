@@ -39,7 +39,7 @@ echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
 echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
-echo "pp() { pushd ~/wzhu_utils; git add .; git commit -m s && git pull && git push; popd; }" >>~/nvidia-profiling.sh
+echo "pp() { pushd ~/wzhu_utils; git add .; git commit -m s && { git pull; git push; } || git pull; popd; }" >>~/nvidia-profiling.sh
 cat >>~/nvidia-profiling.sh <<'EOF'
 EOF
 source ~/nvidia-profiling.sh
