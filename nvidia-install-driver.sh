@@ -57,7 +57,7 @@ else
         fi 
         if [[ -d /mnt/linuxqa/wanliz ]]; then 
             shutdown_graphical_env || exit 1
-            sudo -iu root -- bash -lic "[[ ! -d /root/nvt ]] && /mnt/linuxqa/nvt.sh sync; /mnt/linuxqa/nvt.sh drivers $@" 
+            sudo -iu root -- bash -lc '[[ ! -d /root/nvt ]] && /mnt/linuxqa/nvt.sh sync; /mnt/linuxqa/nvt.sh drivers "$@"' /usr/bin/bash "$@"
         fi 
     fi 
 fi 
@@ -65,5 +65,4 @@ fi
 if [[ -f /tmp/cmd ]]; then 
     chmod +x /tmp/cmd
     source /tmp/cmd 
-    rm -rf /tmp/cmd 
 fi 
