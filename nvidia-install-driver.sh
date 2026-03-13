@@ -37,7 +37,7 @@ install_local_file() {
     [[ -z $(which expect) ]] && sudo apt install -y expect 
 
     sudo chmod +x $file 2>/dev/null 
-    sudo $file -ui=none --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
+    sudo $file --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
         sudo nvidia-smi -pm 1 
         sudo systemctl isolate graphical
     }
