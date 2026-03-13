@@ -77,7 +77,7 @@ install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
     libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
-if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null) ]]; then 
+if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
     read -p "Press [Enter] to uninstall libre office: "
     sudo apt purge -y libreoffice*
     sudo apt autoremove -y 
