@@ -162,7 +162,15 @@ else
 fi 
 
 if [[ -d /data ]]; then 
-    [[ ! -e ~/.steam ]] && ln -sf /data/wzhu/steam ~/.steam 
+    pushd $HOME 
+    [[ ! -e wzhu_utils ]] && ln -vsf /data/wzhu_utils wzhu_utils 
+    [[ ! -e wzhu_p4sw  ]] && ln -vsf /data/wzhu_p4sw  wzhu_p4sw 
+    [[ ! -e .ssh       ]] && ln -vsf /data/_ssh .ssh 
+    [[ ! -e .bashrc    ]] && ln -vsf /data/_bashrc .bashrc 
+    [[ ! -e Documents  ]] && ln -vsf /data/Documents Documents 
+    [[ ! -e Downloads  ]] && ln -vsf /data/Downloads Downloads
+    [[ ! -e Pictures   ]] && ln -vsf /data/Pictures Pictures 
+    popd  
 fi 
 
 printf '\n'
