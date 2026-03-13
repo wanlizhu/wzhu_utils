@@ -6,6 +6,7 @@ rm -rf /tmp/cmd
 shutdown_graphical_env() {
     # unload nvidia kernel modules 
     if [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]]; then 
+        lsmod | awk '$1 ~ /^nvidia/ {print $1}'
         read -p "Press [Enter] to unload nvidia kernel modules: "
         sudo systemctl isolate multi-user && echo "sudo systemctl isolate graphical" >/tmp/cmd
         sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 

@@ -77,6 +77,10 @@ install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
     libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
+read -p "Press [Enter] to uninstall libre office: "
+sudo apt purge libreoffice*
+sudo apt autoremove
+
 # config git env 
 git config --global user.email >/dev/null 2>&1 || git config --global user.email zhu.wanli@icloud.com
 git config --global user.name >/dev/null 2>&1 || git config --global user.name "Wanli Zhu"
@@ -155,6 +159,10 @@ else
     else
         echo "NOT inside nvidia domain, skip NFS mounting"
     fi 
+fi 
+
+if [[ -d /data ]]; then 
+    [[ ! -e ~/.steam ]] && ln -sf /data/wzhu/steam ~/.steam 
 fi 
 
 printf '\n'
