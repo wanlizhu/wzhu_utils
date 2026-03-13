@@ -79,8 +79,8 @@ install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
 
 if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null) ]]; then 
     read -p "Press [Enter] to uninstall libre office: "
-    sudo apt purge libreoffice*
-    sudo apt autoremove
+    sudo apt purge -y libreoffice*
+    sudo apt autoremove -y 
 fi 
 
 # config git env 
