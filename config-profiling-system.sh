@@ -3,7 +3,7 @@
 set -o pipefail 
 
 # enable passwordless sudo 
-if ! sudo -n true 2>/dev/null; then 
+if [[ ! -f /etc/sudoers.d/99-$(id -un)-nopasswd ]]; then 
     echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
     sudo chmod 0440 /etc/sudoers.d/99-$(id -un)-nopasswd
     sudo visudo -cf /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
