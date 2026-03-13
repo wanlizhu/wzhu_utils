@@ -52,8 +52,13 @@ else
         [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
     fi
     if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-        shutdown_graphical_env || exit 1
-        sudo -iu root -- bash -lic "/mnt/linuxqa/nvt.sh drivers $@" 
+        if [[ ! -d /mnt/linuxqa/wanliz ]]; then 
+            sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa
+        fi 
+        if [[ -d /mnt/linuxqa/wanliz ]]; then 
+            shutdown_graphical_env || exit 1
+            sudo -iu root -- bash -lic "[[ ! -d /root/nvt ]] && /mnt/linuxqa/nvt.sh sync; /mnt/linuxqa/nvt.sh drivers $@" 
+        fi 
     fi 
 fi 
 
