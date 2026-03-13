@@ -77,9 +77,11 @@ install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
     libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0
 
-read -p "Press [Enter] to uninstall libre office: "
-sudo apt purge libreoffice*
-sudo apt autoremove
+if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null) ]]; then 
+    read -p "Press [Enter] to uninstall libre office: "
+    sudo apt purge libreoffice*
+    sudo apt autoremove
+fi 
 
 # config git env 
 git config --global user.email >/dev/null 2>&1 || git config --global user.email zhu.wanli@icloud.com
@@ -162,7 +164,7 @@ else
 fi 
 
 if [[ -d /data ]]; then 
-    pushd $HOME 
+    pushd $HOME >/dev/null 
     [[ ! -e wzhu_utils ]] && ln -vsf /data/wzhu_utils wzhu_utils 
     [[ ! -e wzhu_p4sw  ]] && ln -vsf /data/wzhu_p4sw  wzhu_p4sw 
     [[ ! -e .ssh       ]] && ln -vsf /data/_ssh .ssh 
@@ -170,11 +172,11 @@ if [[ -d /data ]]; then
     [[ ! -e Documents  ]] && ln -vsf /data/Documents Documents 
     [[ ! -e Downloads  ]] && ln -vsf /data/Downloads Downloads
     [[ ! -e Pictures   ]] && ln -vsf /data/Pictures Pictures 
-    popd  
+    popd >/dev/null 
 fi 
 
 printf '\n'
 printf 'CPU: %s [RAM: %s, CLK: %.1f GHz]\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" "$(free -h | awk '/^Mem:/ {print $2}')" "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)"
-printf 'GPU: %s\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//')"
+printf 'GPU: %s [VRAM: %s (Resizable BAR: %s), CLK: %s]\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//' | grep -vi Controller | grep -vi Thunderbolt )" "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader)" "$(sudo lspci -vv -s $(lspci -Dnn | grep -iE 'VGA|3D|Display' | grep -i nvidia | awk 'NR==1 {print $1}') | grep -A1 'Physical Resizable BAR' | grep 'current size' | awk -F',' '{print $1}' | awk '{print $5}')" "$(nvidia-smi -q -d CLOCK | grep -A4 'Max Clocks' | grep 'Graphics' | awk -F': ' '{print $2}')"
 
 exec /usr/bin/bash 
