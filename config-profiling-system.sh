@@ -176,8 +176,8 @@ if [[ -d /data ]]; then
 fi 
 
 printf '\n'
+printf ' OS: %s (Kernel: %s)\n' "$(lsb_release -a | grep Description | awk '{print $2 $3}')" "$(uname -r)"
 printf 'CPU: %s [RAM: %s, CLK: %.1f GHz]\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" "$(free -h | awk '/^Mem:/ {print $2}')" "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)"
 printf 'GPU: %s [VRAM: %s (Resizable BAR: %s), CLK: %s]\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//' | grep -vi Controller | grep -vi Thunderbolt )" "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader)" "$(sudo lspci -vv -s $(lspci -Dnn | grep -iE 'VGA|3D|Display' | grep -i nvidia | awk 'NR==1 {print $1}') | grep -A1 'Physical Resizable BAR' | grep 'current size' | awk -F',' '{print $1}' | awk '{print $5}')" "$(nvidia-smi -q -d CLOCK | grep -A4 'Max Clocks' | grep 'Graphics' | awk -F': ' '{print $2}')"
-printf ' OS: %s (Kernel: %s)' "$(lsb_release -a | grep Description | awk '{print $2 $3}')" "$(uname -r)"
 
 exec /usr/bin/bash 
