@@ -6,13 +6,14 @@ OUTPUT_FILE=~/system_info.txt
 DM_SAMPLE_FREQ_MS=100
 DM_SAMPLE_TIME_LIMIT_S=0
 
-dm_target_pid=$1
-dm_output_file=~/system_info_dm_pid${dm_target_pid:-none}.csv
-
 if [[ $1 == steam && ! -z $(pidof steam) ]]; then 
     pstree -aspT $(pidof steam)
     read -p "Input steam game PID: " dm_target_pid
+else 
+    dm_target_pid=$1
 fi 
+dm_output_file=~/system_info_dm_pid${dm_target_pid:-none}.csv
+
 
 append_basic_header() {
     printf '%s\n' "$(hostname)" >$OUTPUT_FILE
@@ -482,7 +483,11 @@ append_dynamic_monitoring() {
         return
     fi
 
-    echo "Dynamic monitoring PID $dm_target_pid for $DM_SAMPLE_TIME_LIMIT_S seconds ..."
+    if (( DM_SAMPLE_TIME_LIMIT_S > 0 )); then
+        echo "Dynamic monitoring PID $dm_target_pid for $DM_SAMPLE_TIME_LIMIT_S seconds ..."
+    else
+        echo "Dynamic monitoring PID $dm_target_pid until Ctrl-C ..."
+    fi
 
     tmp_gpu_latest=$(mktemp /tmp/tmp_gpu_latest.XXXXXX.csv)
     tmp_gpu_raw=$(mktemp /tmp/tmp_gpu_raw.XXXXXX.csv)
@@ -504,7 +509,13 @@ append_dynamic_monitoring() {
         rm -f $tmp_gpu_latest $tmp_gpu_raw $tmp_gpu_swap
     }
 
+    request_stop_dynamic_monitoring() {
+        stop_requested=1
+        echo 'Dynamic monitoring finished'
+    }
+
     trap cleanup_dynamic_monitoring EXIT
+    trap request_stop_dynamic_monitoring INT TERM
 
     echo 'ts_ms,gpu_util,gpu_mem_util,gpu_sm_mhz,gpu_mem_mhz,gpu_power_w,gpu_temp_c,gpu_local_mem_used_mb,gpu_bar1_used_mb,cpu_util_pct,cpu_mem_used_mb,swap_used_mb,target_cpu_of_system_pct,target_rss_mb' >$dm_output_file
 
@@ -530,6 +541,10 @@ append_dynamic_monitoring() {
     start_s=$(date +%s)
 
     while [[ -d /proc/$dm_target_pid ]]; do
+        if (( stop_requested )); then
+            break
+        fi
+
         if (( DM_SAMPLE_TIME_LIMIT_S > 0 )) && (( $(date +%s) - start_s >= DM_SAMPLE_TIME_LIMIT_S )); then
             break
         fi
@@ -599,7 +614,7 @@ append_dynamic_monitoring() {
 
         echo "$now_ms,$gpu_util,$gpu_mem_util,$gpu_sm_mhz,$gpu_mem_mhz,$gpu_power_w,$gpu_temp_c,$gpu_local_mem_used_mb,$gpu_bar1_used_mb,$cpu_util_pct,$cpu_mem_used_mb,$swap_used_mb,$target_cpu_pct,$target_rss_mb" >>$dm_output_file
 
-        sleep $sleep_s
+        sleep $sleep_s || true
     done
 
     echo "dm output csv file: $dm_output_file" >>$OUTPUT_FILE
