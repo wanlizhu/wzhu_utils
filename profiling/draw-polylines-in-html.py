@@ -642,7 +642,6 @@ def main():
     )
 
     OUTPUT_HTML.write_text(html, encoding="utf-8")
-    print(OUTPUT_HTML)
 
 
 if __name__ == "__main__":
