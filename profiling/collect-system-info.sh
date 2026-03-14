@@ -486,7 +486,7 @@ append_dynamic_monitoring() {
     if (( DM_SAMPLE_TIME_LIMIT_S > 0 )); then
         echo "Dynamic monitoring PID $dm_target_pid for $DM_SAMPLE_TIME_LIMIT_S seconds ..."
     else
-        echo "Dynamic monitoring PID $dm_target_pid until Ctrl-C ..."
+        echo "Dynamic monitoring PID $dm_target_pid until [ctrl-c] ..."
     fi
 
     tmp_gpu_latest=$(mktemp /tmp/tmp_gpu_latest.XXXXXX.csv)
@@ -511,6 +511,7 @@ append_dynamic_monitoring() {
 
     request_stop_dynamic_monitoring() {
         stop_requested=1
+        echo 
         echo 'Dynamic monitoring finished'
     }
 
