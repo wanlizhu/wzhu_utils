@@ -6,14 +6,22 @@ OUTPUT_FILE=~/system_info.txt
 DM_SAMPLE_FREQ_MS=100
 DM_SAMPLE_TIME_LIMIT_S=0
 
+if [[ $1 == brief ]]; then 
+    printf '%s (Kernel: %s)\n' "$(lsb_release -a | grep Description | awk '{print $2 $3}')" "$(uname -r)"
+    printf '%s [RAM: %s, CLK: %.1f GHz]\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" "$(free -h | awk '/^Mem:/ {print $2}')" "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)"
+    printf '%s [VRAM: %s (Resizable BAR: %s), CLK: %s]\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//' | grep -vi Controller | grep -vi Thunderbolt )" "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader)" "$(sudo lspci -vv -s $(lspci -Dnn | grep -iE 'VGA|3D|Display' | grep -i nvidia | awk 'NR==1 {print $1}') | grep -A1 'Physical Resizable BAR' | grep 'current size' | awk -F',' '{print $1}' | awk '{print $5}')" "$(nvidia-smi -q -d CLOCK | grep -A4 'Max Clocks' | grep 'Graphics' | awk -F': ' '{print $2}')"
+    exit 
+fi 
+
 if [[ $1 == steam && ! -z $(pidof steam) ]]; then 
     pstree -aspT $(pidof steam)
     read -p "Input steam game PID: " dm_target_pid
-else 
+elif [[ -d /proc/$1 ]]; then 
     dm_target_pid=$1
+else
+    dm_target_pid=
 fi 
-dm_output_file=~/system_info_dm_pid${dm_target_pid:-none}.csv
-
+[[ ! -z $dm_target_pid ]] && dm_output_file=~/system_info_dm_pid${dm_target_pid}.csv
 
 append_basic_header() {
     printf '%s\n' "$(hostname)" >$OUTPUT_FILE
