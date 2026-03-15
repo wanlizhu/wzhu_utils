@@ -57,31 +57,33 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
 fi 
 
 # install required packages
-if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
-    echo "Types: deb
+if [[ ! -z $(which install-pkg.sh) ]]; then 
+    if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
+        echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
 Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
 Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
-    install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
-fi 
-sudo apt update >/dev/null 2>&1
-if [[ ! -z $(apt list --upgradable 2>/dev/null | sed '1d') ]]; then 
-    sudo apt upgrade -y
-    sudo apt autoremove -y
-fi  
-install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
-    build-essential cmake git ninja-build pkg-config meson clang \
-    vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
-    btop htop nvtop sysprof pciutils nfs-common openssh-server \
-    libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
-    libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-    python3-pip python3-pandas 
+        install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+    fi 
+    sudo apt update >/dev/null 2>&1
+    if [[ ! -z $(apt list --upgradable 2>/dev/null | sed '1d') ]]; then 
+        sudo apt upgrade -y
+        sudo apt autoremove -y
+    fi  
+    install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
+        build-essential cmake git ninja-build pkg-config meson clang \
+        vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
+        btop htop nvtop sysprof pciutils nfs-common openssh-server \
+        libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
+        libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
+        python3-pip python3-pandas 
 
-if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
-    read -p "Press [Enter] to uninstall libre office: "
-    sudo apt purge -y libreoffice*
-    sudo apt autoremove -y 
+    if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
+        read -p "Press [Enter] to uninstall libre office: "
+        sudo apt purge -y libreoffice*
+        sudo apt autoremove -y 
+    fi 
 fi 
 
 # config git env 
@@ -90,20 +92,29 @@ git config --global user.name >/dev/null 2>&1 || git config --global user.name "
 git config --global pull.rebase >/dev/null 2>&1 || git config --global pull.rebase false
 
 # install amd gpu drivers 
-if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) ]]; then 
+if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which install-pkg.sh) ]]; then 
     install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
     dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
 fi 
 
 # enable ssh server
 if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
-    install-pkg.sh openssh-server 
+    if [[ ! -z $(which install-pkg.sh) ]]; then 
+        install-pkg.sh openssh-server 
+    else
+        sudo apt install -y openssh-server 
+    fi 
     sudo systemctl enable ssh 
     sudo systemctl start ssh
 fi 
 
 # enable remote login 
-if [[ $(list-login-session.sh -t0) == x11 ]]; then
+if [[ ! -z $(which list-login-session.sh) ]]; then 
+    login_session_type=$(list-login-session.sh -t0)
+else
+    login_session_type=
+fi 
+if [[ $login_session_type == x11 ]]; then
     # x11: enable x11vnc 
     if ! ss -ltnp | grep -E "LISTEN.+:5900\b" >/dev/null; then
         [[ -z $(which screen) ]] && sudo apt install -y screen 
@@ -113,10 +124,14 @@ if [[ $(list-login-session.sh -t0) == x11 ]]; then
         screen -ls | grep -F x11vnc-server 
         ss -ltnp | grep -E "LISTEN.+:5900\b"
     fi 
-elif [[ $(list-login-session.sh -t0) == wayland ]]; then
+elif [[ $login_session_type == wayland ]]; then
     # wayland: enable gnome remote desktop
     if ! sudo ss -ltnp | grep -qE ':3389\b'; then
-        install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+        if [[ ! -z $(which install-pkg.sh) ]]; then 
+            install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+        else
+            sudo apt install -y gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
+        fi 
         cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
         cert_key=$cert_dir/rdp-tls.key
         cert_crt=$cert_dir/rdp-tls.crt
