@@ -449,7 +449,5 @@ merge_cpu_gpu_csv $tmp_cpu_file $tmp_gpu_file $out_csv || {
 }
 
 if command -v draw-polylines-in-html.py >/dev/null 2>&1; then
-    python3 "$(command -v draw-polylines-in-html.py)" $out_csv &&
-        echo "generated: ${out_csv%.*}.html" ||
-        echo "warning: failed to generate html graph" >&2
+    python3 "$(command -v draw-polylines-in-html.py)" $out_csv 
 fi
