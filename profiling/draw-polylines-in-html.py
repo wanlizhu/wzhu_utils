@@ -1030,10 +1030,19 @@ def main():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or not Path(sys.argv[1]).is_file():
-        print(f"usage: {Path(sys.argv[0]).name} <input_csv>", file=sys.stderr)
+    csv_files = [Path(arg).resolve() for arg in sys.argv[1:]]
+    if not csv_files:
+        csv_files = sorted(Path.cwd().glob("*.csv"))
+
+    if not csv_files:
+        print(f"no .csv files found in {Path.cwd()}", file=sys.stderr)
         raise SystemExit(1)
 
-    INPUT_CSV = Path(sys.argv[1]).resolve()
-    OUTPUT_HTML = INPUT_CSV.with_suffix(".html")
-    main()
+    for csv_file in csv_files:
+        if not csv_file.is_file():
+            print(f"error: file not found: {csv_file}", file=sys.stderr)
+            continue
+
+        INPUT_CSV = csv_file
+        OUTPUT_HTML = INPUT_CSV.with_suffix(".html")
+        main()
