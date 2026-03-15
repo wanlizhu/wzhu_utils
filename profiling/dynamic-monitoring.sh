@@ -104,28 +104,41 @@ read_pid_stat() {
 
 stop_process_group() {
     local pid=$1
+    local i
 
     [[ -n $pid ]] || return 0
 
     kill -- -$pid 2>/dev/null || true
+
+    for (( i = 0; i < 20; i++ )); do
+        if ! kill -0 $pid 2>/dev/null; then
+            wait $pid 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.1 || true
+    done
+
+    kill -KILL -- -$pid 2>/dev/null || true
+
+    for (( i = 0; i < 10; i++ )); do
+        if ! kill -0 $pid 2>/dev/null; then
+            wait $pid 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.1 || true
+    done
+
     wait $pid 2>/dev/null || true
 }
 
 cleanup() {
-    stop_process_group $cpu_sampler_pid
-    stop_process_group $gpu_sampler_pid
+    [[ -n $cpu_sampler_pid ]] && stop_process_group $cpu_sampler_pid
+    [[ -n $gpu_sampler_pid ]] && stop_process_group $gpu_sampler_pid
 }
 
 request_stop() {
     trap - INT TERM
     stop_requested=1
-
-    stop_process_group $cpu_sampler_pid
-    stop_process_group $gpu_sampler_pid
-
-    cpu_sampler_pid=
-    gpu_sampler_pid=
-
     echo
     echo dynamic monitoring finished
 }
