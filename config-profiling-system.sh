@@ -176,6 +176,8 @@ if [[ -d /data ]]; then
     popd >/dev/null 
 fi 
 
-[[ ! -z $(which collect-system-info.sh) ]] && collect-system-info.sh brief 
+if [[ ! -z $(which collect-system-info.sh) ]]; then 
+    collect-system-info.sh brief 
+fi 
 
 exec /usr/bin/bash 
