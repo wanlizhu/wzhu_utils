@@ -213,15 +213,17 @@ print_gpu_info() {
     local gpu_id=$1
     local attributes=$2
     local attr
+    shopt -s extglob
     while IFS= read -r attr; do
         attr=${attr##+([[:space:]])}
         attr=${attr%%+([[:space:]])}
         [[ -n $attr ]] || continue
         nvidia-smi --id=$gpu_id \
             --query-gpu="$attr" \
-            --format=csv,noheader,nounits 2>/dev/null |
+            --format=csv,noheader 2>/dev/null |
         awk -v key=$attr '{ print key ": " $0 }'
     done < <(tr ',' '\n' <<< "$attributes" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    shopt -u extglob
 }
 
 if [[ $1 == brief ]]; then 
@@ -291,7 +293,7 @@ append_basic_header() {
 
 append_environment() {
     printf '[environment variables]\n' >>$OUTPUT_FILE
-    env | grep -Ev 'PTYXIS_PROFILE|guid=|INVOCATION_ID=|LS_COLORS|MEMORY_PRESSURE_WRITE=|MEMORY_PRESSURE_WATCH=' >>$OUTPUT_FILE
+    env | grep -Ev 'PTYXIS_PROFILE|guid=|INVOCATION_ID=|LS_COLORS|MEMORY_PRESSURE_WRITE=|MEMORY_PRESSURE_WATCH=|SSH_CONNECTION=|SSH_CLIENT=|OLDPWD=' >>$OUTPUT_FILE
     printf '[environment variables] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
@@ -490,7 +492,7 @@ append_nvidia_smi_query() {
 
     {
         for i in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
-            print_gpu_info $i "$fields" | column -t -s $'\t' -L
+            print_gpu_info $i "$fields" | sed 's/: /\t:\t/' | column -t -s $'\t' -L
             echo
         done
     } >>$OUTPUT_FILE
