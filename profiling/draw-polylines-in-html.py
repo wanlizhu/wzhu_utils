@@ -181,80 +181,122 @@ def build_html(report_payload: dict) -> str:
     payload_json = json.dumps(report_payload, ensure_ascii=False)
     title = "Dynamic Monitoring Graph"
 
-    html = r"""<!doctype html>
+    html = r'''<!doctype html>
 <html lang=en>
 <head>
     <meta charset=utf-8>
     <title>__TITLE__</title>
     <script src=https://cdn.plot.ly/plotly-2.35.2.min.js></script>
     <style>
+        :root {
+            --sidebar-width: 520px;
+            --sidebar-min-width: 360px;
+            --sidebar-max-width: 900px;
+            --panel-bg: #fafafa;
+            --panel-border: #d7d7d7;
+            --muted: #666;
+            --danger: #c62828;
+            --success: #17823b;
+        }
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
+            overflow: hidden;
         }
         .page {
             display: flex;
             height: 100vh;
+            width: 100vw;
         }
         .sidebar {
-            width: 560px;
-            border-right: 1px solid #ccc;
-            padding: 16px;
-            box-sizing: border-box;
-            overflow-y: auto;
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-min-width);
+            max-width: var(--sidebar-max-width);
+            padding: 14px;
+            overflow: auto;
+            background: #fff;
+        }
+        .resizer {
+            width: 8px;
+            cursor: col-resize;
+            background: linear-gradient(to right, #ececec, #d6d6d6, #ececec);
+            border-left: 1px solid #d0d0d0;
+            border-right: 1px solid #d0d0d0;
+            user-select: none;
         }
         .main {
             flex: 1;
+            min-width: 0;
             padding: 12px;
-            box-sizing: border-box;
         }
         #plot {
             width: 100%;
             height: calc(100vh - 24px);
         }
-        .controls {
-            margin-bottom: 16px;
+        .panel {
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 12px;
+            background: var(--panel-bg);
+            margin-bottom: 12px;
         }
-        .controls button,
-        .controls input {
-            margin: 4px 4px 4px 0;
+        .panel-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 10px;
         }
-        .hint {
-            color: #555;
-            font-size: 13px;
+        .sub-title {
+            font-weight: 700;
             margin-top: 8px;
+            margin-bottom: 5px;
         }
-        .section-title {
-            font-weight: 600;
-            margin-top: 12px;
-            margin-bottom: 6px;
+        .row {
+            margin-bottom: 8px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        button, select, input[type=number] {
+            font: inherit;
+        }
+        button:disabled,
+        input:disabled,
+        select:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
         .metric-list {
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
-        .unit-group {
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        .group-box {
+            border: 1px solid #dedede;
+            border-radius: 9px;
             padding: 10px 10px 8px 10px;
-            background: #fafafa;
+            background: #fff;
         }
-        .unit-group-header {
+        .group-title {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 8px;
+            font-size: 17px;
             font-weight: 700;
-            font-size: 16px;
+            margin-bottom: 8px;
         }
-        .unit-group-items {
+        .group-items {
+            border-top: 1px solid #d7d7d7;
+            padding-top: 8px;
             display: flex;
             flex-direction: column;
             gap: 6px;
-            border-top: 1px solid #d8d8d8;
-            padding-top: 8px;
         }
         .metric-item {
             display: flex;
@@ -263,79 +305,126 @@ def build_html(report_payload: dict) -> str:
             padding: 3px 0;
             transition: opacity 120ms ease-in-out;
         }
+        .metric-item.disabled {
+            opacity: 0.45;
+        }
         .metric-text {
             display: flex;
             flex-direction: column;
             line-height: 1.2;
         }
         .metric-name {
-            font-weight: 600;
+            font-weight: 700;
             word-break: break-all;
         }
-        .metric-item.disabled {
-            opacity: 0.48;
-        }
         .metric-avg {
-            color: #555;
+            color: var(--muted);
             font-size: 13px;
         }
         .badge {
             display: inline-block;
             margin-left: 6px;
             padding: 1px 6px;
-            border: 1px solid #999;
+            border: 1px solid #9d9d9d;
             border-radius: 999px;
             font-size: 11px;
             color: #444;
             vertical-align: middle;
         }
-        .comparison-status {
-            color: #555;
+        .hint {
+            color: var(--muted);
             font-size: 13px;
-            margin-top: 4px;
+            margin-top: 6px;
+        }
+        .status-line {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .status-off {
+            color: var(--danger);
+            font-weight: 700;
+        }
+        .status-on {
+            color: var(--success);
+            font-weight: 700;
         }
         .slider-row {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 6px;
+            margin-bottom: 4px;
         }
         #comparison_shift {
             flex: 1;
         }
-        .attr-toolbar {
-            display: flex;
-            gap: 8px;
-            margin-top: 6px;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #ddd;
+        .zoom-info {
+            color: var(--muted);
+            font-size: 13px;
+            align-self: center;
+        }
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            transform: translateX(-50%);
+            background: rgba(40, 40, 40, 0.94);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
         }
         .hidden {
-            display: none;
+            display: none !important;
         }
     </style>
 </head>
 <body>
     <script id=report-data type=application/json>__PAYLOAD_JSON__</script>
     <div class=page>
-        <div class=sidebar>
-            <div class=controls>
-                <div>
+        <div class=sidebar id=sidebar>
+            <div class=panel>
+                <div class=panel-title>Visual style</div>
+                <div class=toolbar>
                     <button type=button onclick=resetZoom()>Reset zoom</button>
+                    <span class=zoom-info id=zoom_info>Zoom: 100%</span>
                 </div>
-                <div class=section-title>Y axis mode</div>
-                <div><label><input type=radio name=y_mode value=normalized checked onchange=renderPlot()> Normalized ratio</label></div>
-                <div><label><input type=radio name=y_mode value=actual onchange=renderPlot()> Actual value</label></div>
-                <div class=section-title>Line source</div>
-                <div><label><input type=checkbox id=use_smooth checked onchange=rebuildAllDerivedAndRender()> Use smoothed values</label></div>
-                <div style="margin-top:10px;"><label for=window_size>Smoothing window:</label> <input id=window_size type=number min=1 step=2 value=7 onchange=rebuildAllDerivedAndRender() style="width:80px;"></div>
-                <div class=section-title>Attributes</div>
-                <div class=attr-toolbar>
+                <div class=sub-title>Y axis mode</div>
+                <div class=row><label><input type=radio name=y_mode value=normalized checked onchange=renderPlot()> Normalized ratio</label></div>
+                <div class=row><label><input type=radio name=y_mode value=actual onchange=renderPlot()> Actual value</label></div>
+                <div class=row><label><input type=radio name=y_mode value=delta id=y_mode_delta onchange=renderPlot()> Delta view (only available in comparison mode)</label></div>
+                <div class=sub-title>Line source</div>
+                <div class=row><label><input type=checkbox id=use_smooth checked onchange=rebuildAllDerivedAndRender()> Use smoothed values</label></div>
+                <div class=row><label for=window_size>Smoothing window:</label> <input id=window_size type=number min=1 step=2 value=7 onchange=rebuildAllDerivedAndRender() style="width:80px;"></div>
+                <div class=hint>Mouse wheel zoom centers on the current hover position. Box zoom only works horizontally.</div>
+            </div>
+
+            <div class=panel>
+                <div class=panel-title>Comparison</div>
+                <div class=status-line id=comparison_status_line>Comparison Mode: <span class=status-off>OFF</span></div>
+                <div class=toolbar>
+                    <button type=button id=load_second_btn onclick=triggerComparisonLoad()>Load the second report</button>
+                    <button type=button id=unload_second_btn onclick=unloadComparisonReport()>Unload the second report</button>
+                    <input id=comparison_file type=file accept=.html,text/html style="display:none" onchange=handleComparisonFile(event)>
+                </div>
+                <div class=sub-title>Align X axis manually</div>
+                <div class=slider-row>
+                    <input id=comparison_shift type=range min=-10 max=10 value=0 step=1 oninput=handleShiftSliderInput()>
+                    <span id=comparison_shift_value>0.0</span>
+                </div>
+                <div class=hint>Hold Shift while dragging the slider to use finer 0.1-step movement.</div>
+                <div class=hint>Comparison requires matching timestamp column name, timestamp type, metric name, and unit.</div>
+            </div>
+
+            <div class=panel>
+                <div class=panel-title>Attributes</div>
+                <div class=toolbar>
                     <button type=button onclick=selectAll()>Select all</button>
                     <button type=button onclick=selectNone()>Select none</button>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div class=row>
                     <label for=group_mode>Group attributes by:</label>
                     <select id=group_mode onchange=handleGroupModeChange()>
                         <option value=unit selected>Group by unit</option>
@@ -343,35 +432,23 @@ def build_html(report_payload: dict) -> str:
                         <option value=none>No grouping</option>
                     </select>
                 </div>
-                <div>
-                    <button type=button onclick=triggerComparisonLoad()>Load comparison report</button>
-                    <button type=button onclick=unloadComparisonReport()>Unload comparison report</button>
-                    <input id=comparison_file type=file accept=.html,text/html style="display:none" onchange=handleComparisonFile(event)>
-                </div>
-                <div id=comparison_status class=comparison-status>No comparison report loaded.</div>
-                <div id=comparison_shift_wrap class="hidden">
-                    <div class=section-title>Comparison alignment</div>
-                    <div class=slider-row>
-                        <input id=comparison_shift type=range min=-10 max=10 value=0 step=1 oninput=handleShiftSliderInput()>
-                        <span id=comparison_shift_value>0.0</span>
-                    </div>
-                    <div class=hint>Hold Shift while dragging the slider to use finer 0.1-step movement.</div>
-                </div>
-                <div class=hint>
-                    Comparison mode loads another HTML report generated by this same script.
-                    Comparable attributes require the same column name and the same unit, and the comparison report must use the same timestamp column name and timestamp type.
-                </div>
+                <div id=metric_list class=metric-list></div>
             </div>
-            <div id=metric_list class=metric-list></div>
         </div>
+        <div class=resizer id=sidebar_resizer></div>
         <div class=main><div id=plot></div></div>
     </div>
+    <div id=toast class=toast></div>
     <script>
         const PRIMARY_REPORT = JSON.parse(document.getElementById("report-data").textContent);
         let SECONDARY_REPORT = null;
         let comparisonShift = 0.0;
         let lastHoverX = null;
         let baseAxisRanges = { x: null, y: null };
+        let currentPlotState = { traces: [], comparisonMode: false, yMode: "normalized" };
+        let suppressRelayoutHandler = false;
+        let toastTimer = null;
+        let pendingXRange = null;
         const colorCache = {};
         const selectionState = {};
         const groupState = {};
@@ -387,9 +464,16 @@ def build_html(report_payload: dict) -> str:
         function getColorForMetric(name) {
             if (!(name in colorCache)) {
                 const hue = hashString(name) % 360;
-                colorCache[name] = `hsl(${hue}, 70%, 45%)`;
+                colorCache[name] = `hsl(${hue}, 70%, 42%)`;
             }
             return colorCache[name];
+        }
+        function dimColor(color) {
+            const m = color.match(/^hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)$/);
+            if (!m) {
+                return color;
+            }
+            return `hsla(${m[1]}, ${m[2]}%, ${Math.max(28, Number(m[3]) + 10)}%, 0.72)`;
         }
         function getMetricUnit(report, name) {
             return report.metrics[name].unit || "";
@@ -404,8 +488,7 @@ def build_html(report_payload: dict) -> str:
             return getMetricNames(PRIMARY_REPORT).filter(metricIsComparable);
         }
         function getGroupMode() {
-            const node = document.getElementById("group_mode");
-            return node ? node.value : "unit";
+            return document.getElementById("group_mode").value;
         }
         function getNameGroupKey(name) {
             const idx = name.indexOf("_");
@@ -415,31 +498,18 @@ def build_html(report_payload: dict) -> str:
             const mode = getGroupMode();
             if (mode === "unit") {
                 const unit = getMetricUnit(PRIMARY_REPORT, name) || "(no unit)";
-                return {
-                    mode: mode,
-                    key: unit,
-                    label: `Unit: ${unit}`,
-                };
+                return { mode: mode, key: unit, label: `Unit: ${unit}` };
             }
             if (mode === "name") {
                 const prefix = getNameGroupKey(name);
-                return {
-                    mode: mode,
-                    key: prefix,
-                    label: `Name: ${prefix}`,
-                };
+                return { mode: mode, key: prefix, label: `Name: ${prefix}` };
             }
-            return {
-                mode: mode,
-                key: name,
-                label: name,
-            };
+            return { mode: mode, key: name, label: name };
         }
         function getStateGroupKey(mode, key) {
             return `${mode}::${key}`;
         }
         function getSortedGroupKeys() {
-            const mode = getGroupMode();
             const items = new Map();
             for (const name of getMetricNames(PRIMARY_REPORT)) {
                 const info = getMetricGroupInfo(name);
@@ -496,7 +566,6 @@ def build_html(report_payload: dict) -> str:
             row.className = "metric-item";
             const cb = document.createElement("input");
             cb.type = "checkbox";
-            cb.value = name;
             cb.checked = !!selectionState[name];
             cb.dataset.metricName = name;
             cb.onchange = () => {
@@ -509,13 +578,9 @@ def build_html(report_payload: dict) -> str:
             };
             const textWrap = document.createElement("span");
             textWrap.className = "metric-text";
-            const color = getColorForMetric(name);
-            if (!selectionState[name]) {
-                row.classList.add("disabled");
-            }
             const nameSpan = document.createElement("span");
             nameSpan.className = "metric-name";
-            nameSpan.style.color = selectionState[name] ? color : "#8a8a8a";
+            nameSpan.style.color = selectionState[name] ? getColorForMetric(name) : "#8a8a8a";
             nameSpan.textContent = name;
             if (metricIsComparable(name)) {
                 const badge = document.createElement("span");
@@ -527,6 +592,9 @@ def build_html(report_payload: dict) -> str:
             const avgSpan = document.createElement("span");
             avgSpan.className = "metric-avg";
             avgSpan.textContent = `avg=${meta.avg_label}   min=${meta.min_label}   max=${meta.max_label}`;
+            if (!selectionState[name]) {
+                row.classList.add("disabled");
+            }
             textWrap.appendChild(nameSpan);
             textWrap.appendChild(avgSpan);
             row.appendChild(cb);
@@ -539,27 +607,27 @@ def build_html(report_payload: dict) -> str:
             root.innerHTML = "";
             const mode = getGroupMode();
             if (mode === "none") {
-                const listBox = document.createElement("div");
-                listBox.className = "unit-group";
-                const header = document.createElement("div");
-                header.className = "unit-group-header";
-                header.textContent = "All attributes";
-                listBox.appendChild(header);
+                const box = document.createElement("div");
+                box.className = "group-box";
+                const title = document.createElement("div");
+                title.className = "group-title";
+                title.textContent = "All attributes";
+                box.appendChild(title);
                 const items = document.createElement("div");
-                items.className = "unit-group-items";
+                items.className = "group-items";
                 for (const name of getMetricNames(PRIMARY_REPORT)) {
                     items.appendChild(buildMetricItem(name, null));
                 }
-                listBox.appendChild(items);
-                root.appendChild(listBox);
+                box.appendChild(items);
+                root.appendChild(box);
                 return;
             }
             for (const groupInfo of getSortedGroupKeys()) {
                 const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
-                const groupBox = document.createElement("div");
-                groupBox.className = "unit-group";
+                const box = document.createElement("div");
+                box.className = "group-box";
                 const header = document.createElement("label");
-                header.className = "unit-group-header";
+                header.className = "group-title";
                 const groupCb = document.createElement("input");
                 groupCb.type = "checkbox";
                 groupCb.checked = !!groupState[stateKey];
@@ -570,18 +638,18 @@ def build_html(report_payload: dict) -> str:
                     buildMetricList();
                     renderPlot();
                 };
-                const headerText = document.createElement("span");
-                headerText.textContent = groupInfo.label;
+                const label = document.createElement("span");
+                label.textContent = groupInfo.label;
                 header.appendChild(groupCb);
-                header.appendChild(headerText);
-                groupBox.appendChild(header);
+                header.appendChild(label);
+                box.appendChild(header);
                 const items = document.createElement("div");
-                items.className = "unit-group-items";
+                items.className = "group-items";
                 for (const name of getMetricsInGroup(groupInfo)) {
                     items.appendChild(buildMetricItem(name, groupInfo));
                 }
-                groupBox.appendChild(items);
-                root.appendChild(groupBox);
+                box.appendChild(items);
+                root.appendChild(box);
             }
         }
         function getSelectedMetrics() {
@@ -610,6 +678,20 @@ def build_html(report_payload: dict) -> str:
         function getYMode() {
             const node = document.querySelector('input[name="y_mode"]:checked');
             return node ? node.value : "normalized";
+        }
+        function setYMode(mode) {
+            const node = document.querySelector(`input[name="y_mode"][value="${mode}"]`);
+            if (node) {
+                node.checked = true;
+            }
+        }
+        function updateYModeUi() {
+            const deltaNode = document.getElementById("y_mode_delta");
+            const enabled = !!SECONDARY_REPORT;
+            deltaNode.disabled = !enabled;
+            if (!enabled && getYMode() === "delta") {
+                setYMode("normalized");
+            }
         }
         function getUseSmooth() {
             return document.getElementById("use_smooth").checked;
@@ -682,7 +764,8 @@ def build_html(report_payload: dict) -> str:
         }
         function getSeriesForMetric(report, name) {
             const metric = report.metrics[name];
-            if (getYMode() === "normalized") {
+            const yMode = getYMode();
+            if (yMode === "normalized") {
                 return getUseSmooth() ? metric.norm_smooth : metric.norm_raw;
             }
             return getUseSmooth() ? metric.smooth : metric.raw;
@@ -690,16 +773,43 @@ def build_html(report_payload: dict) -> str:
         function comparisonTimestampCompatible(primaryReport, secondaryReport) {
             return primaryReport.time_col === secondaryReport.time_col && primaryReport.time_type === secondaryReport.time_type;
         }
-        function updateComparisonStatus() {
-            const node = document.getElementById("comparison_status");
+        function updateComparisonUi() {
+            const status = document.getElementById("comparison_status_line");
+            const loadBtn = document.getElementById("load_second_btn");
+            const unloadBtn = document.getElementById("unload_second_btn");
+            const slider = document.getElementById("comparison_shift");
+            const sliderVal = document.getElementById("comparison_shift_value");
             if (!SECONDARY_REPORT) {
-                node.textContent = "No comparison report loaded.";
-                return;
+                status.innerHTML = 'Comparison Mode: <span class="status-off">OFF</span>';
+                loadBtn.disabled = false;
+                unloadBtn.disabled = true;
+                slider.disabled = true;
+                slider.value = "0";
+                sliderVal.textContent = "0.0";
+            } else {
+                status.innerHTML = 'Comparison Mode: <span class="status-on">ON</span>';
+                loadBtn.disabled = true;
+                unloadBtn.disabled = false;
+                slider.disabled = false;
             }
-            node.textContent = `Comparison report loaded: ${SECONDARY_REPORT.report_name}. Comparable attributes: ${getComparableMetricNames().length}.`;
+            updateYModeUi();
+            updateComparisonShiftUi();
         }
         function triggerComparisonLoad() {
-            document.getElementById("comparison_file").click();
+            if (!SECONDARY_REPORT) {
+                document.getElementById("comparison_file").click();
+            }
+        }
+        function showToast(message) {
+            const node = document.getElementById("toast");
+            node.textContent = message;
+            node.style.display = "block";
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+            }
+            toastTimer = setTimeout(() => {
+                node.style.display = "none";
+            }, 3000);
         }
         async function handleComparisonFile(event) {
             const file = event.target.files && event.target.files[0];
@@ -717,82 +827,63 @@ def build_html(report_payload: dict) -> str:
                 }
                 const report = JSON.parse(node.textContent);
                 if (!comparisonTimestampCompatible(PRIMARY_REPORT, report)) {
-                    throw new Error("comparison report timestamp column name or timestamp type does not match the primary report");
+                    throw new Error("the second report timestamp column name or timestamp type does not match the first report");
                 }
                 SECONDARY_REPORT = report;
                 comparisonShift = 0.0;
-                updateComparisonStatus();
-                updateComparisonShiftUi();
+                updateComparisonUi();
                 ensureStateDefaults();
                 buildMetricList();
                 rebuildAllDerivedAndRender();
             } catch (err) {
                 SECONDARY_REPORT = null;
                 comparisonShift = 0.0;
-                updateComparisonStatus();
-                updateComparisonShiftUi();
+                updateComparisonUi();
                 buildMetricList();
                 renderPlot();
-                alert(`Failed to load comparison report: ${err.message}`);
+                alert(`Failed to load the second report: ${err.message}`);
             } finally {
                 event.target.value = "";
             }
         }
         function unloadComparisonReport() {
+            if (!SECONDARY_REPORT) {
+                return;
+            }
             saveStateFromDom();
             SECONDARY_REPORT = null;
             comparisonShift = 0.0;
-            updateComparisonStatus();
-            updateComparisonShiftUi();
+            updateComparisonUi();
             buildMetricList();
             renderPlot();
         }
         function getComparisonCommonLength() {
             return SECONDARY_REPORT ? Math.min(PRIMARY_REPORT.row_count, SECONDARY_REPORT.row_count) : 0;
         }
-        function buildPrimaryX(len) {
+        function buildPrimaryIndex(len) {
             return Array.from({ length: len }, (_, i) => i + 1);
         }
-        function buildSecondaryX(len) {
+        function buildSecondaryIndex(len) {
             return Array.from({ length: len }, (_, i) => i + 1 + comparisonShift);
         }
         function getComparisonSlice(series) {
             return series.slice(0, getComparisonCommonLength());
         }
-        function buildTrace(report, name, role) {
-            const yMode = getYMode();
-            const metric = report.metrics[name];
-            const color = getColorForMetric(name);
-            const comparisonMode = !!SECONDARY_REPORT;
-            let y = getSeriesForMetric(report, name);
-            let x = report.x_sec;
-            let custom = [];
-            if (comparisonMode) {
-                y = getComparisonSlice(y);
-                const rawText = getComparisonSlice(metric.hover_raw_text);
-                const smoothText = getComparisonSlice(metric.hover_smooth_text);
-                const diffText = getComparisonSlice(metric.hover_diff_text);
-                const len = y.length;
-                const pointIndex = buildPrimaryX(len);
-                x = role === "secondary" ? buildSecondaryX(len) : pointIndex;
-                custom = pointIndex.map((idx, i) => [rawText[i], smoothText[i], metric.min_label, metric.max_label, diffText[i], report.report_name || (role === "secondary" ? "comparison" : "primary"), metric.unit || "", idx]);
-            } else {
-                custom = report.x_sec.map((_, i) => [metric.hover_raw_text[i], metric.hover_smooth_text[i], metric.min_label, metric.max_label, metric.hover_diff_text[i], report.report_name || "primary", metric.unit || "", i + 1]);
-            }
+        function createStandardTrace(name, x, y, custom, role) {
             return {
                 x: x,
                 y: y,
                 mode: "lines",
                 type: "scatter",
-                name: role === "secondary" ? `${name} [comparison]` : name,
-                line: { color: color, dash: role === "secondary" ? "dot" : "solid", width: 2 },
+                name: role === "secondary" ? `${name} [second]` : name,
+                line: { color: getColorForMetric(name), dash: role === "secondary" ? "dot" : "solid", width: 2 },
                 customdata: custom,
                 hovertemplate:
                     "metric=%{fullData.name}<br>" +
                     "source=%{customdata[5]}<br>" +
                     "sample_index=%{customdata[7]}<br>" +
-                    (comparisonMode ? "x_position=%{x:.2f}<br>" : (`time_col=${report.time_col}<br>time=%{x:.3f} s<br>`)) +
-                    (yMode === "normalized" ? "normalized=%{y:.4f}<br>" : "actual_y=%{y:.4f}<br>") +
+                    (currentPlotState.comparisonMode ? "x_position=%{x:.2f}<br>" : (`time_col=${PRIMARY_REPORT.time_col}<br>time=%{x:.3f} s<br>`)) +
+                    (currentPlotState.yMode === "normalized" ? "normalized=%{y:.4f}<br>" : "actual_y=%{y:.4f}<br>") +
                     "raw=%{customdata[0]}<br>" +
                     "smoothed=%{customdata[1]}<br>" +
                     "min=%{customdata[2]}<br>" +
@@ -801,22 +892,110 @@ def build_html(report_payload: dict) -> str:
                     "unit=%{customdata[6]}<extra></extra>",
             };
         }
-        function calcVisibleYRange(traces) {
+        function buildStandardMetricTrace(report, name, role) {
+            const metric = report.metrics[name];
+            let y = getSeriesForMetric(report, name);
+            let x = report.x_sec;
+            let custom = [];
+            if (currentPlotState.comparisonMode) {
+                y = getComparisonSlice(y);
+                const rawText = getComparisonSlice(metric.hover_raw_text);
+                const smoothText = getComparisonSlice(metric.hover_smooth_text);
+                const diffText = getComparisonSlice(metric.hover_diff_text);
+                const len = y.length;
+                const index = buildPrimaryIndex(len);
+                x = role === "secondary" ? buildSecondaryIndex(len) : index;
+                custom = index.map((idx, i) => [rawText[i], smoothText[i], metric.min_label, metric.max_label, diffText[i], report.report_name || (role === "secondary" ? "second" : "first"), metric.unit || "", idx]);
+            } else {
+                custom = report.x_sec.map((_, i) => [metric.hover_raw_text[i], metric.hover_smooth_text[i], metric.min_label, metric.max_label, metric.hover_diff_text[i], report.report_name || "first", metric.unit || "", i + 1]);
+            }
+            return createStandardTrace(name, x, y, custom, role);
+        }
+        function buildDeltaTraces(name) {
+            const aMetric = PRIMARY_REPORT.metrics[name];
+            const bMetric = SECONDARY_REPORT.metrics[name];
+            const aSeries = getComparisonSlice(getSeriesForMetric(PRIMARY_REPORT, name));
+            const bSeries = getComparisonSlice(getSeriesForMetric(SECONDARY_REPORT, name));
+            const len = Math.min(aSeries.length, bSeries.length);
+            const x = buildPrimaryIndex(len);
+            const posY = [];
+            const negY = [];
+            const color = getColorForMetric(name);
+            const dimmed = dimColor(color);
+            const custom = [];
+            for (let i = 0; i < len; i++) {
+                const delta = bSeries[i] - aSeries[i];
+                posY.push(delta >= 0 ? delta : null);
+                negY.push(delta < 0 ? delta : null);
+                custom.push([
+                    aMetric.hover_raw_text[i],
+                    bMetric.hover_raw_text[i],
+                    aMetric.hover_smooth_text[i],
+                    bMetric.hover_smooth_text[i],
+                    aMetric.unit || "",
+                    delta,
+                    i + 1,
+                ]);
+            }
+            const baseHover =
+                "metric=%{fullData.name}<br>" +
+                "sample_index=%{customdata[6]}<br>" +
+                "A raw=%{customdata[0]}<br>" +
+                "B raw=%{customdata[1]}<br>" +
+                "A smoothed=%{customdata[2]}<br>" +
+                "B smoothed=%{customdata[3]}<br>" +
+                "delta=%{customdata[5]:.4f} %{customdata[4]}<extra></extra>";
+            return [
+                {
+                    x: x,
+                    y: posY,
+                    mode: "lines",
+                    type: "scatter",
+                    name: `${name} [delta]`,
+                    line: { color: color, dash: "solid", width: 2.5 },
+                    customdata: custom,
+                    hovertemplate: baseHover,
+                },
+                {
+                    x: x,
+                    y: negY,
+                    mode: "lines",
+                    type: "scatter",
+                    name: `${name} [delta]`,
+                    line: { color: dimmed, dash: "dot", width: 2.5 },
+                    customdata: custom,
+                    hovertemplate: baseHover,
+                    showlegend: false,
+                },
+            ];
+        }
+        function getVisibleYRangeFromTraces(traces, xRange) {
             const vals = [];
             for (const trace of traces) {
-                for (const v of trace.y) {
-                    if (v !== null && v !== undefined && !Number.isNaN(v)) {
-                        vals.push(v);
+                for (let i = 0; i < trace.x.length; i++) {
+                    const x = trace.x[i];
+                    const y = trace.y[i];
+                    if (y === null || y === undefined || Number.isNaN(y)) {
+                        continue;
                     }
+                    if (xRange && (x < xRange[0] || x > xRange[1])) {
+                        continue;
+                    }
+                    vals.push(y);
                 }
             }
             if (vals.length === 0) {
-                return { min: 0.0, max: 1.0 };
+                return currentPlotState.yMode === "delta" ? { min: -1, max: 1 } : { min: 0, max: 1 };
             }
             let ymin = Math.min(...vals);
             let ymax = Math.max(...vals);
+            if (currentPlotState.yMode === "delta") {
+                const absMax = Math.max(Math.abs(ymin), Math.abs(ymax));
+                const pad = absMax === 0 ? 1 : absMax * 0.08;
+                return { min: -(absMax + pad), max: absMax + pad };
+            }
             if (ymin === ymax) {
-                const pad = ymin === 0 ? 1.0 : Math.abs(ymin) * 0.05;
+                const pad = ymin === 0 ? 1 : Math.abs(ymin) * 0.05;
                 ymin -= pad;
                 ymax += pad;
             } else {
@@ -826,33 +1005,41 @@ def build_html(report_payload: dict) -> str:
             }
             return { min: ymin, max: ymax };
         }
-        function getVisibleUnits(selected) {
+        function getVisibleUnits(selected, yMode) {
+            if (yMode === "normalized" || yMode === "delta") {
+                return [];
+            }
             const units = [];
             for (const name of selected) {
                 units.push(getMetricUnit(PRIMARY_REPORT, name));
-                if (metricIsComparable(name)) {
+                if (currentPlotState.comparisonMode && metricIsComparable(name)) {
                     units.push(getMetricUnit(SECONDARY_REPORT, name));
                 }
             }
             return units.filter(Boolean);
         }
-        function getYAxisTitle(selected) {
-            if (getYMode() === "normalized") {
+        function getYAxisTitle(selected, yMode) {
+            if (yMode === "normalized") {
                 return "Normalized ratio";
             }
-            const units = getVisibleUnits(selected);
-            if (units.length === 0) {
-                return "Actual value";
+            if (yMode === "delta") {
+                const comparable = selected.filter(metricIsComparable);
+                const units = comparable.map(name => getMetricUnit(PRIMARY_REPORT, name)).filter(Boolean);
+                if (units.length > 0 && units.every(unit => unit === units[0])) {
+                    return `Delta value (${units[0]})`;
+                }
+                return "Delta value";
             }
-            const first = units[0];
-            return units.every(unit => unit === first) ? `Actual value (${first})` : "Actual value";
+            const units = getVisibleUnits(selected, yMode);
+            if (units.length > 0 && units.every(unit => unit === units[0])) {
+                return `Actual value (${units[0]})`;
+            }
+            return "Actual value";
         }
         function updateComparisonShiftUi() {
-            const wrap = document.getElementById("comparison_shift_wrap");
             const slider = document.getElementById("comparison_shift");
             const valueNode = document.getElementById("comparison_shift_value");
             if (!SECONDARY_REPORT) {
-                wrap.classList.add("hidden");
                 slider.value = "0";
                 valueNode.textContent = "0.0";
                 return;
@@ -863,61 +1050,100 @@ def build_html(report_payload: dict) -> str:
             slider.max = String(limit);
             slider.value = String(comparisonShift);
             valueNode.textContent = Number(comparisonShift).toFixed(1);
-            wrap.classList.remove("hidden");
         }
-        function installPlotInteractions() {
+        function updateZoomInfo() {
+            const node = document.getElementById("zoom_info");
             const plot = document.getElementById("plot");
-            plot.on("plotly_hover", event => {
-                if (event && event.points && event.points.length > 0) {
-                    const x = event.points[0].x;
-                    if (typeof x === "number" && Number.isFinite(x)) {
-                        lastHoverX = x;
+            if (!baseAxisRanges.x || !plot.layout || !plot.layout.xaxis || !Array.isArray(plot.layout.xaxis.range)) {
+                node.textContent = "Zoom: 100%";
+                return;
+            }
+            const baseSpan = Number(baseAxisRanges.x[1]) - Number(baseAxisRanges.x[0]);
+            const curSpan = Number(plot.layout.xaxis.range[1]) - Number(plot.layout.xaxis.range[0]);
+            if (!(baseSpan > 0) || !(curSpan > 0)) {
+                node.textContent = "Zoom: 100%";
+                return;
+            }
+            node.textContent = `Zoom: ${((curSpan / baseSpan) * 100).toFixed(1)}%`;
+        }
+        function getCurrentTracesForSelected(selected) {
+            const traces = [];
+            const yMode = getYMode();
+            currentPlotState.comparisonMode = !!SECONDARY_REPORT;
+            currentPlotState.yMode = yMode;
+            if (yMode === "delta") {
+                for (const name of selected) {
+                    if (metricIsComparable(name)) {
+                        traces.push(...buildDeltaTraces(name));
                     }
                 }
+                return traces;
+            }
+            for (const name of selected) {
+                traces.push(buildStandardMetricTrace(PRIMARY_REPORT, name, "primary"));
+                if (currentPlotState.comparisonMode && metricIsComparable(name)) {
+                    traces.push(buildStandardMetricTrace(SECONDARY_REPORT, name, "secondary"));
+                }
+            }
+            return traces;
+        }
+        function computeInitialRanges(traces) {
+            let xMin = 0;
+            let xMax = 1;
+            const xs = [];
+            for (const trace of traces) {
+                for (const x of trace.x) {
+                    if (x !== null && x !== undefined && !Number.isNaN(x)) {
+                        xs.push(x);
+                    }
+                }
+            }
+            if (xs.length > 0) {
+                xMin = Math.min(...xs);
+                xMax = Math.max(...xs);
+                if (xMin === xMax) {
+                    xMin -= 1;
+                    xMax += 1;
+                }
+            }
+            const yRange = getVisibleYRangeFromTraces(traces, [xMin, xMax]);
+            return { x: [xMin, xMax], y: [yRange.min, yRange.max] };
+        }
+        function getPointCountInRange(traces, xRange) {
+            const idxs = new Set();
+            for (const trace of traces) {
+                for (let i = 0; i < trace.x.length; i++) {
+                    const x = trace.x[i];
+                    const y = trace.y[i];
+                    if (y === null || y === undefined || Number.isNaN(y)) {
+                        continue;
+                    }
+                    if (x >= xRange[0] && x <= xRange[1]) {
+                        idxs.add(`${trace.name}:${i}`);
+                    }
+                }
+            }
+            return idxs.size;
+        }
+        function applyRanges(xRange, yRange) {
+            const plot = document.getElementById("plot");
+            suppressRelayoutHandler = true;
+            Plotly.relayout(plot, {
+                "xaxis.range": [xRange[0], xRange[1]],
+                "yaxis.range": [yRange[0], yRange[1]],
+            }).then(() => {
+                suppressRelayoutHandler = false;
+                updateZoomInfo();
             });
-            plot.addEventListener("wheel", event => {
-                const layout = plot.layout;
-                if (!layout || !layout.xaxis || !layout.yaxis) {
-                    return;
-                }
-                const xRange = layout.xaxis.range;
-                const yRange = layout.yaxis.range;
-                if (!Array.isArray(xRange) || !Array.isArray(yRange)) {
-                    return;
-                }
-                event.preventDefault();
-                const x0 = Number(xRange[0]);
-                const x1 = Number(xRange[1]);
-                const y0 = Number(yRange[0]);
-                const y1 = Number(yRange[1]);
-                if (![x0, x1, y0, y1].every(Number.isFinite)) {
-                    return;
-                }
-                const anchorX = Number.isFinite(lastHoverX) ? lastHoverX : (x0 + x1) / 2;
-                const factor = event.deltaY < 0 ? 0.85 : 1 / 0.85;
-                const newX0 = anchorX - (anchorX - x0) * factor;
-                const newX1 = anchorX + (x1 - anchorX) * factor;
-                const yCenter = (y0 + y1) / 2;
-                const halfY = (y1 - y0) * factor / 2;
-                Plotly.relayout(plot, {
-                    "xaxis.range": [newX0, newX1],
-                    "yaxis.range": [yCenter - halfY, yCenter + halfY],
-                });
-            }, { passive: false });
         }
         function resetZoom() {
-            const plot = document.getElementById("plot");
             if (!baseAxisRanges.x || !baseAxisRanges.y) {
                 return;
             }
-            Plotly.relayout(plot, {
-                "xaxis.range": [baseAxisRanges.x[0], baseAxisRanges.x[1]],
-                "yaxis.range": [baseAxisRanges.y[0], baseAxisRanges.y[1]],
-            });
+            applyRanges(baseAxisRanges.x, baseAxisRanges.y);
         }
         function handleShiftSliderInput() {
-            const slider = document.getElementById("comparison_shift");
-            comparisonShift = parseFloat(slider.value) || 0.0;
+            comparisonShift = parseFloat(document.getElementById("comparison_shift").value) || 0.0;
             document.getElementById("comparison_shift_value").textContent = comparisonShift.toFixed(1);
             renderPlot();
         }
@@ -937,67 +1163,159 @@ def build_html(report_payload: dict) -> str:
                 slider.step = "1";
             });
         }
+        function installResizer() {
+            const resizer = document.getElementById("sidebar_resizer");
+            const sidebar = document.getElementById("sidebar");
+            let active = false;
+            resizer.addEventListener("mousedown", event => {
+                active = true;
+                document.body.style.cursor = "col-resize";
+                event.preventDefault();
+            });
+            window.addEventListener("mousemove", event => {
+                if (!active) {
+                    return;
+                }
+                const minW = 360;
+                const maxW = Math.min(window.innerWidth - 220, 900);
+                const w = Math.max(minW, Math.min(maxW, event.clientX));
+                sidebar.style.width = `${w}px`;
+            });
+            window.addEventListener("mouseup", () => {
+                if (active) {
+                    active = false;
+                    document.body.style.cursor = "";
+                }
+            });
+        }
+        function installPlotInteractions() {
+            const plot = document.getElementById("plot");
+            if (!plot || plot.dataset.interactionsInstalled === "1" || typeof plot.on !== "function") {
+                return;
+            }
+            plot.on("plotly_hover", event => {
+                if (event && event.points && event.points.length > 0) {
+                    const x = event.points[0].x;
+                    if (typeof x === "number" && Number.isFinite(x)) {
+                        lastHoverX = x;
+                    }
+                }
+            });
+            plot.on("plotly_unhover", () => {
+                lastHoverX = null;
+            });
+            plot.on("plotly_relayout", event => {
+                if (suppressRelayoutHandler) {
+                    return;
+                }
+                if (!event || (!("xaxis.range[0]" in event) && !(event.xaxis && event.xaxis.range))) {
+                    updateZoomInfo();
+                    return;
+                }
+                let x0;
+                let x1;
+                if ("xaxis.range[0]" in event && "xaxis.range[1]" in event) {
+                    x0 = Number(event["xaxis.range[0]"]);
+                    x1 = Number(event["xaxis.range[1]"]);
+                } else if (event.xaxis && Array.isArray(event.xaxis.range)) {
+                    x0 = Number(event.xaxis.range[0]);
+                    x1 = Number(event.xaxis.range[1]);
+                }
+                if (!Number.isFinite(x0) || !Number.isFinite(x1)) {
+                    updateZoomInfo();
+                    return;
+                }
+                const xRange = [Math.min(x0, x1), Math.max(x0, x1)];
+                const pointCount = getPointCountInRange(currentPlotState.traces, xRange);
+                if (pointCount < 3) {
+                    showToast("Zoom range rejected: a valid canvas must contain at least 3 data points.");
+                    resetZoom();
+                    return;
+                }
+                const yRange = getVisibleYRangeFromTraces(currentPlotState.traces, xRange);
+                applyRanges(xRange, [yRange.min, yRange.max]);
+            });
+            plot.addEventListener("wheel", event => {
+                if (!plot.layout || !plot.layout.xaxis || !Array.isArray(plot.layout.xaxis.range)) {
+                    return;
+                }
+                event.preventDefault();
+                const xRange = plot.layout.xaxis.range;
+                const x0 = Number(xRange[0]);
+                const x1 = Number(xRange[1]);
+                if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) {
+                    return;
+                }
+                const anchorX = Number.isFinite(lastHoverX) ? lastHoverX : ((x0 + x1) / 2);
+                const factor = event.deltaY < 0 ? 0.85 : (1 / 0.85);
+                const newX0 = anchorX - (anchorX - x0) * factor;
+                const newX1 = anchorX + (x1 - anchorX) * factor;
+                const pointCount = getPointCountInRange(currentPlotState.traces, [newX0, newX1]);
+                if (pointCount < 3) {
+                    showToast("Zoom range rejected: a valid canvas must contain at least 3 data points.");
+                    return;
+                }
+                const yRange = getVisibleYRangeFromTraces(currentPlotState.traces, [newX0, newX1]);
+                applyRanges([newX0, newX1], [yRange.min, yRange.max]);
+            }, { passive: false });
+            plot.dataset.interactionsInstalled = "1";
+        }
         function renderPlot() {
             const selected = getSelectedMetrics();
-            const traces = [];
-            const comparisonMode = !!SECONDARY_REPORT;
-            for (const name of selected) {
-                traces.push(buildTrace(PRIMARY_REPORT, name, "primary"));
-                if (metricIsComparable(name)) {
-                    traces.push(buildTrace(SECONDARY_REPORT, name, "secondary"));
-                }
+            const traces = getCurrentTracesForSelected(selected);
+            currentPlotState.traces = traces;
+            baseAxisRanges = computeInitialRanges(traces);
+            const yMode = getYMode();
+            const shapes = [];
+            if (yMode === "delta") {
+                shapes.push({
+                    type: "line",
+                    xref: "paper",
+                    x0: 0,
+                    x1: 1,
+                    yref: "y",
+                    y0: 0,
+                    y1: 0,
+                    line: { color: "#c62828", width: 3 },
+                });
             }
-            const yRange = calcVisibleYRange(traces);
-            let xMin = 0.0;
-            let xMax = 1.0;
-            if (traces.length > 0) {
-                const xs = [];
-                for (const trace of traces) {
-                    for (const x of trace.x) {
-                        if (x !== null && x !== undefined && !Number.isNaN(x)) {
-                            xs.push(x);
-                        }
-                    }
-                }
-                if (xs.length > 0) {
-                    xMin = Math.min(...xs);
-                    xMax = Math.max(...xs);
-                    if (xMin === xMax) {
-                        xMin -= 1;
-                        xMax += 1;
-                    }
-                }
-            }
-            baseAxisRanges = {
-                x: [xMin, xMax],
-                y: [yRange.min, yRange.max],
-            };
             const layout = {
                 title: "Dynamic Monitoring Metrics",
+                dragmode: "zoom",
                 xaxis: {
-                    title: comparisonMode ? "Sample index" : `Time since start from ${PRIMARY_REPORT.time_col} (sec)`,
-                    range: [xMin, xMax],
+                    title: currentPlotState.comparisonMode ? "Sample index" : `Time since start from ${PRIMARY_REPORT.time_col} (sec)`,
+                    range: [baseAxisRanges.x[0], baseAxisRanges.x[1]],
+                    fixedrange: false,
                 },
                 yaxis: {
-                    title: getYAxisTitle(selected),
-                    range: [yRange.min, yRange.max],
+                    title: getYAxisTitle(selected, yMode),
+                    range: [baseAxisRanges.y[0], baseAxisRanges.y[1]],
+                    fixedrange: true,
                 },
+                shapes: shapes,
                 hovermode: "closest",
                 legend: { orientation: "h" },
-                margin: { l: 60, r: 20, t: 50, b: 60 }
+                margin: { l: 70, r: 25, t: 55, b: 70 },
             };
-            Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false });
+            Plotly.react("plot", traces, layout, {
+                responsive: true,
+                displaylogo: false,
+                scrollZoom: false,
+                doubleClick: false,
+            }).then(() => {
+                installPlotInteractions();
+                updateZoomInfo();
+            });
         }
         buildMetricList();
-        updateComparisonStatus();
-        updateComparisonShiftUi();
+        updateComparisonUi();
         installShiftSensitiveSliderStep();
-        installPlotInteractions();
+        installResizer();
         rebuildAllDerivedAndRender();
     </script>
 </body>
 </html>
-"""
+'''
     html = html.replace("__TITLE__", title)
     html = html.replace("__PAYLOAD_JSON__", payload_json)
     return html
