@@ -1027,6 +1027,7 @@ def main():
 
     html = build_html(report_payload)
     OUTPUT_HTML.write_text(html, encoding="utf-8")
+    print(f"generated: {OUTPUT_HTML}")
 
 
 if __name__ == "__main__":
@@ -1039,10 +1040,9 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     for csv_file in csv_files:
-        if not csv_file.is_file():
+        if csv_file.is_file():
+            INPUT_CSV = csv_file
+            OUTPUT_HTML = INPUT_CSV.with_suffix(".html")
+            main()
+        else:
             print(f"error: file not found: {csv_file}", file=sys.stderr)
-            continue
-
-        INPUT_CSV = csv_file
-        OUTPUT_HTML = INPUT_CSV.with_suffix(".html")
-        main()
