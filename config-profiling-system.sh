@@ -77,7 +77,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         btop htop nvtop sysprof pciutils nfs-common openssh-server \
         libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
         libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-        python3-pip python3-pandas 
+        python3-pip python3-pandas cpufrequtils stress-ng glmark2
 
     if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
         read -p "Press [Enter] to uninstall libre office: "

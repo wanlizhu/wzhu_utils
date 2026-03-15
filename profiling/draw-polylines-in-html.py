@@ -24,10 +24,12 @@ def guess_unit_strict(col: str) -> str:
         return "W"
     if name.endswith("_c"):
         return "°C"
+    if name.endswith("_int"):
+        return "Integer"
 
     raise ValueError(
         f"unrecognized unit suffix for column: {col}. "
-        f"expected one of: _pct, _util, _mhz, _mb, _w, _c"
+        f"expected one of: _pct, _util, _mhz, _mb, _w, _c, _int"
     )
 
 
@@ -678,6 +680,22 @@ def build_html(report_payload: dict) -> str:
         function getYMode() {
             const node = document.querySelector('input[name="y_mode"]:checked');
             return node ? node.value : "normalized";
+        }
+        function getDisplayUnit(unit) {
+            return unit === "" ? "Integer" : unit;
+        }
+        function getSharedVisibleUnit(selected) {
+            const units = selected.map(name => unitMap[name]);
+            if (units.length === 0) {
+                return null;
+            }
+
+            const first = units[0];
+            if (units.every(unit => unit === first)) {
+                return first;
+            }
+
+            return null;
         }
         function setYMode(mode) {
             const node = document.querySelector(`input[name="y_mode"][value="${mode}"]`);
