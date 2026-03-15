@@ -225,11 +225,34 @@ start_cpu_sampler() {
     echo $!
 }
 
+build_nvidia_smi_query_fields() {
+    local fields_csv=$1
+    local field
+    local out=
+    local old_ifs=$IFS
+
+    IFS=,
+    for field in $fields_csv; do
+        field=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<< "$field")
+        field=${field%%:*}
+
+        if [[ -z $out ]]; then
+            out=$field
+        else
+            out+=,$field
+        fi
+    done
+    IFS=$old_ifs
+
+    echo "$out"
+}
+
 start_gpu_sampler() {
     local fields_csv=$1
     local sample_ms=$2
     local out_file=$3
     local header=$4
+    local nvidia_smi_fields=$5
 
     setsid bash -c '
         set -o pipefail
@@ -238,6 +261,7 @@ start_gpu_sampler() {
         sample_ms=$2
         out_file=$3
         header=$4
+        nvidia_smi_fields=$5
 
         trim() {
             sed "s/^[[:space:]]*//; s/[[:space:]]*$//"
@@ -283,7 +307,7 @@ start_gpu_sampler() {
         echo "$header" >$out_file
 
         nvidia-smi \
-            --query-gpu="$fields_csv" \
+            --query-gpu="$nvidia_smi_fields" \
             --format=csv,noheader,nounits \
             --loop-ms="$sample_ms" 2>/dev/null |
         while IFS= read -r line; do
@@ -306,7 +330,7 @@ start_gpu_sampler() {
 
             echo "$out_line" >>$out_file
         done
-    ' bash "$fields_csv" $sample_ms $out_file "$header" &
+    ' bash "$fields_csv" $sample_ms $out_file "$header" "$nvidia_smi_fields" &
     echo $!
 }
 
@@ -392,6 +416,7 @@ rm -f $tmp_cpu_file $tmp_gpu_file $out_csv ${out_csv%.*}.html
 sleep_s=$(awk -v ms=$dm_sample_freq_ms 'BEGIN { printf "%.3f\n", ms / 1000.0 }')
 page_size=$(getconf PAGESIZE)
 gpu_header=$(build_gpu_csv_header "$gpu_query_fields")
+nvidia_smi_query_fields=$(build_nvidia_smi_query_fields "$gpu_query_fields")
 
 trap cleanup EXIT
 trap request_stop INT TERM
@@ -403,7 +428,7 @@ else
 fi
 
 cpu_sampler_pid=$(start_cpu_sampler $dm_target_pid $sleep_s $tmp_cpu_file $page_size)
-gpu_sampler_pid=$(start_gpu_sampler "$gpu_query_fields" $dm_sample_freq_ms $tmp_gpu_file "$gpu_header")
+gpu_sampler_pid=$(start_gpu_sampler "$gpu_query_fields" $dm_sample_freq_ms $tmp_gpu_file "$gpu_header" "$nvidia_smi_query_fields")
 start_s=$(date +%s)
 
 while [[ -d /proc/$dm_target_pid ]]; do
