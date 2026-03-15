@@ -1381,7 +1381,8 @@ if __name__ == "__main__":
             try:
                 main()
                 print(f"generated: {OUTPUT_HTML}")
-            except:
+            except Exception as e:
+                print(e)
                 print(f"error: failed to generate html from {csv_file}")
         else:
             print(f"error: file not found: {csv_file}", file=sys.stderr)
