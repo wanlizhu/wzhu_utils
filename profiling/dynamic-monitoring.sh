@@ -136,6 +136,7 @@ start_cpu_sampler() {
 
         target_pid=$1
         sleep_s=$2
+        sleep_ms=$(awk -v s=$sleep_s '"'"'BEGIN { printf "%d\n", s * 1000 }'"'"')
         out_file=$3
         page_size=$4
 
@@ -197,7 +198,7 @@ start_cpu_sampler() {
             else
                 sample_idx=$((sample_idx + 1))
             fi
-            now_ms=$((base_ts_ms + sample_idx * sample_ms))
+            now_ms=$((base_ts_ms + sample_idx * sleep_ms))
 
             read cur_total cur_idle < <(read_proc_cpu_total_idle)
             total_delta=$((cur_total - prev_total))
@@ -318,7 +319,7 @@ start_gpu_sampler() {
         echo "$header" >$out_file
         base_ts_ms=
         sample_idx=
-        
+
         nvidia-smi \
             --query-gpu="$nvidia_smi_fields" \
             --format=csv,noheader,nounits \
