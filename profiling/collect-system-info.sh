@@ -6,97 +6,7 @@ OUTPUT_FILE=~/system_info.txt
 DM_SAMPLE_FREQ_MS=100
 DM_SAMPLE_TIME_LIMIT_S=0
 
-if [[ $1 == brief ]]; then 
-    printf '%s (Kernel: %s)\n' "$(lsb_release -a | grep Description | awk '{print $2 $3}')" "$(uname -r)"
-    printf '%s [RAM: %s, CLK: %.1f GHz]\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" "$(free -h | awk '/^Mem:/ {print $2}')" "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)"
-    printf '%s [VRAM: %s (Resizable BAR: %s), CLK: %s]\n' "$(lspci | grep -iE 'vga|3d|display' | cut -d: -f3- | sed 's/^ *//' | grep -vi Controller | grep -vi Thunderbolt )" "$(nvidia-smi --query-gpu=memory.total --format=csv,noheader)" "$(sudo lspci -vv -s $(lspci -Dnn | grep -iE 'VGA|3D|Display' | grep -i nvidia | awk 'NR==1 {print $1}') | grep -A1 'Physical Resizable BAR' | grep 'current size' | awk -F',' '{print $1}' | awk '{print $5}')" "$(nvidia-smi -q -d CLOCK | grep -A4 'Max Clocks' | grep 'Graphics' | awk -F': ' '{print $2}')"
-    exit 
-fi 
-
-if [[ $1 == steam && ! -z $(pidof steam) ]]; then 
-    pstree -aspT $(pidof steam)
-    read -p "Input steam game PID: " dm_target_pid
-elif [[ -d /proc/$1 ]]; then 
-    dm_target_pid=$1
-else
-    dm_target_pid=
-fi 
-[[ ! -z $dm_target_pid ]] && dm_output_file=~/system_info_dm_pid${dm_target_pid}.csv
-
-append_basic_header() {
-    printf '%s\n' "$(hostname)" >$OUTPUT_FILE
-
-    if command -v lsb_release >/dev/null 2>&1; then
-        lsb_release -a 2>/dev/null | grep 'Description' | awk -F: '{ sub(/^[[:space:]]+/, "", $2); print $2 }' >>$OUTPUT_FILE
-    else
-        echo N/A >>$OUTPUT_FILE
-    fi
-
-    uname -srm >>$OUTPUT_FILE
-    lscpu | grep 'Model name' | awk -F: '{ sub(/^[[:space:]]+/, "", $2); print $2 }' >>$OUTPUT_FILE
-
-    if command -v nvidia-smi >/dev/null 2>&1; then
-        nvidia-smi -L >>$OUTPUT_FILE 2>/dev/null
-    fi
-
-    printf '\n' >>$OUTPUT_FILE
-}
-
-append_environment() {
-    printf '[environment variables]\n' >>$OUTPUT_FILE
-    env | grep -Ev 'PTYXIS_PROFILE|guid=|INVOCATION_ID=|LS_COLORS|MEMORY_PRESSURE_WRITE=|MEMORY_PRESSURE_WATCH=' >>$OUTPUT_FILE
-    printf '[environment variables] FINISHED\n\n' >>$OUTPUT_FILE
-}
-
-append_cpu_static_info() {
-    printf '[cpu static info]\n' >>$OUTPUT_FILE
-
-    lscpu >>$OUTPUT_FILE
-    printf '\n' >>$OUTPUT_FILE
-
-    if [[ -r /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw ]]; then
-        echo max_power_limit_uw: "$(cat /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw)" >>$OUTPUT_FILE
-    else
-        echo max_power_limit_uw: N/A >>$OUTPUT_FILE
-    fi
-
-    if [[ -r /sys/devices/system/cpu/intel_pstate/status ]]; then
-        echo intel_pstate: "$(cat /sys/devices/system/cpu/intel_pstate/status)" >>$OUTPUT_FILE
-    else
-        echo intel_pstate: N/A >>$OUTPUT_FILE
-    fi
-
-    if command -v powerprofilesctl >/dev/null 2>&1; then
-        echo power_profile: "$(powerprofilesctl get 2>/dev/null || echo N/A)" >>$OUTPUT_FILE
-    else
-        echo power_profile: N/A >>$OUTPUT_FILE
-    fi
-
-    {
-        printf 'cpu\tmax_freq_khz\tcurrent_policy\tcpufreq_governor\tenergy_perf_bias\tenergy_perf_pref\n'
-        for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
-            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "${cpu##*/}" \
-                "$( [[ -r $cpu/cpufreq/cpuinfo_max_freq ]] && cat $cpu/cpufreq/cpuinfo_max_freq || echo N/A )" \
-                "$( [[ -r $cpu/cpufreq/scaling_driver ]] && cat $cpu/cpufreq/scaling_driver || echo N/A )" \
-                "$( [[ -r $cpu/cpufreq/scaling_governor ]] && cat $cpu/cpufreq/scaling_governor || echo N/A )" \
-                "$( [[ -r $cpu/power/energy_perf_bias ]] && cat $cpu/power/energy_perf_bias || echo N/A )" \
-                "$( [[ -r $cpu/cpufreq/energy_performance_preference ]] && cat $cpu/cpufreq/energy_performance_preference || echo N/A )"
-        done
-    } | column -t -s $'\t' >>$OUTPUT_FILE
-
-    printf '[cpu static info] FINISHED\n\n' >>$OUTPUT_FILE
-}
-
-append_mem_static_info() {
-    printf '[mem static info]\n' >>$OUTPUT_FILE
-
-    if ! command -v dmidecode >/dev/null 2>&1; then
-        echo dmidecode: N/A >>$OUTPUT_FILE
-        printf '[mem static info] FINISHED\n\n' >>$OUTPUT_FILE
-        return
-    fi
-
+print_mem_brief() {
     sudo dmidecode -t memory 2>/dev/null | awk '
         function trim(s) {
             sub(/^[[:space:]]+/, "", s)
@@ -243,8 +153,183 @@ append_mem_static_info() {
             printf "theoretical_bandwidth: %.1f GB/s\n", total_bandwidth_gbs
             print  "manufacturer: " manufacturer_str
         }
-    ' >>$OUTPUT_FILE
+    '
+}
 
+print_cpu_max_power_limit_uw() {
+    if [[ -r /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw ]]; then
+        echo max_power_limit_uw: "$(cat /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw)" 
+    else
+        echo max_power_limit_uw: N/A 
+    fi
+}
+
+print_cpu_intel_pstate() {
+    if [[ -r /sys/devices/system/cpu/intel_pstate/status ]]; then
+        echo intel_pstate: "$(cat /sys/devices/system/cpu/intel_pstate/status)" 
+    else
+        echo intel_pstate: N/A 
+    fi
+}
+
+print_cpu_core_info() {
+    if [[ -e /sys/devices/system/cpu/cpu$1 ]]; then 
+        cpu=/sys/devices/system/cpu/cpu$1 
+        printf 'max_freq_khz: %s\n' "$( [[ -r $cpu/cpufreq/cpuinfo_max_freq ]] && cat $cpu/cpufreq/cpuinfo_max_freq || echo N/A )"
+        printf 'scaling_driver: %s\n' "$( [[ -r $cpu/cpufreq/scaling_driver ]] && cat $cpu/cpufreq/scaling_driver || echo N/A )"
+        printf 'scaling_governor: %s\n' "$( [[ -r $cpu/cpufreq/scaling_governor ]] && cat $cpu/cpufreq/scaling_governor || echo N/A )"
+        printf 'energy_perf_bias: %s\n' "$( [[ -r $cpu/power/energy_perf_bias ]] && cat $cpu/power/energy_perf_bias || echo N/A )"
+        printf 'energy_performance_preference: %s\n' "$( [[ -r $cpu/cpufreq/energy_performance_preference ]] && cat $cpu/cpufreq/energy_performance_preference || echo N/A )"
+    fi 
+}
+
+print_cpu_power_profile() {
+    if command -v powerprofilesctl >/dev/null 2>&1; then
+        echo power_profile: "$(powerprofilesctl get 2>/dev/null || echo N/A)" 
+    else
+        echo power_profile: N/A 
+    fi
+}
+
+count_cpu_core_list() {
+    awk -F, '
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /-/) {
+                    split($i, a, "-")
+                    n += a[2] - a[1] + 1
+                } else if ($i ~ /^[0-9]+$/) {
+                    n++
+                }
+            }
+        }
+        END {
+            print n + 0
+        }
+    '
+}
+
+print_gpu_info() {
+    local gpu_id=$1
+    local attributes=$2
+    local attr
+    while IFS= read -r attr; do
+        attr=${attr##+([[:space:]])}
+        attr=${attr%%+([[:space:]])}
+        [[ -n $attr ]] || continue
+        nvidia-smi --id=$gpu_id \
+            --query-gpu="$attr" \
+            --format=csv,noheader,nounits 2>/dev/null |
+        awk -v key=$attr '{ print key ": " $0 }'
+    done < <(tr ',' '\n' <<< "$attributes" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+}
+
+if [[ $1 == brief ]]; then 
+    hostname >/tmp/brief
+    printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>/tmp/brief
+    printf '\t\tKernel: %s\n' "$(uname -r)" >>/tmp/brief
+    printf '\t\tMemory:\n' >>/tmp/brief
+    print_mem_brief | sed 's/^/\t\t/' >>/tmp/brief
+
+    printf '\tCPU: %s\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" >>/tmp/brief
+    printf '\t\tMax clock: %s\n' "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)" >>/tmp/brief
+    printf '\t\t%s\n' "$(print_cpu_max_power_limit_uw)" >>/tmp/brief
+    printf '\t\t%s\n' "$(print_cpu_intel_pstate)" >>/tmp/brief
+    printf '\t\t%s\n' "$(print_cpu_power_profile)" >>/tmp/brief
+    if grep -qi '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo; then
+        printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>/tmp/brief
+        print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+        printf '\t\tNumber of E-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_atom/cpus) >>/tmp/brief
+        print_cpu_core_info $(cat /sys/devices/cpu_atom/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+    else
+        printf '\t\tNumber of cores: %s\n' "$(grep -c '^processor' /proc/cpuinfo)" >>/tmp/brief
+        print_cpu_core_info 0 | sed 's/^/\t\t\t/' >>/tmp/brief
+    fi 
+    
+    for gpu_id in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
+        printf '\tGPU %s: %s\n' "$gpu_id" "$(nvidia-smi --id=$gpu_id --query-gpu=name --format=noheader)" 
+        print_gpu_info $gpu_id "driver_version,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.max,display_attached,display_active,persistence_mode,vbios_version,memory.total,compute_cap,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total" | sed 's/^/\t\t/' >>/tmp/brief
+    done
+
+    if [[ ! -z $(which print-ascii-tree.sh) ]]; then 
+        print-ascii-tree.sh /tmp/brief 
+    else
+        cat /tmp/brief 
+    fi 
+
+    exit 
+fi 
+
+if [[ $1 == steam && ! -z $(pidof steam) ]]; then 
+    pstree -aspT $(pidof steam)
+    read -p "Input steam game PID: " dm_target_pid
+elif [[ -d /proc/$1 ]]; then 
+    dm_target_pid=$1
+else
+    dm_target_pid=
+fi 
+[[ ! -z $dm_target_pid ]] && dm_output_file=~/system_info_dm_pid${dm_target_pid}.csv
+
+append_basic_header() {
+    printf '%s\n' "$(hostname)" >$OUTPUT_FILE
+
+    if command -v lsb_release >/dev/null 2>&1; then
+        lsb_release -a 2>/dev/null | grep 'Description' | awk -F: '{ sub(/^[[:space:]]+/, "", $2); print $2 }' >>$OUTPUT_FILE
+    else
+        echo N/A >>$OUTPUT_FILE
+    fi
+
+    uname -srm >>$OUTPUT_FILE
+    lscpu | grep 'Model name' | awk -F: '{ sub(/^[[:space:]]+/, "", $2); print $2 }' >>$OUTPUT_FILE
+
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi -L >>$OUTPUT_FILE 2>/dev/null
+    fi
+
+    printf '\n' >>$OUTPUT_FILE
+}
+
+append_environment() {
+    printf '[environment variables]\n' >>$OUTPUT_FILE
+    env | grep -Ev 'PTYXIS_PROFILE|guid=|INVOCATION_ID=|LS_COLORS|MEMORY_PRESSURE_WRITE=|MEMORY_PRESSURE_WATCH=' >>$OUTPUT_FILE
+    printf '[environment variables] FINISHED\n\n' >>$OUTPUT_FILE
+}
+
+append_cpu_static_info() {
+    printf '[cpu static info]\n' >>$OUTPUT_FILE
+
+    lscpu >>$OUTPUT_FILE
+    printf '\n' >>$OUTPUT_FILE
+    print_cpu_max_power_limit_uw >>$OUTPUT_FILE
+    print_cpu_intel_pstate >>$OUTPUT_FILE
+    print_cpu_power_profile >>$OUTPUT_FILE
+
+    {
+        printf 'cpu\tmax_freq_khz\tcurrent_policy\tcpufreq_governor\tenergy_perf_bias\tenergy_perf_pref\n'
+        for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${cpu##*/}" \
+                "$( [[ -r $cpu/cpufreq/cpuinfo_max_freq ]] && cat $cpu/cpufreq/cpuinfo_max_freq || echo N/A )" \
+                "$( [[ -r $cpu/cpufreq/scaling_driver ]] && cat $cpu/cpufreq/scaling_driver || echo N/A )" \
+                "$( [[ -r $cpu/cpufreq/scaling_governor ]] && cat $cpu/cpufreq/scaling_governor || echo N/A )" \
+                "$( [[ -r $cpu/power/energy_perf_bias ]] && cat $cpu/power/energy_perf_bias || echo N/A )" \
+                "$( [[ -r $cpu/cpufreq/energy_performance_preference ]] && cat $cpu/cpufreq/energy_performance_preference || echo N/A )"
+        done
+    } | column -t -s $'\t' >>$OUTPUT_FILE
+
+    printf '[cpu static info] FINISHED\n\n' >>$OUTPUT_FILE
+}
+
+append_mem_static_info() {
+    printf '[mem static info]\n' >>$OUTPUT_FILE
+
+    if ! command -v dmidecode >/dev/null 2>&1; then
+        echo dmidecode: N/A >>$OUTPUT_FILE
+        printf '[mem static info] FINISHED\n\n' >>$OUTPUT_FILE
+        return
+    fi
+
+    print_mem_brief >>$OUTPUT_FILE
     printf '\n' >>$OUTPUT_FILE
 
     sudo dmidecode -t memory 2>/dev/null | awk '
@@ -405,10 +490,7 @@ append_nvidia_smi_query() {
 
     {
         for i in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
-            paste <(tr ',' '\n' <<< "$fields") \
-                <(nvidia-smi --id=$i --query-gpu="$fields" --format=csv,noheader 2>/dev/null | sed 's/, /\n/g') |
-                awk -F '\t' '{ print $1 "\t:\t" $2 }' |
-                column -t -s $'\t' -L
+            print_gpu_info $i "$fields" | column -t -s $'\t' -L
             echo
         done
     } >>$OUTPUT_FILE
