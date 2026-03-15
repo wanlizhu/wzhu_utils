@@ -117,7 +117,15 @@ cleanup() {
 }
 
 request_stop() {
+    trap - INT TERM
     stop_requested=1
+
+    stop_process_group $cpu_sampler_pid
+    stop_process_group $gpu_sampler_pid
+
+    cpu_sampler_pid=
+    gpu_sampler_pid=
+
     echo
     echo dynamic monitoring finished
 }
@@ -221,7 +229,7 @@ start_cpu_sampler() {
 
             sleep $sleep_s || true
         done
-    ' bash $target_pid $sleep_s $out_file $page_size &
+    ' bash $target_pid $sleep_s $out_file $page_size </dev/null &
     echo $!
 }
 
@@ -330,7 +338,7 @@ start_gpu_sampler() {
 
             echo "$out_line" >>$out_file
         done
-    ' bash "$fields_csv" $sample_ms $out_file "$header" "$nvidia_smi_fields" &
+    ' bash "$fields_csv" $sample_ms $out_file "$header" "$nvidia_smi_fields" </dev/null &
     echo $!
 }
 
