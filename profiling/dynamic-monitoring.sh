@@ -187,9 +187,17 @@ start_cpu_sampler() {
 
         read prev_total prev_idle < <(read_proc_cpu_total_idle)
         read prev_target_jiffies _ < <(read_pid_stat $target_pid)
+        base_ts_ms=
+        sample_idx=
 
         while [[ -d /proc/$target_pid ]]; do
-            now_ms=$(date +%s%3N)
+            if [[ -z $base_ts_ms ]]; then
+                base_ts_ms=$(date +%s%3N)
+                sample_idx=0
+            else
+                sample_idx=$((sample_idx + 1))
+            fi
+            now_ms=$((base_ts_ms + sample_idx * sample_ms))
 
             read cur_total cur_idle < <(read_proc_cpu_total_idle)
             total_delta=$((cur_total - prev_total))
@@ -308,7 +316,9 @@ start_gpu_sampler() {
         }
 
         echo "$header" >$out_file
-
+        base_ts_ms=
+        sample_idx=
+        
         nvidia-smi \
             --query-gpu="$nvidia_smi_fields" \
             --format=csv,noheader,nounits \
@@ -316,7 +326,14 @@ start_gpu_sampler() {
         while IFS= read -r line; do
             [[ -n $line ]] || continue
 
-            now_ms=$(date +%s%3N)
+            if [[ -z $base_ts_ms ]]; then
+                base_ts_ms=$(date +%s%3N)
+                sample_idx=0
+            else
+                sample_idx=$((sample_idx + 1))
+            fi
+
+            now_ms=$((base_ts_ms + sample_idx * sample_ms))
             out_line=$now_ms
 
             i=0
