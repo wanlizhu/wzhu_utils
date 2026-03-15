@@ -18,6 +18,7 @@ out_csv=./dynamic_monitoring.csv
 
 cpu_sampler_pid=
 gpu_sampler_pid=
+poll_wait_pid=
 stop_requested=0
 
 normalize_gpu_field_name() {
@@ -104,31 +105,12 @@ read_pid_stat() {
 
 stop_process_group() {
     local pid=$1
-    local i
 
     [[ -n $pid ]] || return 0
 
     kill -- -$pid 2>/dev/null || true
-
-    for (( i = 0; i < 20; i++ )); do
-        if ! kill -0 $pid 2>/dev/null; then
-            wait $pid 2>/dev/null || true
-            return 0
-        fi
-        sleep 0.1 || true
-    done
-
+    sleep 0.2 || true
     kill -KILL -- -$pid 2>/dev/null || true
-
-    for (( i = 0; i < 10; i++ )); do
-        if ! kill -0 $pid 2>/dev/null; then
-            wait $pid 2>/dev/null || true
-            return 0
-        fi
-        sleep 0.1 || true
-    done
-
-    wait $pid 2>/dev/null || true
 }
 
 cleanup() {
@@ -139,6 +121,9 @@ cleanup() {
 request_stop() {
     trap - INT TERM
     stop_requested=1
+
+    [[ -n $poll_wait_pid ]] && kill $poll_wait_pid 2>/dev/null || true
+
     echo
     echo dynamic monitoring finished
 }
@@ -471,7 +456,10 @@ while [[ -d /proc/$dm_target_pid ]]; do
         break
     fi
 
-    sleep 0.2 || true
+    sleep 0.2 &
+    poll_wait_pid=$!
+    wait $poll_wait_pid 2>/dev/null || true
+    poll_wait_pid=
 done
 
 stop_process_group $cpu_sampler_pid
