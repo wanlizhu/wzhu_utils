@@ -66,10 +66,10 @@ Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
         install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
     fi 
-    sudo apt update >/dev/null 2>&1
-    if [[ ! -z $(apt list --upgradable 2>/dev/null | sed '1d') ]]; then 
-        sudo apt upgrade -y
-        sudo apt autoremove -y
+    if [[ ! -z $(apt list '?upgradable !?phasing') ]]; then 
+        sudo apt update  
+        sudo apt upgrade -y 
+        sudo apt autoremove -y  
     fi  
     install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
         build-essential cmake git ninja-build pkg-config meson clang \
