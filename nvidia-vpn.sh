@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -o pipefail 
+
 if [[ -z $(which globalprotect) ]]; then 
     pushd /tmp 
     wget https://d2hvyxt0t758wb.cloudfront.net/gp_install_files/gp_install.sh
