@@ -410,8 +410,13 @@ merge_cpu_gpu_csv() {
             if (gpu_n < count)
                 count = gpu_n
 
+            last_ts = -1
             for (i = 0; i < count; i++) {
-                print gpu_ts[i + 1] "," gpu_rest[i + 1] "," cpu_rest[cpu_start_idx + i]
+                out_ts = gpu_ts[i + 1] + 0
+                if (last_ts >= 0 && out_ts <= last_ts)
+                    out_ts = last_ts + 1
+                print out_ts "," gpu_rest[i + 1] "," cpu_rest[cpu_start_idx + i]
+                last_ts = out_ts
             }
         }
     ' $cpu_file $gpu_file >$out_file
