@@ -121,9 +121,6 @@ cleanup() {
 request_stop() {
     trap - INT TERM
     stop_requested=1
-
-    [[ -n $poll_wait_pid ]] && kill $poll_wait_pid 2>/dev/null || true
-
     echo
     echo dynamic monitoring finished
 }
@@ -228,7 +225,7 @@ start_cpu_sampler() {
             sleep $sleep_s || true
         done
     ' bash $target_pid $sleep_s $out_file $page_size </dev/null &
-    echo $!
+    cpu_sampler_pid=$!
 }
 
 build_nvidia_smi_query_fields() {
@@ -337,7 +334,7 @@ start_gpu_sampler() {
             echo "$out_line" >>$out_file
         done
     ' bash "$fields_csv" $sample_ms $out_file "$header" "$nvidia_smi_fields" </dev/null &
-    echo $!
+    gpu_sampler_pid=$!
 }
 
 merge_cpu_gpu_csv() {
@@ -433,8 +430,8 @@ else
     echo 'time limit: until ctrl-c or target exits'
 fi
 
-cpu_sampler_pid=$(start_cpu_sampler $dm_target_pid $sleep_s $tmp_cpu_file $page_size)
-gpu_sampler_pid=$(start_gpu_sampler "$gpu_query_fields" $dm_sample_freq_ms $tmp_gpu_file "$gpu_header" "$nvidia_smi_query_fields")
+start_cpu_sampler $dm_target_pid $sleep_s $tmp_cpu_file $page_size
+start_gpu_sampler "$gpu_query_fields" $dm_sample_freq_ms $tmp_gpu_file "$gpu_header" "$nvidia_smi_query_fields" 
 start_s=$(date +%s)
 
 while [[ -d /proc/$dm_target_pid ]]; do
