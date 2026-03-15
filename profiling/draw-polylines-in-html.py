@@ -237,26 +237,31 @@ def build_html(report_payload: dict) -> str:
         }
         .unit-group {
             border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 8px;
+            border-radius: 8px;
+            padding: 10px 10px 8px 10px;
+            background: #fafafa;
         }
         .unit-group-header {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 6px;
-            font-weight: 600;
+            margin-bottom: 8px;
+            font-weight: 700;
+            font-size: 16px;
         }
         .unit-group-items {
             display: flex;
             flex-direction: column;
             gap: 6px;
+            border-top: 1px solid #d8d8d8;
+            padding-top: 8px;
         }
         .metric-item {
             display: flex;
             align-items: flex-start;
             gap: 8px;
-            padding: 2px 0;
+            padding: 3px 0;
+            transition: opacity 120ms ease-in-out;
         }
         .metric-text {
             display: flex;
@@ -266,6 +271,9 @@ def build_html(report_payload: dict) -> str:
         .metric-name {
             font-weight: 600;
             word-break: break-all;
+        }
+        .metric-item.disabled {
+            opacity: 0.48;
         }
         .metric-avg {
             color: #555;
@@ -295,6 +303,14 @@ def build_html(report_payload: dict) -> str:
         #comparison_shift {
             flex: 1;
         }
+        .attr-toolbar {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+        }
         .hidden {
             display: none;
         }
@@ -306,8 +322,7 @@ def build_html(report_payload: dict) -> str:
         <div class=sidebar>
             <div class=controls>
                 <div>
-                    <button type=button onclick=selectAll()>Select all</button>
-                    <button type=button onclick=selectNone()>Select none</button>
+                    <button type=button onclick=resetZoom()>Reset zoom</button>
                 </div>
                 <div class=section-title>Y axis mode</div>
                 <div><label><input type=radio name=y_mode value=normalized checked onchange=renderPlot()> Normalized ratio</label></div>
@@ -316,6 +331,18 @@ def build_html(report_payload: dict) -> str:
                 <div><label><input type=checkbox id=use_smooth checked onchange=rebuildAllDerivedAndRender()> Use smoothed values</label></div>
                 <div style="margin-top:10px;"><label for=window_size>Smoothing window:</label> <input id=window_size type=number min=1 step=2 value=7 onchange=rebuildAllDerivedAndRender() style="width:80px;"></div>
                 <div class=section-title>Attributes</div>
+                <div class=attr-toolbar>
+                    <button type=button onclick=selectAll()>Select all</button>
+                    <button type=button onclick=selectNone()>Select none</button>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label for=group_mode>Group attributes by:</label>
+                    <select id=group_mode onchange=handleGroupModeChange()>
+                        <option value=unit selected>Group by unit</option>
+                        <option value=name>Group by name</option>
+                        <option value=none>No grouping</option>
+                    </select>
+                </div>
                 <div>
                     <button type=button onclick=triggerComparisonLoad()>Load comparison report</button>
                     <button type=button onclick=unloadComparisonReport()>Unload comparison report</button>
@@ -343,6 +370,8 @@ def build_html(report_payload: dict) -> str:
         const PRIMARY_REPORT = JSON.parse(document.getElementById("report-data").textContent);
         let SECONDARY_REPORT = null;
         let comparisonShift = 0.0;
+        let lastHoverX = null;
+        let baseAxisRanges = { x: null, y: null };
         const colorCache = {};
         const selectionState = {};
         const groupState = {};
@@ -374,18 +403,54 @@ def build_html(report_payload: dict) -> str:
         function getComparableMetricNames() {
             return getMetricNames(PRIMARY_REPORT).filter(metricIsComparable);
         }
-        function getGroupKey(unit) {
-            return unit || "(no unit)";
+        function getGroupMode() {
+            const node = document.getElementById("group_mode");
+            return node ? node.value : "unit";
+        }
+        function getNameGroupKey(name) {
+            const idx = name.indexOf("_");
+            return idx >= 0 ? name.slice(0, idx) : name;
+        }
+        function getMetricGroupInfo(name) {
+            const mode = getGroupMode();
+            if (mode === "unit") {
+                const unit = getMetricUnit(PRIMARY_REPORT, name) || "(no unit)";
+                return {
+                    mode: mode,
+                    key: unit,
+                    label: `Unit: ${unit}`,
+                };
+            }
+            if (mode === "name") {
+                const prefix = getNameGroupKey(name);
+                return {
+                    mode: mode,
+                    key: prefix,
+                    label: `Name: ${prefix}`,
+                };
+            }
+            return {
+                mode: mode,
+                key: name,
+                label: name,
+            };
+        }
+        function getStateGroupKey(mode, key) {
+            return `${mode}::${key}`;
         }
         function getSortedGroupKeys() {
-            const keys = new Set();
+            const mode = getGroupMode();
+            const items = new Map();
             for (const name of getMetricNames(PRIMARY_REPORT)) {
-                keys.add(getGroupKey(getMetricUnit(PRIMARY_REPORT, name)));
+                const info = getMetricGroupInfo(name);
+                if (!items.has(info.key)) {
+                    items.set(info.key, info);
+                }
             }
-            return Array.from(keys).sort((a, b) => a.localeCompare(b));
+            return Array.from(items.values()).sort((a, b) => a.key.localeCompare(b.key));
         }
-        function getMetricsInGroup(groupKey) {
-            return getMetricNames(PRIMARY_REPORT).filter(name => getGroupKey(getMetricUnit(PRIMARY_REPORT, name)) === groupKey);
+        function getMetricsInGroup(groupInfo) {
+            return getMetricNames(PRIMARY_REPORT).filter(name => getMetricGroupInfo(name).key === groupInfo.key);
         }
         function ensureStateDefaults() {
             for (const name of getMetricNames(PRIMARY_REPORT)) {
@@ -393,9 +458,10 @@ def build_html(report_payload: dict) -> str:
                     selectionState[name] = true;
                 }
             }
-            for (const groupKey of getSortedGroupKeys()) {
-                if (!(groupKey in groupState)) {
-                    groupState[groupKey] = true;
+            for (const groupInfo of getSortedGroupKeys()) {
+                const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
+                if (!(stateKey in groupState)) {
+                    groupState[stateKey] = true;
                 }
             }
         }
@@ -403,80 +469,116 @@ def build_html(report_payload: dict) -> str:
             for (const cb of document.querySelectorAll('#metric_list input[data-metric-name]')) {
                 selectionState[cb.dataset.metricName] = cb.checked;
             }
-            for (const cb of document.querySelectorAll('#metric_list input[data-group-key]')) {
-                groupState[cb.dataset.groupKey] = cb.checked;
+            for (const cb of document.querySelectorAll('#metric_list input[data-state-group-key]')) {
+                groupState[cb.dataset.stateGroupKey] = cb.checked;
             }
         }
-        function applyGroupStateToSelection(groupKey) {
-            const checked = !!groupState[groupKey];
-            for (const name of getMetricsInGroup(groupKey)) {
+        function applyGroupStateToSelection(groupInfo) {
+            const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
+            const checked = !!groupState[stateKey];
+            for (const name of getMetricsInGroup(groupInfo)) {
                 selectionState[name] = checked;
             }
         }
-        function updateGroupStateFromSelection(groupKey) {
-            const names = getMetricsInGroup(groupKey);
-            groupState[groupKey] = names.length > 0 && names.every(name => !!selectionState[name]);
+        function updateGroupStateFromSelection(groupInfo) {
+            const names = getMetricsInGroup(groupInfo);
+            const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
+            groupState[stateKey] = names.length > 0 && names.every(name => !!selectionState[name]);
+        }
+        function handleGroupModeChange() {
+            saveStateFromDom();
+            ensureStateDefaults();
+            buildMetricList();
+            renderPlot();
+        }
+        function buildMetricItem(name, groupInfo) {
+            const row = document.createElement("label");
+            row.className = "metric-item";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = name;
+            cb.checked = !!selectionState[name];
+            cb.dataset.metricName = name;
+            cb.onchange = () => {
+                selectionState[name] = cb.checked;
+                if (groupInfo) {
+                    updateGroupStateFromSelection(groupInfo);
+                }
+                buildMetricList();
+                renderPlot();
+            };
+            const textWrap = document.createElement("span");
+            textWrap.className = "metric-text";
+            const color = getColorForMetric(name);
+            if (!selectionState[name]) {
+                row.classList.add("disabled");
+            }
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "metric-name";
+            nameSpan.style.color = selectionState[name] ? color : "#8a8a8a";
+            nameSpan.textContent = name;
+            if (metricIsComparable(name)) {
+                const badge = document.createElement("span");
+                badge.className = "badge";
+                badge.textContent = "comparable";
+                nameSpan.appendChild(badge);
+            }
+            const meta = PRIMARY_REPORT.metrics[name];
+            const avgSpan = document.createElement("span");
+            avgSpan.className = "metric-avg";
+            avgSpan.textContent = `avg=${meta.avg_label}   min=${meta.min_label}   max=${meta.max_label}`;
+            textWrap.appendChild(nameSpan);
+            textWrap.appendChild(avgSpan);
+            row.appendChild(cb);
+            row.appendChild(textWrap);
+            return row;
         }
         function buildMetricList() {
             ensureStateDefaults();
             const root = document.getElementById("metric_list");
             root.innerHTML = "";
-            for (const groupKey of getSortedGroupKeys()) {
+            const mode = getGroupMode();
+            if (mode === "none") {
+                const listBox = document.createElement("div");
+                listBox.className = "unit-group";
+                const header = document.createElement("div");
+                header.className = "unit-group-header";
+                header.textContent = "All attributes";
+                listBox.appendChild(header);
+                const items = document.createElement("div");
+                items.className = "unit-group-items";
+                for (const name of getMetricNames(PRIMARY_REPORT)) {
+                    items.appendChild(buildMetricItem(name, null));
+                }
+                listBox.appendChild(items);
+                root.appendChild(listBox);
+                return;
+            }
+            for (const groupInfo of getSortedGroupKeys()) {
+                const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
                 const groupBox = document.createElement("div");
                 groupBox.className = "unit-group";
                 const header = document.createElement("label");
                 header.className = "unit-group-header";
                 const groupCb = document.createElement("input");
                 groupCb.type = "checkbox";
-                groupCb.checked = !!groupState[groupKey];
-                groupCb.dataset.groupKey = groupKey;
+                groupCb.checked = !!groupState[stateKey];
+                groupCb.dataset.stateGroupKey = stateKey;
                 groupCb.onchange = () => {
-                    groupState[groupKey] = groupCb.checked;
-                    applyGroupStateToSelection(groupKey);
+                    groupState[stateKey] = groupCb.checked;
+                    applyGroupStateToSelection(groupInfo);
                     buildMetricList();
                     renderPlot();
                 };
                 const headerText = document.createElement("span");
-                headerText.textContent = `Unit: ${groupKey}`;
+                headerText.textContent = groupInfo.label;
                 header.appendChild(groupCb);
                 header.appendChild(headerText);
                 groupBox.appendChild(header);
                 const items = document.createElement("div");
                 items.className = "unit-group-items";
-                for (const name of getMetricsInGroup(groupKey)) {
-                    const row = document.createElement("label");
-                    row.className = "metric-item";
-                    const cb = document.createElement("input");
-                    cb.type = "checkbox";
-                    cb.value = name;
-                    cb.checked = !!selectionState[name];
-                    cb.dataset.metricName = name;
-                    cb.onchange = () => {
-                        selectionState[name] = cb.checked;
-                        updateGroupStateFromSelection(groupKey);
-                        buildMetricList();
-                        renderPlot();
-                    };
-                    const textWrap = document.createElement("span");
-                    textWrap.className = "metric-text";
-                    const nameSpan = document.createElement("span");
-                    nameSpan.className = "metric-name";
-                    nameSpan.textContent = name;
-                    if (metricIsComparable(name)) {
-                        const badge = document.createElement("span");
-                        badge.className = "badge";
-                        badge.textContent = "comparable";
-                        nameSpan.appendChild(badge);
-                    }
-                    const meta = PRIMARY_REPORT.metrics[name];
-                    const avgSpan = document.createElement("span");
-                    avgSpan.className = "metric-avg";
-                    avgSpan.textContent = `avg=${meta.avg_label}   min=${meta.min_label}   max=${meta.max_label}`;
-                    textWrap.appendChild(nameSpan);
-                    textWrap.appendChild(avgSpan);
-                    row.appendChild(cb);
-                    row.appendChild(textWrap);
-                    items.appendChild(row);
+                for (const name of getMetricsInGroup(groupInfo)) {
+                    items.appendChild(buildMetricItem(name, groupInfo));
                 }
                 groupBox.appendChild(items);
                 root.appendChild(groupBox);
@@ -486,8 +588,8 @@ def build_html(report_payload: dict) -> str:
             return getMetricNames(PRIMARY_REPORT).filter(name => !!selectionState[name]);
         }
         function selectAll() {
-            for (const groupKey of getSortedGroupKeys()) {
-                groupState[groupKey] = true;
+            for (const groupInfo of getSortedGroupKeys()) {
+                groupState[getStateGroupKey(groupInfo.mode, groupInfo.key)] = true;
             }
             for (const name of getMetricNames(PRIMARY_REPORT)) {
                 selectionState[name] = true;
@@ -496,8 +598,8 @@ def build_html(report_payload: dict) -> str:
             renderPlot();
         }
         function selectNone() {
-            for (const groupKey of getSortedGroupKeys()) {
-                groupState[groupKey] = false;
+            for (const groupInfo of getSortedGroupKeys()) {
+                groupState[getStateGroupKey(groupInfo.mode, groupInfo.key)] = false;
             }
             for (const name of getMetricNames(PRIMARY_REPORT)) {
                 selectionState[name] = false;
@@ -763,6 +865,56 @@ def build_html(report_payload: dict) -> str:
             valueNode.textContent = Number(comparisonShift).toFixed(1);
             wrap.classList.remove("hidden");
         }
+        function installPlotInteractions() {
+            const plot = document.getElementById("plot");
+            plot.on("plotly_hover", event => {
+                if (event && event.points && event.points.length > 0) {
+                    const x = event.points[0].x;
+                    if (typeof x === "number" && Number.isFinite(x)) {
+                        lastHoverX = x;
+                    }
+                }
+            });
+            plot.addEventListener("wheel", event => {
+                const layout = plot.layout;
+                if (!layout || !layout.xaxis || !layout.yaxis) {
+                    return;
+                }
+                const xRange = layout.xaxis.range;
+                const yRange = layout.yaxis.range;
+                if (!Array.isArray(xRange) || !Array.isArray(yRange)) {
+                    return;
+                }
+                event.preventDefault();
+                const x0 = Number(xRange[0]);
+                const x1 = Number(xRange[1]);
+                const y0 = Number(yRange[0]);
+                const y1 = Number(yRange[1]);
+                if (![x0, x1, y0, y1].every(Number.isFinite)) {
+                    return;
+                }
+                const anchorX = Number.isFinite(lastHoverX) ? lastHoverX : (x0 + x1) / 2;
+                const factor = event.deltaY < 0 ? 0.85 : 1 / 0.85;
+                const newX0 = anchorX - (anchorX - x0) * factor;
+                const newX1 = anchorX + (x1 - anchorX) * factor;
+                const yCenter = (y0 + y1) / 2;
+                const halfY = (y1 - y0) * factor / 2;
+                Plotly.relayout(plot, {
+                    "xaxis.range": [newX0, newX1],
+                    "yaxis.range": [yCenter - halfY, yCenter + halfY],
+                });
+            }, { passive: false });
+        }
+        function resetZoom() {
+            const plot = document.getElementById("plot");
+            if (!baseAxisRanges.x || !baseAxisRanges.y) {
+                return;
+            }
+            Plotly.relayout(plot, {
+                "xaxis.range": [baseAxisRanges.x[0], baseAxisRanges.x[1]],
+                "yaxis.range": [baseAxisRanges.y[0], baseAxisRanges.y[1]],
+            });
+        }
         function handleShiftSliderInput() {
             const slider = document.getElementById("comparison_shift");
             comparisonShift = parseFloat(slider.value) || 0.0;
@@ -796,10 +948,35 @@ def build_html(report_payload: dict) -> str:
                 }
             }
             const yRange = calcVisibleYRange(traces);
+            let xMin = 0.0;
+            let xMax = 1.0;
+            if (traces.length > 0) {
+                const xs = [];
+                for (const trace of traces) {
+                    for (const x of trace.x) {
+                        if (x !== null && x !== undefined && !Number.isNaN(x)) {
+                            xs.push(x);
+                        }
+                    }
+                }
+                if (xs.length > 0) {
+                    xMin = Math.min(...xs);
+                    xMax = Math.max(...xs);
+                    if (xMin === xMax) {
+                        xMin -= 1;
+                        xMax += 1;
+                    }
+                }
+            }
+            baseAxisRanges = {
+                x: [xMin, xMax],
+                y: [yRange.min, yRange.max],
+            };
             const layout = {
                 title: "Dynamic Monitoring Metrics",
                 xaxis: {
-                    title: comparisonMode ? "Sample index" : `Time since start from ${PRIMARY_REPORT.time_col} (sec)`
+                    title: comparisonMode ? "Sample index" : `Time since start from ${PRIMARY_REPORT.time_col} (sec)`,
+                    range: [xMin, xMax],
                 },
                 yaxis: {
                     title: getYAxisTitle(selected),
@@ -815,6 +992,7 @@ def build_html(report_payload: dict) -> str:
         updateComparisonStatus();
         updateComparisonShiftUi();
         installShiftSensitiveSliderStep();
+        installPlotInteractions();
         rebuildAllDerivedAndRender();
     </script>
 </body>
