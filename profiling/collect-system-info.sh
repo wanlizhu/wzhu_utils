@@ -229,7 +229,7 @@ if [[ $1 == brief ]]; then
     printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>/tmp/brief
     printf '\t\tKernel: %s\n' "$(uname -r)" >>/tmp/brief
     printf '\t\tMemory:\n' >>/tmp/brief
-    print_mem_brief | sed 's/^/\t\t/' >>/tmp/brief
+    print_mem_brief | sed 's/^/\t\t\t/' >>/tmp/brief
 
     printf '\tCPU: %s\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" >>/tmp/brief
     printf '\t\tMax clock: %s\n' "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)" >>/tmp/brief
