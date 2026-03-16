@@ -8,7 +8,7 @@ elif [[ ! -z $(pidof Xwayland) ]]; then
     echo "Found Xwayland: $(pidof Xwayland)"
 else
     if [[ -d /mnt/linuxqa/wanliz ]]; then 
-        screen -dm sudo -i bash -lc '/mnt/linuxqa/nvt.sh 3840x2160__runcmd --cmd "sleep 100000000"'
+        screen -dm sudo -i /mnt/linuxqa/nvt.sh 3840x2160__runcmd --cmd "sleep 100000000"
         for ((i = 10; i > 0; i--)); do 
             if [[ ! -z $(pidof Xorg) || ! -z $(pidof Xwayland) ]] then 
                 printf '\n'
