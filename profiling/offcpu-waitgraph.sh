@@ -54,14 +54,12 @@ if [[ ! -z $1 ]]; then
     [[ -z $COMM ]] && COMM=unknown
 
     # Install debug symbol packages for the target process.
+    [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
     if [[ $INSTALL_DEBUG_SYMBOL == true ]]; then
-        if [[ ! -f /tmp/$(cat /proc/$PID/comm)-dbgsym-installed && ! -z $(which find-dbgsym-packages) ]]; then
-            echo "Installing debug symbols for process $PID..."
-            find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' | while read -r pkg; do
-                sudo apt install -y $pkg
-            done
-            touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
-        fi
+        echo "Installing debug symbols for process $PID..."
+        cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
+            install-pkg.sh $pkg
+        done
     fi
 fi
 

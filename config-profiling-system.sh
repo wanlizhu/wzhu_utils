@@ -79,6 +79,17 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
         python3-pip python3-pandas cpufrequtils stress-ng glmark2
 
+    find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
+    while IFS= read -r -d '' file; do
+        while IFS= read -r pkg; do
+            if [[ ! -z $(which install-pkg.sh) ]]; then 
+                install-pkg.sh $pkg 
+            else 
+                sudo apt install -y $pkg 
+            fi 
+        done < "$file"
+    done
+
     if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
         read -p "Press [Enter] to uninstall libre office: "
         sudo apt purge -y libreoffice*
