@@ -219,7 +219,7 @@ cleanup() {
             if has_perf_data; then
                 echo "Post-processing (perf script, report generation)..." >&2
                 echo "  [1/4] Running perf script..." >&2
-                if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
+                if ! sudo perf script -f -i "$TEMP_DIR/perf_sched.data" \
                     -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt" 2>/dev/null; then
                     : > "$TEMP_DIR/perf_script.txt"
                 fi
@@ -228,16 +228,17 @@ cleanup() {
                 echo "  [3/4] Building scheduler views..." >&2
                 {
                     echo "===== perf sched timehist ====="
-                    sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>/dev/null || true
+                    sudo perf sched timehist -f -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>/dev/null || true
                     echo
                     echo "===== perf sched latency ====="
-                    sudo perf sched latency -i "$TEMP_DIR/perf_sched.data" -p 2>/dev/null || true
+                    sudo perf sched latency -f -i "$TEMP_DIR/perf_sched.data" -p 2>/dev/null || true
                     echo
                     echo "===== perf sched map ====="
-                    sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact 2>/dev/null || true
+                    sudo perf sched map -f -i "$TEMP_DIR/perf_sched.data" --compact 2>/dev/null || true
                 } > "$TEMP_DIR/scheduler_views.txt"
                 echo "  [4/4] Running Python report generator..." >&2
                 run_python_postprocessor && echo "generated: $OUT_DIR/out_report.html" >&2
+                POST_PROCESSING_ALREADY_DONE=1
             else
                 : > "$TEMP_DIR/perf_script.txt"
                 echo "perf data not available (perf_sched.data missing or empty)" > "$TEMP_DIR/scheduler_views.txt"
@@ -1605,6 +1606,10 @@ kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null && kill -TERM $kernel_wait_r
 wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
 
 CAPTURING=0
+# If we already ran post-processing in the INT/TERM trap (e.g. Ctrl-C), skip so we don't generate the report twice.
+if [[ -n $POST_PROCESSING_ALREADY_DONE ]]; then
+    echo "generated: $OUT_DIR/out_report.html"
+else
 echo "Post-processing (perf script, report generation)..."
 # Handle missing or empty perf data: skip perf script and produce minimal report.
 if ! has_perf_data; then
@@ -1612,8 +1617,8 @@ if ! has_perf_data; then
     : > "$TEMP_DIR/perf_script.txt"
 else
     echo "  [1/4] Running perf script (may take a while for large captures)..."
-    if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
-        -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt"; then
+    if ! sudo perf script -f -i "$TEMP_DIR/perf_sched.data" \
+        -F comm,pid,tid,cpu,time,event,trace 2>/dev/null > "$TEMP_DIR/perf_script.txt"; then
         echo "warning: perf script failed, generating minimal report" >&2
         : > "$TEMP_DIR/perf_script.txt"
     fi
@@ -1627,13 +1632,13 @@ echo "  [3/4] Building scheduler views (timehist, latency, map)..."
 if has_perf_data; then
     {
         echo "===== perf sched timehist ====="
-        sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S || true
+        sudo perf sched timehist -f -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>/dev/null || true
         echo
         echo "===== perf sched latency ====="
-        sudo perf sched latency -i "$TEMP_DIR/perf_sched.data" -p || true
+        sudo perf sched latency -f -i "$TEMP_DIR/perf_sched.data" -p 2>/dev/null || true
         echo
         echo "===== perf sched map ====="
-        sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact || true
+        sudo perf sched map -f -i "$TEMP_DIR/perf_sched.data" --compact 2>/dev/null || true
     } > "$TEMP_DIR/scheduler_views.txt"
 else
     echo "perf data not available (perf_sched.data missing or empty)" > "$TEMP_DIR/scheduler_views.txt"
@@ -1646,3 +1651,4 @@ if ! run_python_postprocessor; then
 fi
 
 echo "generated: $OUT_DIR/out_report.html"
+fi
