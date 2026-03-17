@@ -2,14 +2,15 @@
 
 set -o pipefail
 
-NAME_PREFIX=
 WAIT_SECONDS=0 # delay before perf recording starts.
 RECORD_SECONDS=5 # recording duration in seconds.
+TRACE_WAKERS=true
+LOCK_CONTENTION=true
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 unset PID COMM
 
 while (( $# )); do
     case $1 in
-        -name=*) NAME_PREFIX=${1#-name=} ;;
         -wait=*) WAIT_SECONDS=${1#-wait=} ;;
         -record=*) RECORD_SECONDS=${1#-record=} ;;
         *) break ;;
@@ -64,19 +65,60 @@ if [[ ! -z $1 ]]; then
 fi
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg
+sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg $HOME/${COMM}_wakers.txt $HOME/${COMM}_lock_contention.txt
+
+# Running waker tracer in background (logs which PID/comm wakes the target).
+WAKER_PID=
+if [[ $TRACE_WAKERS == true ]]; then
+    echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS s -> $HOME/${COMM}_wakers.txt"
+    ( 
+        echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"; 
+        sudo timeout $RECORD_SECONDS bpftrace $SCRIPT_DIR/trace-wakers-bpftrace.bt $PID 2>/dev/null 
+    ) >$HOME/${COMM}_wakers.txt &
+    WAKER_PID=$!
+fi
+
+# Run lock contention in parallel (perf lock contention -b).
+LOCK_PID=
+if [[ $LOCK_CONTENTION == true ]]; then
+    if perf lock contention -h &>/dev/null; then
+        echo "[Detached] Running perf lock contention -b -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
+        sudo timeout $RECORD_SECONDS perf lock contention -b -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
+        LOCK_PID=$!
+    else
+        echo "Warning: perf lock contention not available (kernel 5.17+ with BPF), skipped"
+    fi
+fi
 
 # Start sampling (requires a target PID; pass a numeric PID or use steam/command launch above).
 echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
 sudo offwaketime-bpfcc -p $PID -f $RECORD_SECONDS >/tmp/offwake.folded || exit 1
 
-# Post-process folded stacks into flame graph.
+# Wait for background jobs (they use the same duration, so they exit on their own).
+[[ -n $WAKER_PID ]] && wait $WAKER_PID 2>/dev/null || true
+[[ -n $LOCK_PID ]] && wait $LOCK_PID 2>/dev/null || true
+
+# Post-process: convert folded stacks into flame graph.
 if [[ -f /tmp/offwake.folded ]]; then
     cat /tmp/offwake.folded | flamegraph.pl >$HOME/${COMM}_waitgraph.svg && echo "Generated $HOME/${COMM}_waitgraph.svg"
 
     # If the process has multiple threads, also generate one SVG per thread.
     if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
         echo "$COMM ($PID) has $(ls /proc/$PID/task 2>/dev/null | wc -l) threads"
-        # TODO 
-    fi 
+        # TODO
+    fi
+fi
+
+# Post-process: show waker output 
+if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
+    echo "Waker log: $HOME/${COMM}_wakers.txt"
+    if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
+        echo "Top wakers (waker_pid,waker_comm count):"
+        tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -20
+    fi
+fi
+
+# Post-process: show lock contention output 
+if [[ $LOCK_CONTENTION == true ]] && [[ -f "$HOME/${COMM}_lock_contention.txt" ]]; then 
+    echo "Lock contention: $HOME/${COMM}_lock_contention.txt"
 fi 

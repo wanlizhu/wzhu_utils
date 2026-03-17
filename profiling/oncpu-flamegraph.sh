@@ -2,7 +2,6 @@
 
 set -o pipefail
 
-NAME_PREFIX=
 WAIT_SECONDS=0 # delay before perf recording starts.
 RECORD_SECONDS=5 # perf recording duration in seconds.
 RECORD_FREQ=1000 # perf sampling frequency in Hz.
@@ -12,7 +11,6 @@ unset PID COMM
 
 while (( $# )); do
     case $1 in
-        -name=*) NAME_PREFIX=${1#-name=} ;;
         -wait=*) WAIT_SECONDS=${1#-wait=} ;;
         -record=*) RECORD_SECONDS=${1#-record=} ;;
         -freq=*) RECORD_FREQ=${1#-freq=} ;;

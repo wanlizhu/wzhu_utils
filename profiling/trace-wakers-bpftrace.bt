@@ -1,0 +1,39 @@
+#!/usr/bin/env bpftrace
+//
+// Trace which process/thread wakes the target process.
+// Use when off-CPU flamegraph shows long futex (or other) waits but not *who*
+// is holding the lock or who eventually wakes the target (e.g. compositor).
+//
+// Usage (requires root):
+//   sudo bpftrace trace-wakers-bpftrace.bt <target_pid>
+//   sudo bpftrace trace-wakers-bpftrace.bt -o wakers.txt 12345
+//
+// Optional: set RECORD_SECONDS in the script or interrupt with Ctrl+C.
+// Output: timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid,ns_blocked
+//
+
+param $1;
+
+if ($1 == 0) {
+    printf("Usage: sudo bpftrace %s <target_pid>\n", $0);
+    printf("  target_pid: PID of the process to track (e.g. game under Wayland)\n");
+    exit(1);
+}
+
+$target_pid = $1;
+
+kprobe:try_to_wake_up
+{
+    $p = (struct task_struct *)arg0;
+    $woke_pid = $p->pid;
+    if ($woke_pid != $target_pid)
+        return;
+    $waker_pid = pid;
+    $waker_comm = comm;
+    $waker_tid = tid;
+    $woke_tid = $p->tid;
+    printf("%d,%d,%s,%d,%d\n", nsecs / 1000000000, $waker_pid, $waker_comm, $waker_tid, $woke_tid);
+}
+
+// Run for the same duration as your offcpu-waitgraph (e.g. 30s), then Ctrl+C.
+// Aggregate with: cut -d, -f2,3 wakers.txt | sort | uniq -c | sort -rn
