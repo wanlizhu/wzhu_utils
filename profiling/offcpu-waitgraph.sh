@@ -81,7 +81,7 @@ fi
 # Run lock contention in parallel (perf lock contention -b).
 LOCK_PID=
 if [[ $LOCK_CONTENTION == true ]]; then
-    if perf lock contention -h &>/dev/null; then
+    if [[ ! -z $(perf lock contention -h) ]]; then
         echo "[Detached] Running perf lock contention -b -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
         sudo timeout $RECORD_SECONDS perf lock contention -b -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
         LOCK_PID=$!
