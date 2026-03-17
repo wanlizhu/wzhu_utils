@@ -91,16 +91,17 @@
     }
     .svg-resize-wrap {
       position: relative;
-      display: inline-block;
+      display: block;
+      width: 100%;
+      height: 60vh;
       max-width: 100%;
       max-height: 60vh;
     }
     .svg-resize-wrap[data-height-set="1"] { max-height: none; }
     .svg-zoom-wrap {
-      overflow: auto;
+      overflow: hidden;
       width: 100%;
       height: 100%;
-      max-height: inherit;
     }
     .svg-resize-r, .svg-resize-b, .svg-resize-corner {
       position: absolute;
@@ -134,10 +135,15 @@
     }
     .svg-zoom-inner {
       display: block;
+      width: 100%;
+      height: 100%;
       padding: 12px;
+      box-sizing: border-box;
     }
     .svg-zoom-inner object {
       display: block;
+      width: 100%;
+      height: 100%;
       vertical-align: top;
     }
     .tabbtn.active:hover {
