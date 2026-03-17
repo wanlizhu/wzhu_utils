@@ -81,7 +81,7 @@ done
 echo '];' >> "$f_folded"
 
 # Build JSON array for SVG base64
-printf '      window.TAB_SVG_B64 = ' >> "$f_svg"
+printf '      window.TAB_SVG_B64 = ' > "$f_svg"
 echo -n '[' >> "$f_svg"
 for i in "${!tab_files[@]}"; do
     path="${tab_files[$i]}"

@@ -16,7 +16,9 @@ set -o pipefail
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg $HOME/${COMM}_flamegraph_tabs.html
+# Per-thread SVGs live in /tmp; combined flamegraph and HTML report in $HOME.
+sudo rm -rf /tmp/perf.data /tmp/${COMM}_thread*_flamegraph.svg \
+  $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg $HOME/${COMM}_flamegraph_tabs.html
 
 # Start sampling
 echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
