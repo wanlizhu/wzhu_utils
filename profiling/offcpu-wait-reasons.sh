@@ -172,17 +172,17 @@ print_help() {
 #     cases without leaving collectors running in the background.
 # -----------------------------------------------------------------------------
 cleanup() {
-    [[ -n $perf_pid ]] && kill -INT $perf_pid 2>/dev/null
-    [[ -n $function_trace_pid ]] && kill -INT $function_trace_pid 2>/dev/null
-    [[ -n $stack_trace_pid ]] && kill -INT $stack_trace_pid 2>/dev/null
-    [[ -n $kernel_wait_reason_sampler_pid ]] && kill -TERM $kernel_wait_reason_sampler_pid 2>/dev/null
-    [[ -n $timeout_pid ]] && kill $timeout_pid 2>/dev/null
+    [[ -n $perf_pid ]] && kill -INT $perf_pid
+    [[ -n $function_trace_pid ]] && kill -INT $function_trace_pid
+    [[ -n $stack_trace_pid ]] && kill -INT $stack_trace_pid
+    [[ -n $kernel_wait_reason_sampler_pid ]] && kill -TERM $kernel_wait_reason_sampler_pid
+    [[ -n $timeout_pid ]] && kill $timeout_pid
 
-    [[ -n $perf_pid ]] && wait $perf_pid 2>/dev/null
-    [[ -n $function_trace_pid ]] && wait $function_trace_pid 2>/dev/null
-    [[ -n $stack_trace_pid ]] && wait $stack_trace_pid 2>/dev/null
-    [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid 2>/dev/null
-    [[ -n $timeout_pid ]] && wait $timeout_pid 2>/dev/null
+    [[ -n $perf_pid ]] && wait $perf_pid
+    [[ -n $function_trace_pid ]] && wait $function_trace_pid
+    [[ -n $stack_trace_pid ]] && wait $stack_trace_pid
+    [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid
+    [[ -n $timeout_pid ]] && wait $timeout_pid
 
     [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf "$TEMP_DIR"
 }
@@ -214,16 +214,16 @@ sample_kernel_wait_reasons() {
     sudo bash -c "
         echo -e 'ts_ns\ttid\tstate\tkernel_wait_reason\tcomm' > \"$TEMP_DIR/kernel_wait_reason_samples.tsv\"
         while [[ -d /proc/$TARGET_PID ]]; do
-            ts_ns=\$(date +%s%N 2>/dev/null)
+            ts_ns=\$(date +%s%N)
             [[ \$ts_ns =~ ^[0-9]+\$ ]] || ts_ns=0
 
             for task_dir in /proc/$TARGET_PID/task/*; do
                 [[ -d \$task_dir ]] || continue
 
                 tid=\${task_dir##*/}
-                state=\$(awk '/^State:/ { print \$2 }' \$task_dir/status 2>/dev/null)
-                kernel_wait_reason=\$(cat \$task_dir/wchan 2>/dev/null)
-                comm=\$(cat \$task_dir/comm 2>/dev/null)
+                state=\$(awk '/^State:/ { print \$2 }' \$task_dir/status)
+                kernel_wait_reason=\$(cat \$task_dir/wchan)
+                comm=\$(cat \$task_dir/comm)
 
                 [[ -n \$state ]] || state=-
                 [[ -n \$kernel_wait_reason ]] || kernel_wait_reason=-
@@ -232,7 +232,7 @@ sample_kernel_wait_reasons() {
                 printf '%s\t%s\t%s\t%s\t%s\n' \"\$ts_ns\" \"\$tid\" \"\$state\" \"\$kernel_wait_reason\" \"\$comm\"
             done >> \"$TEMP_DIR/kernel_wait_reason_samples.tsv\"
 
-            python3 -c \"import time; time.sleep($SAMPLE_MS / 1000.0)\" 2>/dev/null || sleep 0.02
+            python3 -c \"import time; time.sleep($SAMPLE_MS / 1000.0)\" || sleep 0.02
         done
     " &
     kernel_wait_reason_sampler_pid=$!
@@ -1082,7 +1082,7 @@ for cmd in perf python3 awk sed grep readelf nm sort uniq bpftrace; do
     fi
 done
 
-if ! sudo test -d /proc/$TARGET_PID 2>/dev/null; then
+if ! sudo test -d /proc/$TARGET_PID; then
     echo "error: pid $TARGET_PID does not exist or cannot be accessed" >&2
     exit 1
 fi
@@ -1112,15 +1112,17 @@ mkdir -p $OUT_DIR || {
     exit 1
 }
 
-TEMP_DIR=$(mktemp -d /tmp/offcpu-wait-reasons.XXXXXX) || {
-    echo "error: failed to create temporary directory" >&2
+TEMP_DIR=/tmp/offcpu-wait-reasons
+rm -rf "$TEMP_DIR"
+mkdir -p "$TEMP_DIR" || {
+    echo "error: failed to create temporary directory: $TEMP_DIR" >&2
     exit 1
 }
 
 # Resolve symbol if needed.
 if [[ $ANALYSIS_SCOPE == function ]]; then
     mapfile -t mapped_exec_files < <(
-        sudo cat /proc/$TARGET_PID/maps 2>/dev/null | awk '$3 ~ /x/ && $6 ~ /^\// { print $6 }' | sort -u
+        sudo cat /proc/$TARGET_PID/maps | awk '$3 ~ /x/ && $6 ~ /^\// { print $6 }' | sort -u
     )
 
     : > $TEMP_DIR/symbol_resolution.txt
@@ -1134,7 +1136,7 @@ if [[ $ANALYSIS_SCOPE == function ]]; then
         if [[ -n $FUNCTION_LIBRARY_PATH && $file_path != $FUNCTION_LIBRARY_PATH ]]; then
             continue
         fi
-        if ! sudo readelf -h "$file_path" >/dev/null 2>&1; then
+        if ! sudo readelf -h "$file_path" >/dev/null; then
             continue
         fi
         base=${file_path##*/}
@@ -1164,13 +1166,13 @@ if [[ $ANALYSIS_SCOPE == function ]]; then
     for item in "${prioritized_candidates[@]}"; do
         file_path=${item#*|}
         found=0
-        if sudo readelf -Ws "$file_path" 2>/dev/null | awk -v sym=$FUNCTION_NAME '$8 == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
+        if sudo readelf -Ws "$file_path" | awk -v sym=$FUNCTION_NAME '$8 == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
             found=1
         fi
-        if [[ $found -eq 0 ]] && sudo nm -D --defined-only "$file_path" 2>/dev/null | awk -v sym=$FUNCTION_NAME '$3 == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
+        if [[ $found -eq 0 ]] && sudo nm -D --defined-only "$file_path" | awk -v sym=$FUNCTION_NAME '$3 == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
             found=1
         fi
-        if [[ $found -eq 0 ]] && sudo nm -a "$file_path" 2>/dev/null | awk -v sym=$FUNCTION_NAME '$NF == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
+        if [[ $found -eq 0 ]] && sudo nm -a "$file_path" | awk -v sym=$FUNCTION_NAME '$NF == sym { found = 1 } END { exit(found ? 0 : 1) }'; then
             found=1
         fi
         if [[ $found -eq 1 ]]; then
@@ -1294,10 +1296,10 @@ EOSTACK
 fi
 
 if [[ $ANALYSIS_SCOPE == function ]]; then
-    sudo bpftrace "$TEMP_DIR/trace_function.bt" > "$TEMP_DIR/function_trace.tsv" 2> "$TEMP_DIR/function_trace.log" &
+    sudo bpftrace "$TEMP_DIR/trace_function.bt" > "$TEMP_DIR/function_trace.tsv" &
     function_trace_pid=$!
     sleep 0.2
-    if ! kill -0 $function_trace_pid 2>/dev/null; then
+    if ! kill -0 $function_trace_pid; then
         echo "error: failed to start function trace bpftrace" >&2
         exit 1
     fi
@@ -1306,10 +1308,10 @@ else
 fi
 
 if [[ $ENABLE_STACKS -eq 1 ]]; then
-    sudo bpftrace "$TEMP_DIR/trace_stacks.bt" > "$TEMP_DIR/stack_events.txt" 2> "$TEMP_DIR/stack_events.log" &
+    sudo bpftrace "$TEMP_DIR/trace_stacks.bt" > "$TEMP_DIR/stack_events.txt" &
     stack_trace_pid=$!
     sleep 0.2
-    if ! kill -0 $stack_trace_pid 2>/dev/null; then
+    if ! kill -0 $stack_trace_pid; then
         echo "warning: failed to start stack trace bpftrace, continuing without stacks" >&2
         ENABLE_STACKS=0
         : > $TEMP_DIR/stack_events.txt
@@ -1321,7 +1323,7 @@ fi
 sample_kernel_wait_reasons
 
 sleep 0.1
-if ! kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null; then
+if ! kill -0 $kernel_wait_reason_sampler_pid; then
     echo "error: failed to start kernel wait reason sampler" >&2
     exit 1
 fi
@@ -1332,11 +1334,11 @@ sudo perf record -a \
     -e sched:sched_wakeup \
     -e sched:sched_wakeup_new \
     -e sched:sched_migrate_task \
-    --timestamp-filename >/dev/null 2> "$TEMP_DIR/perf_record.log" &
+    --timestamp-filename &
 perf_pid=$!
 
 sleep 0.2
-if ! kill -0 $perf_pid 2>/dev/null; then
+if ! kill -0 $perf_pid; then
     echo "error: failed to start perf record" >&2
     exit 1
 fi
@@ -1344,7 +1346,7 @@ fi
 if [[ $CAPTURE_SECONDS -gt 0 ]]; then
     (
         sleep $CAPTURE_SECONDS
-        kill -INT $perf_pid 2>/dev/null
+        kill -INT $perf_pid
     ) &
     timeout_pid=$!
     echo "Capturing for $CAPTURE_SECONDS seconds (or until target process exits)..."
@@ -1353,41 +1355,53 @@ else
 fi
 
 # Wait until perf is stopped (by timeout, or by Ctrl-C when CAPTURE_SECONDS=0). Do not wait for target process.
-while kill -0 $perf_pid 2>/dev/null; do
+while kill -0 $perf_pid; do
     sleep 0.2
 done
 
-kill -INT $perf_pid 2>/dev/null
-wait $perf_pid 2>/dev/null
+kill -INT $perf_pid
+wait $perf_pid
 
-kill -INT $function_trace_pid 2>/dev/null
-wait $function_trace_pid 2>/dev/null
+kill -INT $function_trace_pid
+wait $function_trace_pid
 
-kill -INT $stack_trace_pid 2>/dev/null
-wait $stack_trace_pid 2>/dev/null
+kill -INT $stack_trace_pid
+wait $stack_trace_pid
 
-kill -TERM $kernel_wait_reason_sampler_pid 2>/dev/null
-wait $kernel_wait_reason_sampler_pid 2>/dev/null
+kill -TERM $kernel_wait_reason_sampler_pid
+wait $kernel_wait_reason_sampler_pid
 
-if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
-    -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt" 2> "$TEMP_DIR/perf_script.log"; then
-    echo "warning: perf script failed" >&2
+echo "Post-processing (perf script, report generation)..."
+# Handle missing or empty perf data: skip perf script and produce minimal report.
+if [[ ! -f "$TEMP_DIR/perf_sched.data" || ! -s "$TEMP_DIR/perf_sched.data" ]]; then
+    echo "warning: no perf data captured (perf_sched.data missing or empty), generating minimal report" >&2
     : > "$TEMP_DIR/perf_script.txt"
+else
+    if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
+        -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt"; then
+        echo "warning: perf script failed, generating minimal report" >&2
+        : > "$TEMP_DIR/perf_script.txt"
+    fi
 fi
 
 # Make sudo-created files in TEMP_DIR readable by the current user for the Python postprocessor.
-sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" 2>/dev/null || true
+sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" || true
 
-{
-    echo "===== perf sched timehist ====="
-    sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>&1 || true
-    echo
-    echo "===== perf sched latency ====="
-    sudo perf sched latency -i "$TEMP_DIR/perf_sched.data" -p 2>&1 || true
-    echo
-    echo "===== perf sched map ====="
-    sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact 2>&1 || true
-} > "$TEMP_DIR/scheduler_views.txt"
+# Scheduler views require valid perf data; otherwise write a placeholder.
+if [[ -f "$TEMP_DIR/perf_sched.data" && -s "$TEMP_DIR/perf_sched.data" ]]; then
+    {
+        echo "===== perf sched timehist ====="
+        sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S || true
+        echo
+        echo "===== perf sched latency ====="
+        sudo perf sched latency -i "$TEMP_DIR/perf_sched.data" -p || true
+        echo
+        echo "===== perf sched map ====="
+        sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact || true
+    } > "$TEMP_DIR/scheduler_views.txt"
+else
+    echo "perf data not available (perf_sched.data missing or empty)" > "$TEMP_DIR/scheduler_views.txt"
+fi
 
 if ! run_python_postprocessor; then
     echo "error: Python post-processing failed" >&2
