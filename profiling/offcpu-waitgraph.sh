@@ -30,9 +30,6 @@ fi
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
 [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
 
-# Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/offwake.folded $HOME/offcpu.svg.d/ 
-
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
     echo "Wait $WAIT_SECONDS seconds before recording"
@@ -45,11 +42,11 @@ if [[ ! -z $1 ]]; then
         PID=$1
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then
         pstree -aspT $(pidof steam)
-        read -p "Input steam game PID: " PID
+        read -p "Select steam game PID: " PID
     else
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
-        echo "Detached process $PID"
+        echo "Launched and detached process $PID"
     fi
 
     # Resolve the command name of the target process.
@@ -66,27 +63,22 @@ if [[ ! -z $1 ]]; then
             touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
         fi
     fi
-
-    # Show quick process context before recording
-    pstree -aspT $PID
-    pidstat -t -p $PID
 fi
 
+# Remove previous output from earlier runs so the new result is easier to inspect.
+sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg
+
 # Start sampling (requires a target PID; pass a numeric PID or use steam/command launch above).
-echo "Recording for $RECORD_SECONDS seconds ..."
+echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
 sudo offwaketime-bpfcc -p $PID -f $RECORD_SECONDS >/tmp/offwake.folded || exit 1
 
 # Post-process folded stacks into flame graph.
 if [[ -f /tmp/offwake.folded ]]; then
-    mkdir -p $HOME/offcpu.svg.d
-    cat /tmp/offwake.folded | flamegraph.pl >$HOME/offcpu.svg.d/offcpu-all-threads.svg && echo "Generated: $HOME/offcpu.svg.d/offcpu-all-threads.svg"
+    cat /tmp/offwake.folded | flamegraph.pl >$HOME/${COMM}_waitgraph.svg && echo "Generated $HOME/${COMM}_waitgraph.svg"
 
-    # TODO: If the process has multiple threads, also generate one SVG per thread. 
-    # (this needs to remove -f option and generate folded callchains manually)
-    
-    # Rename so multiple profiling runs can coexist under different names.
-    if [[ ! -z $NAME_PREFIX ]]; then
-        sudo mv -f $HOME/offcpu.svg.d $HOME/$NAME_PREFIX.offcpu.svg.d
-        echo "Renamed output dir to $HOME/$NAME_PREFIX.offcpu.svg.d"
-    fi
+    # If the process has multiple threads, also generate one SVG per thread.
+    if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
+        echo "$COMM ($PID) has $(ls /proc/$PID/task 2>/dev/null | wc -l) threads"
+        # TODO 
+    fi 
 fi 

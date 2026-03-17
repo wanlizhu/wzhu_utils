@@ -44,9 +44,6 @@ echo
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
 [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
 
-# Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/perf.data $HOME/oncpu-system-wide.svg $HOME/oncpu.svg.d/
-
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
     echo "Wait $WAIT_SECONDS seconds before recording"
@@ -59,11 +56,11 @@ if [[ ! -z $1 ]]; then
         PID=$1
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then
         pstree -aspT $(pidof steam)
-        read -p "Input steam game PID: " PID
+        read -p "Select steam game PID: " PID
     else
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
-        echo "Detached process $PID"
+        echo "Launched and detached process $PID"
     fi
 
     # Resolve the command name of the target process.
@@ -80,14 +77,13 @@ if [[ ! -z $1 ]]; then
             touch /tmp/$(cat /proc/$PID/comm)-dbgsym-installed
         fi
     fi
-
-    # Show quick process context before recording
-    pstree -aspT $PID
-    pidstat -t -p $PID
 fi
 
+# Remove previous output from earlier runs so the new result is easier to inspect.
+sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_tid*_flamegraph.svg
+
 # Start sampling
-echo "Sampling for $RECORD_SECONDS seconds ..."
+echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
 sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") --freq=$RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS
 
 # Post-process perf.data into flame graphs.
@@ -103,7 +99,7 @@ if [[ -f /tmp/perf.data ]]; then
 
         # If the process has multiple threads, also generate one SVG per thread.
         if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
-            echo "$COMM has $(ls /proc/$PID/task 2>/dev/null | wc -l) threads"
+            echo "$COMM ($PID) has $(ls /proc/$PID/task 2>/dev/null | wc -l) threads"
             sudo rm -rf /tmp/perf_tid*
             # Split perf script output by TID. Process line-by-line so we don't rely on blank lines
             # between samples; each line is appended to the file for the TID from the last seen
@@ -125,8 +121,7 @@ if [[ -f /tmp/perf.data ]]; then
                 { file = "/tmp/perf_tid" (cur_tid == "" ? "unknown" : cur_tid) ".txt"; print >> file }
             ' /tmp/perf.txt
 
-            # Count how many unique per-thread files were produced. Only generate per-thread
-            # SVGs when more than one thread was actually found in perf output.
+            # Count how many unique per-thread files were produced.
             tid_count=$(ls /tmp/perf_tid*.txt 2>/dev/null | sed -n 's|.*/perf_tid\([0-9]\+\)\.txt$|\1|p' | sort -u | wc -l)
             if (( tid_count > 1 )); then
                 for file in /tmp/perf_tid*.txt; do
@@ -137,9 +132,11 @@ if [[ -f /tmp/perf.data ]]; then
                     cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | flamegraph.pl >$HOME/${COMM}_tid${tid}_flamegraph.svg
                     echo "    - $HOME/${COMM}_tid${tid}_flamegraph.svg"
                 done
+            else
+                echo "Found 0 per-thread stack, skipping per-thread flamegraph"
             fi
         else
-            echo "$COMM has 1 thread, skipping per-thread flamegraph"
+            echo "$COMM ($PID) has 1 thread, skipping per-thread flamegraph"
         fi
     fi
 fi
