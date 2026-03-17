@@ -78,15 +78,24 @@ if [[ $TRACE_WAKERS == true ]]; then
     WAKER_PID=$!
 fi
 
-# Run lock contention in parallel (perf lock contention -b).
+# Run lock contention in parallel. Use BPF if built-in, else record + report.
 LOCK_PID=
 if [[ $LOCK_CONTENTION == true ]]; then
-    if [[ ! -z $(perf lock contention -h 2>&1) ]]; then
-        echo "[Detached] Running perf lock contention -b -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
-        sudo timeout $RECORD_SECONDS perf lock contention -b -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
+    if [[ ! -z $(perf lock contention -h 2>&1 | grep "no BUILD_BPF_SKEL") ]]; then
+        # perf was built without BPF skeleton; use two-step record then report.
+        echo "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
+        (
+            sudo perf lock record -p $PID -o /tmp/perf_lock_$$.data sleep $RECORD_SECONDS 2>/dev/null
+            if [[ -f /tmp/perf_lock_$$.data ]]; then
+                sudo perf lock contention -i /tmp/perf_lock_$$.data 2>&1 | tee $HOME/${COMM}_lock_contention.txt
+                sudo rm -f /tmp/perf_lock_$$.data
+            fi
+        ) &
         LOCK_PID=$!
     else
-        echo "Warning: perf lock contention not available (kernel 5.17+ with BPF), skipped"
+        echo "[Detached] Running perf lock contention --use-bpf -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
+        sudo timeout $RECORD_SECONDS perf lock contention --use-bpf -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
+        LOCK_PID=$!
     fi
 fi
 
