@@ -69,11 +69,11 @@ set -o pipefail
 CAPTURE_SECONDS=10
 SAMPLE_MS=10
 LONG_WAIT_MS=2.0
-OUT_DIR=./offcpu_wait_reasons_out
+OUT_DIR=./offcpu_wait_reasons.d
 
 ENABLE_STACKS=1
 STACK_SCOPE=all
-STACK_LIMIT=12
+STACK_LIMIT=32
 
 FUNCTION_LIBRARY_PATH=
 
