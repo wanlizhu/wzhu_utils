@@ -611,9 +611,20 @@
           zoomWrap.className = 'svg-zoom-wrap';
           var inner = document.createElement('div');
           inner.className = 'svg-zoom-inner';
-          try {
-            inner.innerHTML = window.TAB_SVG_B64 && window.TAB_SVG_B64[i] ? atob(window.TAB_SVG_B64[i]) : '';
-          } catch (e) { inner.innerHTML = ''; }
+          if (window.TAB_SVG_B64 && window.TAB_SVG_B64[i]) {
+            try {
+              var svgString = atob(window.TAB_SVG_B64[i]);
+              var blob = new Blob([svgString], { type: 'image/svg+xml' });
+              var blobUrl = URL.createObjectURL(blob);
+              var obj = document.createElement('object');
+              obj.data = blobUrl;
+              obj.type = 'image/svg+xml';
+              obj.style.width = '100%';
+              obj.style.display = 'block';
+              obj.style.minHeight = '200px';
+              inner.appendChild(obj);
+            } catch (e) {}
+          }
           zoomWrap.appendChild(inner);
           setupZoom(zoomWrap);
           svgToolbarWrap.appendChild(zoomWrap);
@@ -651,18 +662,6 @@
             } catch (e) {}
           }
 
-          (function(panelIdx) {
-            var panel = document.getElementById('panel' + panelIdx);
-            var svg = panel ? panel.querySelector('.svg-zoom-inner svg') : null;
-            if (!svg) return;
-            svg.addEventListener('click', function(e) {
-              var t = e.target;
-              if (t.tagName !== 'rect') return;
-              var stack = getTitleStack(t);
-              if (!stack.length) return;
-              setSelection(stack.join(';'), panelIdx);
-            });
-          })(i);
         }
       }
 
