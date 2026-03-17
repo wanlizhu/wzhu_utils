@@ -2,47 +2,7 @@
 
 set -o pipefail
 
-OUTPUT_FILE=~/system_info.txt
-
-# Print usage and exit. Used for -h/--help.
-print_usage() {
-    cat <<'USAGE'
-Usage: collect-system-info.sh [OPTIONS] [brief]
-
-Collect system hardware and environment information.
-
-OPTIONS
-  -h, --help       Show this help and exit.
-  -o, --output F   Write full report to F (default: ~/system_info.txt).
-
-ARGUMENTS
-  brief            Print a brief summary to stdout and exit (writes to /tmp/brief).
-
-With no arguments, writes the full report to the output file.
-USAGE
-}
-
-# Parse -h/--help and -o/--output. Leaves positional args (e.g. "brief") in $@.
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            print_usage
-            exit 0
-            ;;
-        -o|--output)
-            if [[ -z ${2:-} ]]; then
-                echo "Error: -o/--output requires an argument." >&2
-                print_usage >&2
-                exit 1
-            fi
-            OUTPUT_FILE="$2"
-            shift 2
-            ;;
-        *)
-            break
-            ;;
-    esac
-done
+OUTPUT_FILE=$HOME/system_info.txt
 
 # -----------------------------------------------------------------------------
 # Memory: parse dmidecode -t memory and output a one-line summary (total size,
@@ -286,8 +246,7 @@ print_gpu_info() {
     shopt -u extglob
 }
 
-# --- Brief mode: write summary to /tmp/brief and display (tree or cat), then exit. ---
-if [[ $1 == brief ]]; then
+print_brief() {
     hostname >/tmp/brief
     printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>/tmp/brief
     printf '\t\tKernel: %s\n' "$(uname -r)" >>/tmp/brief
@@ -321,7 +280,11 @@ if [[ $1 == brief ]]; then
     else
         cat /tmp/brief 
     fi 
+}
 
+# --- Brief mode: write summary to /tmp/brief and display (tree or cat), then exit. ---
+if [[ $1 == brief ]]; then
+    print_brief 
     exit
 fi
 
@@ -329,7 +292,7 @@ fi
 # and nvidia-smi -L to OUTPUT_FILE. Overwrites OUTPUT_FILE; later append_*
 # functions append.
 append_basic_header() {
-    printf '%s\n' "$(hostname)" >$OUTPUT_FILE
+    printf '%s\n' "$(hostname)" >>$OUTPUT_FILE
 
     if command -v lsb_release >/dev/null 2>&1; then
         lsb_release -a 2>/dev/null | grep 'Description' | awk -F: '{ sub(/^[[:space:]]+/, "", $2); print $2 }' >>$OUTPUT_FILE
@@ -578,6 +541,8 @@ append_nvidia_smi_query() {
 }
 
 # --- Full report: run all append_* functions in order to build OUTPUT_FILE. ---
+echo >$OUTPUT_FILE
+print_brief >>$OUTPUT_FILE
 append_basic_header
 append_environment
 append_cpu_static_info
