@@ -172,17 +172,17 @@ print_help() {
 #     cases without leaving collectors running in the background.
 # -----------------------------------------------------------------------------
 cleanup() {
-    [[ -n $perf_pid ]] && kill -INT $perf_pid
-    [[ -n $function_trace_pid ]] && kill -INT $function_trace_pid
-    [[ -n $stack_trace_pid ]] && kill -INT $stack_trace_pid
-    [[ -n $kernel_wait_reason_sampler_pid ]] && kill -TERM $kernel_wait_reason_sampler_pid
-    [[ -n $timeout_pid ]] && kill $timeout_pid
+    [[ -n $perf_pid ]] && kill -0 $perf_pid 2>/dev/null && kill -INT $perf_pid
+    [[ -n $function_trace_pid ]] && kill -0 $function_trace_pid 2>/dev/null && kill -INT $function_trace_pid
+    [[ -n $stack_trace_pid ]] && kill -0 $stack_trace_pid 2>/dev/null && kill -INT $stack_trace_pid
+    [[ -n $kernel_wait_reason_sampler_pid ]] && kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null && kill -TERM $kernel_wait_reason_sampler_pid
+    [[ -n $timeout_pid ]] && kill -0 $timeout_pid 2>/dev/null && kill $timeout_pid
 
-    [[ -n $perf_pid ]] && wait $perf_pid
-    [[ -n $function_trace_pid ]] && wait $function_trace_pid
-    [[ -n $stack_trace_pid ]] && wait $stack_trace_pid
-    [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid
-    [[ -n $timeout_pid ]] && wait $timeout_pid
+    [[ -n $perf_pid ]] && wait $perf_pid 2>/dev/null || true
+    [[ -n $function_trace_pid ]] && wait $function_trace_pid 2>/dev/null || true
+    [[ -n $stack_trace_pid ]] && wait $stack_trace_pid 2>/dev/null || true
+    [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
+    [[ -n $timeout_pid ]] && wait $timeout_pid 2>/dev/null || true
 
     [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf "$TEMP_DIR"
 }
@@ -1261,7 +1261,7 @@ tracepoint:sched:sched_switch
     printf("actor_comm=%s\n", args->prev_comm);
     printf("target_tid=%d\n", args->next_pid);
     printf("target_comm=%s\n", args->next_comm);
-    printf("prev_state=%s\n", args->prev_state);
+    printf("prev_state=%u\n", args->prev_state);
     printf("KERNEL_STACK_BEGIN\n");
     print(kstack($STACK_LIMIT));
     printf("KERNEL_STACK_END\n");
@@ -1334,7 +1334,7 @@ sudo perf record -a \
     -e sched:sched_wakeup \
     -e sched:sched_wakeup_new \
     -e sched:sched_migrate_task \
-    --timestamp-filename &
+    &
 perf_pid=$!
 
 sleep 0.2
@@ -1346,7 +1346,7 @@ fi
 if [[ $CAPTURE_SECONDS -gt 0 ]]; then
     (
         sleep $CAPTURE_SECONDS
-        kill -INT $perf_pid
+        kill -0 $perf_pid 2>/dev/null && kill -INT $perf_pid
     ) &
     timeout_pid=$!
     echo "Capturing for $CAPTURE_SECONDS seconds (or until target process exits)..."
@@ -1355,21 +1355,21 @@ else
 fi
 
 # Wait until perf is stopped (by timeout, or by Ctrl-C when CAPTURE_SECONDS=0). Do not wait for target process.
-while kill -0 $perf_pid; do
+while kill -0 $perf_pid 2>/dev/null; do
     sleep 0.2
 done
 
-kill -INT $perf_pid
-wait $perf_pid
+kill -0 $perf_pid 2>/dev/null && kill -INT $perf_pid
+wait $perf_pid 2>/dev/null || true
 
-kill -INT $function_trace_pid
-wait $function_trace_pid
+[[ -n $function_trace_pid ]] && kill -0 $function_trace_pid 2>/dev/null && kill -INT $function_trace_pid
+[[ -n $function_trace_pid ]] && wait $function_trace_pid 2>/dev/null || true
 
-kill -INT $stack_trace_pid
-wait $stack_trace_pid
+[[ -n $stack_trace_pid ]] && kill -0 $stack_trace_pid 2>/dev/null && kill -INT $stack_trace_pid
+[[ -n $stack_trace_pid ]] && wait $stack_trace_pid 2>/dev/null || true
 
-kill -TERM $kernel_wait_reason_sampler_pid
-wait $kernel_wait_reason_sampler_pid
+kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null && kill -TERM $kernel_wait_reason_sampler_pid
+wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
 
 echo "Post-processing (perf script, report generation)..."
 # Handle missing or empty perf data: skip perf script and produce minimal report.
