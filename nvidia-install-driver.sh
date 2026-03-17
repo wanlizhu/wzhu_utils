@@ -22,6 +22,8 @@ shutdown_graphical_env() {
             lsmod | awk '$1 ~ /^nvidia/ {print $1}'
             return 1
         fi 
+    else
+        echo "Found 0 active nvidia kernel module"
     fi 
 
     # Remove apt-based nvidia packaged 
