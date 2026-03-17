@@ -40,9 +40,9 @@ if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 
     tid_list=$(ls /tmp/perf_tid*.txt 2>/dev/null | sed -n 's|.*/perf_tid\([0-9]\+\)\.txt$|\1|p' | sort -n -u)
     tid_count=$(echo "$tid_list" | grep -c . || true)
     if (( tid_count > 1 )); then
-        # Tab labels, SVG files, and folded data for the combined view HTML (tab 0 = All threads, then Thread 1, 2, ...).
+        # Tab labels, SVG files (absolute paths), and folded data for the combined view HTML (tab 0 = All threads, then Thread 1, 2, ...).
         tab_labels=("All threads")
-        tab_files=("${COMM}_flamegraph.svg")
+        tab_files=("$HOME/${COMM}_flamegraph.svg")
         tab_folded_files=()
         # Folded data for "All threads" (combined) is produced from /tmp/perf.txt in perf-record-and-postprocess; we produce it here for the report.
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null >/tmp/perf_all.folded
@@ -55,10 +55,10 @@ if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 
             [[ -z $thread_name ]] && thread_name="untitled"
             out_name="${COMM}_thread${index}_${thread_name}_flamegraph.svg"
             folded_path="/tmp/perf_tid${tid}.folded"
-            cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | tee "$folded_path" | flamegraph.pl >"$HOME/$out_name"
-            echo "    - $HOME/$out_name"
+            cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | tee "$folded_path" | flamegraph.pl >"/tmp/$out_name"
+            echo "    - /tmp/$out_name"
             tab_labels+=("Thread $index: $thread_name")
-            tab_files+=("$out_name")
+            tab_files+=("/tmp/$out_name")
             tab_folded_files+=("$folded_path")
             (( index++ )) || true
         done

@@ -33,8 +33,9 @@ f_page="$tmpdir/grep_page_$pid"
 f_labels="$tmpdir/grep_labels_$pid"
 f_folded="$tmpdir/grep_folded_$pid"
 f_svg="$tmpdir/grep_svg_$pid"
+f_filenames="$tmpdir/grep_filenames_$pid"
 f_comm="$tmpdir/grep_comm_$pid"
-cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg" "$f_comm"; }
+cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg" "$f_filenames" "$f_comm"; }
 trap cleanup EXIT
 
 # Build replacement for __PAGE_TITLE_JS__ (full assignment line; 6 spaces to match template)
@@ -44,6 +45,17 @@ printf '      window.PAGE_TITLE = "%s";\n' "$page_title_escaped" > "$f_page"
 # Build replacement for __COMM_JS__ (for dump filename)
 comm_escaped=$(echo "$COMM" | sed 's/\\/\\\\/g; s/"/\\"/g')
 printf '      window.COMM = "%s";\n' "$comm_escaped" > "$f_comm"
+
+# Build JSON array for SVG display filenames (basename only, for use in UI)
+printf '      window.TAB_SVG_FILENAMES = ' > "$f_filenames"
+echo -n '[' >> "$f_filenames"
+for i in "${!tab_files[@]}"; do
+    base=$(basename -- "${tab_files[$i]}")
+    base_escaped=$(echo "$base" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    [[ $i -gt 0 ]] && echo -n ',' >> "$f_filenames"
+    printf '"%s"' "$base_escaped" >> "$f_filenames"
+done
+echo '];' >> "$f_filenames"
 
 # Build JSON array for tab labels (escape each element for JSON)
 printf '      window.TAB_LABELS = ' > "$f_labels"
@@ -72,7 +84,8 @@ echo '];' >> "$f_folded"
 printf '      window.TAB_SVG_B64 = ' >> "$f_svg"
 echo -n '[' >> "$f_svg"
 for i in "${!tab_files[@]}"; do
-    b64=$(base64 -w0 < "$HOME/${tab_files[$i]}" 2>/dev/null || base64 < "$HOME/${tab_files[$i]}" 2>/dev/null | tr -d '\n')
+    path="${tab_files[$i]}"
+    b64=$(base64 -w0 < "$path" 2>/dev/null || base64 < "$path" 2>/dev/null | tr -d '\n')
     [[ $i -gt 0 ]] && echo -n ',' >> "$f_svg"
     printf '"%s"' "$b64" >> "$f_svg"
 done
@@ -83,6 +96,7 @@ echo '];' >> "$f_svg"
 sed -e "/__PAGE_TITLE_JS__/{ r $f_page" -e $'\nd}' \
    -e "/__COMM_JS__/{ r $f_comm" -e $'\nd}' \
    -e "/__TAB_LABELS_JSON__/{ r $f_labels" -e $'\nd}' \
+   -e "/__TAB_SVG_FILENAMES_JSON__/{ r $f_filenames" -e $'\nd}' \
    -e "/__FOLDED_B64_JSON__/{ r $f_folded" -e $'\nd}' \
    -e "/__TAB_SVG_B64_JSON__/{ r $f_svg" -e $'\nd}' \
    "$TEMPLATE" > "$html_file"
