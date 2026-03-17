@@ -122,22 +122,22 @@ if [[ -f /tmp/offwake.folded ]]; then
     fi
 fi
 
-# Post-process: show waker output
+# Post-process: show waker output (top 3 waker names only, no PIDs)
 if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
     TOP3=
     if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
-        # Columns: count, waker_pid, waker_comm. If comm is empty, resolve from /proc/PID/comm.
-        TOP3=$(tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -3 | awk '
+        # CSV: timestamp,waker_pid,waker_comm,waker_tid,woke_tid. Aggregate by waker_pid, take top 3, show resolved name only.
+        TOP3=$(awk -F',' 'NR>1 { n[$2]++ }
+            END { for (p in n) print n[p], p }' "$HOME/${COMM}_wakers.txt" | sort -rn | head -3 | awk '
             {
-                pid = $2
-                comm = $3
                 count = $1
-                if (comm == "" && pid != "") {
-                    getline comm < ("/proc/" pid "/comm")
+                pid = $2
+                comm = ""
+                if ((getline comm < ("/proc/" pid "/comm")) > 0) {
                     close("/proc/" pid "/comm")
                     gsub(/\r?\n$/, "", comm)
                 }
-                if (comm == "") comm = "pid:" pid
+                if (comm == "") comm = "?"
                 printf "%s%s: %s", (NR > 1 ? ", " : ""), comm, count
             }')
     fi
