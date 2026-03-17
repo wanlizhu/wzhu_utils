@@ -67,13 +67,15 @@ fi
 # Remove previous output from earlier runs so the new result is easier to inspect.
 sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg $HOME/${COMM}_wakers.txt $HOME/${COMM}_lock_contention.txt $HOME/${COMM}_profiling_stderr.log
 
-# Running waker tracer in background (logs which PID/comm wakes the target).
+# Running waker tracer in background (tracepoint sched:sched_waking; logs who wakes the target).
 WAKER_PID=
 if [[ $TRACE_WAKERS == true ]]; then
+    # Pass PID (main thread) then up to 9 more tids so we catch wakeups for any thread in the process.
+    WAKER_TIDS="$PID $(ls /proc/$PID/task 2>/dev/null | grep -v "^${PID}$" | sort -n | head -9 | tr '\n' ' ')"
     echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS s -> $HOME/${COMM}_wakers.txt"
-    ( 
-        echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"; 
-        sudo timeout $RECORD_SECONDS bpftrace "$SCRIPT_DIR/trace-wakers-bpftrace.bt" $PID 2>>"$HOME/${COMM}_profiling_stderr.log"
+    (
+        echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"
+        sudo timeout $RECORD_SECONDS bpftrace "$SCRIPT_DIR/trace-wakers-bpftrace.bt" $WAKER_TIDS 2>>"$HOME/${COMM}_profiling_stderr.log"
     ) >$HOME/${COMM}_wakers.txt &
     WAKER_PID=$!
 fi
@@ -126,10 +128,27 @@ if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
     if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
         TOP3=$(tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -3 | awk '{printf "%s%s: %s", (NR>1?", ":""), $3, $1}')
     fi
-    [[ -n "$TOP3" ]] && echo "Generated $HOME/${COMM}_wakers.txt ($TOP3)" || echo "Generated $HOME/${COMM}_wakers.txt"
+    if [[ -n "$TOP3" ]]; then
+        echo "Generated $HOME/${COMM}_wakers.txt ($TOP3)"
+    else
+        echo "Generated $HOME/${COMM}_wakers.txt (no wakeup events captured)"
+        if [[ -f "$HOME/${COMM}_profiling_stderr.log" ]] && [[ -s "$HOME/${COMM}_profiling_stderr.log" ]]; then
+            echo "  Check for errors: $HOME/${COMM}_profiling_stderr.log"
+            tail -5 "$HOME/${COMM}_profiling_stderr.log" | sed 's/^/  /'
+        fi
+    fi
 fi
 
-# Post-process: show lock contention output 
-if [[ $LOCK_CONTENTION == true ]] && [[ -f "$HOME/${COMM}_lock_contention.txt" ]]; then 
-    echo "Generated $HOME/${COMM}_lock_contention.txt"
-fi 
+# Post-process: show lock contention output
+if [[ $LOCK_CONTENTION == true ]] && [[ -f "$HOME/${COMM}_lock_contention.txt" ]]; then
+    if [[ -s "$HOME/${COMM}_lock_contention.txt" ]] && [[ $(wc -l <"$HOME/${COMM}_lock_contention.txt") -gt 1 ]]; then
+        echo "Generated $HOME/${COMM}_lock_contention.txt"
+    else
+        echo "Generated $HOME/${COMM}_lock_contention.txt (no lock contention or perf produced no output)"
+        # Ensure file has at least one line so it's not "empty"
+        grep -q . "$HOME/${COMM}_lock_contention.txt" 2>/dev/null || echo "No lock contention events recorded. Check $HOME/${COMM}_profiling_stderr.log or run: sudo perf lock record -a sleep 5 && sudo perf lock contention -i perf.data" >>"$HOME/${COMM}_lock_contention.txt"
+        if [[ -f "$HOME/${COMM}_profiling_stderr.log" ]] && [[ -s "$HOME/${COMM}_profiling_stderr.log" ]]; then
+            echo "  Check: $HOME/${COMM}_profiling_stderr.log"
+        fi
+    fi
+fi

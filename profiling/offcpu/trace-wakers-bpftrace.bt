@@ -1,40 +1,33 @@
 #!/usr/bin/env bpftrace
 //
-// Trace which process/thread wakes the target process.
-// Use when off-CPU flamegraph shows long futex (or other) waits but not *who*
-// is holding the lock or who eventually wakes the target (e.g. compositor).
+// Trace which process/thread wakes the target process(es).
+// Uses tracepoint sched:sched_waking (reliable; no task_struct layout dependency).
 //
 // Usage (requires root):
-//   sudo bpftrace trace-wakers-bpftrace.bt <target_pid>
-//   sudo bpftrace trace-wakers-bpftrace.bt -o wakers.txt 12345
+//   sudo bpftrace trace-wakers-bpftrace.bt <target_pid>              # main thread only
+//   sudo bpftrace trace-wakers-bpftrace.bt <target_pid> <tid2> <tid3> ...  # up to 10 tids
 //
-// Optional: set RECORD_SECONDS in the script or interrupt with Ctrl+C.
-// Output: timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid,ns_blocked
+// Output: timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid
 //
 
 param $1;
 
 if ($1 == 0) {
-    printf("Usage: sudo bpftrace %s <target_pid>\n", $0);
-    printf("  target_pid: PID of the process to track (e.g. game under Wayland)\n");
+    printf("Usage: sudo bpftrace %s <target_pid> [tid2 tid3 ...]\n", $0);
+    printf("  target_pid: process (main thread tid). Optional: more tids to track (max 10 total).\n");
     exit(1);
 }
 
 $target_pid = $1;
 
-kprobe:try_to_wake_up
+// Match woken task: main thread or any of the optional tid args ($2..$10).
+tracepoint:sched:sched_waking
+/args->pid == $target_pid ||
+ (($2 != 0 && args->pid == $2) || ($3 != 0 && args->pid == $3) ||
+  ($4 != 0 && args->pid == $4) || ($5 != 0 && args->pid == $5) ||
+  ($6 != 0 && args->pid == $6) || ($7 != 0 && args->pid == $7) ||
+  ($8 != 0 && args->pid == $8) || ($9 != 0 && args->pid == $9) ||
+  ($10 != 0 && args->pid == $10))/
 {
-    $p = (struct task_struct *)arg0;
-    // Match by tgid (process ID) so we record wakeups for any thread in the target process.
-    // $p->pid is kernel thread ID; $p->tgid is the process ID the user passes.
-    if ($p->tgid != $target_pid)
-        return;
-    $waker_pid = pid;
-    $waker_comm = comm;
-    $waker_tid = tid;
-    $woke_tid = $p->pid;
-    printf("%d,%d,%s,%d,%d\n", nsecs / 1000000000, $waker_pid, $waker_comm, $waker_tid, $woke_tid);
+    printf("%d,%d,%s,%d,%d\n", nsecs / 1000000000, pid, comm, tid, args->pid);
 }
-
-// Run for the same duration as your offcpu-waitgraph (e.g. 30s), then Ctrl+C.
-// Aggregate with: cut -d, -f2,3 wakers.txt | sort | uniq -c | sort -rn
