@@ -78,7 +78,7 @@ if [[ ! -z $1 ]]; then
 fi
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg
+sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg $HOME/${COMM}_flamegraph_tabs.html
 
 # Start sampling
 echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
@@ -123,18 +123,41 @@ if [[ -f /tmp/perf.data ]]; then
             tid_list=$(ls /tmp/perf_tid*.txt 2>/dev/null | sed -n 's|.*/perf_tid\([0-9]\+\)\.txt$|\1|p' | sort -n -u)
             tid_count=$(echo "$tid_list" | grep -c . || true)
             if (( tid_count > 1 )); then
+                # Tab labels and SVG files for the combined view HTML (tab 0 = All threads, then Thread 1, 2, ...).
+                tab_labels=("All threads")
+                tab_files=("${COMM}_flamegraph.svg")
                 index=1
                 for tid in $tid_list; do
                     file=/tmp/perf_tid${tid}.txt
                     [[ -f $file ]] || continue
-                    # Use thread name from /proc/PID/task/TID/comm for a readable filename (sanitized).
                     thread_name=$(cat /proc/$PID/task/$tid/comm 2>/dev/null | tr -d '\n' | sed 's/[^a-zA-Z0-9._-]/_/g' | head -c 48)
                     [[ -z $thread_name ]] && thread_name="untitled"
                     out_name="${COMM}_thread${index}_${thread_name}_flamegraph.svg"
                     cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | flamegraph.pl >"$HOME/$out_name"
                     echo "    - $HOME/$out_name"
+                    tab_labels+=("Thread $index: $thread_name")
+                    tab_files+=("$out_name")
                     (( index++ )) || true
                 done
+                # Generate one self-contained HTML with a tab per flamegraph (SVG content embedded
+                # inline so the single file can be sent to others and opened anywhere).
+                html_file="$HOME/${COMM}_flamegraph_tabs.html"
+                {
+                    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'"$COMM"' flame graphs</title>'
+                    echo '<style>.tabbtn{border:1px solid #888;background:#eee;padding:8px 12px;cursor:pointer;margin:2px}.tabbtn.active{background:#ccc}.tabpanel{display:none}.tabpanel.active{display:block}.svgwrap{overflow:auto;max-height:85vh}.svgwrap svg{max-width:100%}</style></head><body>'
+                    echo '<h1>'"$COMM"' flame graphs</h1><div class="tabbar">'
+                    for i in "${!tab_labels[@]}"; do
+                        echo -n '<button class="tabbtn'"$([[ $i -eq 0 ]] && echo ' active')"'" onclick="showTab('"$i"')">'"${tab_labels[$i]}"'</button>'
+                    done
+                    echo '</div>'
+                    for i in "${!tab_files[@]}"; do
+                        echo -n '<div id="panel'"$i"'" class="tabpanel'"$([[ $i -eq 0 ]] && echo ' active')"'"><div class="svgwrap">'
+                        cat "$HOME/${tab_files[$i]}"
+                        echo '</div></div>'
+                    done
+                    echo '<script>function showTab(i){document.querySelectorAll(".tabpanel").forEach(function(p){p.classList.remove("active")});document.querySelectorAll(".tabbtn").forEach(function(b){b.classList.remove("active")});document.getElementById("panel"+i).classList.add("active");document.querySelectorAll(".tabbtn")[i].classList.add("active")}</script></body></html>'
+                } > "$html_file"
+                echo "    - $html_file (tab view)"
             else
                 echo "Found 0 per-thread stack, skipping per-thread flamegraph"
             fi
