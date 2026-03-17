@@ -35,21 +35,14 @@
 set -o pipefail
 
 NAME_PREFIX=
-WAIT_SECONDS=0 # Delay before perf recording starts.
+WAIT_SECONDS=0 # delay before perf recording starts.
 RECORD_SECONDS=5 # perf recording duration in seconds.
 RECORD_FREQ=1000 # perf sampling frequency in Hz.
 UNWIND_METHOD=dwarf # dwarf or fp (frame pointer)
 INSTALL_DEBUG_SYMBOL=true
 DEBUGINFOD_URLS="https://debuginfod.ubuntu.com"
-
-# These are filled later after the target is resolved.
 unset PID COMM
 
-# Parse leading script options.
-# Parsing stops at the first non-option token, which becomes either:
-# - a PID
-# - the special keyword steam
-# - or the command to launch and profile
 while (( $# )); do
     case $1 in
         -name=*) NAME_PREFIX=${1#-name=} ;;
@@ -63,9 +56,6 @@ while (( $# )); do
     shift
  done
 
-# sudo is required for perf record, perf script access, package installation, and some
-# temporary file management. The script intentionally requires passwordless sudo so the
-# workflow stays non-interactive once recording starts.
 if ! sudo -n true 2>/dev/null; then
     echo "Error: NOPASSWD is NOT enabled for $(id -un)"
     echo "Aborting"
@@ -73,8 +63,6 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 # Print a few kernel knobs that commonly affect perf usability and symbol visibility.
-# This is only informational but helps explain unexpected missing stacks or permission
-# failures on new systems.
 echo "=== sysctl knobs (runtime kernel params) ==="
 echo "/proc/sys/kernel/perf_event_paranoid => $(cat /proc/sys/kernel/perf_event_paranoid)"
 echo "/proc/sys/kernel/kptr_restrict => $(cat /proc/sys/kernel/kptr_restrict)"
@@ -82,9 +70,6 @@ echo "/proc/sys/kernel/perf_event_max_sample_rate => $(cat /proc/sys/kernel/perf
 echo
 
 # Install required tools on demand.
-# - eu-stack: quick stack utility from elfutils, useful in the profiling workflow
-# - perf: kernel/userspace sampler
-# - flamegraph.pl + stackcollapse-perf.pl: render SVG flame graphs from perf samples
 [[ -z $(which eu-stack) ]] && sudo apt install -y elfutils >/dev/null 2>&1
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
 [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
@@ -92,7 +77,7 @@ echo
 # Remove previous output from earlier runs so the new result is easier to inspect.
 sudo rm -rf /tmp/perf.data $HOME/perf-system-wide.svg $HOME/perf.svg.d/
 
-# Optional delay before recording starts.
+# Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
     echo "Wait $WAIT_SECONDS seconds before recording"
     sleep $WAIT_SECONDS
@@ -101,31 +86,21 @@ fi
 # Resolve the target process or launch a new command.
 if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then
-        # Numeric argument: profile an already-running PID.
         PID=$1
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then
-        # Steam helper mode: show the Steam tree, then let the user manually choose the
-        # game PID because Steam itself is usually not the real workload we want.
         pstree -aspT $(pidof steam)
         read -p "Input steam game PID: " PID
     else
-        # Otherwise treat the remaining arguments as a command to launch.
-        # The command runs detached in the background and its stdout/stderr go to a log.
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
         echo "Detached process $PID"
     fi
 
     # Resolve the command name of the target process.
-    # This is later used for diagnostics and the debug-symbol installation marker file.
     COMM=$(cat /proc/$PID/comm 2>/dev/null)
     [[ -z $COMM ]] && COMM=unknown
 
-    # Optionally install debug symbol packages for the target process.
-    # Implementation details:
-    # - find-dbgsym-packages inspects the process mappings and prints matching dbgsym pkgs
-    # - each package is installed with apt
-    # - a per-comm marker file in /tmp avoids re-installing on every run
+    # Install debug symbol packages for the target process.
     if [[ $INSTALL_DEBUG_SYMBOL == true ]]; then
         if [[ ! -f /tmp/$(cat /proc/$PID/comm)-dbgsym-installed && ! -z $(which find-dbgsym-packages) ]]; then
             echo "Installing debug symbols for process $PID..."
@@ -136,62 +111,47 @@ if [[ ! -z $1 ]]; then
         fi
     fi
 
-    # Show quick process context before recording:
-    # - pstree: parent/child relation and arguments
-    # - pidstat -t: per-thread statistics snapshot
+    # Show quick process context before recording
     pstree -aspT $PID
     pidstat -t -p $PID
 fi
 
-# Start sampling.
-# - system-wide mode: perf record -a samples all CPUs
-# - per-process mode: perf record --pid samples only the target process
-# Samples are written to /tmp/perf.data.
+# Start sampling
 echo "Recording for $RECORD_SECONDS seconds ..."
 sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") --freq=$RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS
 
 # Post-process perf.data into flame graphs.
 if [[ -f /tmp/perf.data ]]; then
-    # Convert binary perf.data into text records.
     sudo perf script -i /tmp/perf.data >/tmp/perf.txt
     chmod 666 /tmp/perf.txt
 
     if [[ -z $PID ]]; then
-        # System-wide mode: generate one combined SVG for the whole machine.
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf-system-wide.svg && echo "Generated $HOME/perf-system-wide.svg"
     else
-        # Per-process mode: always generate one SVG that combines all threads.
         mkdir -p $HOME/perf.svg.d/
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/perf-all-threads.svg && echo "Generated $HOME/perf.svg.d/perf-all-threads.svg"
 
         # If the process has multiple threads, also generate one SVG per thread.
-        #
-        # Implementation details of the splitting step:
-        # - perf script output is organized as blank-line-separated records
-        # - awk reads each record with RS=""
-        # - the first line of each record contains a token like PID/TID
-        # - that TID is extracted and used to append the whole record into
-        #   /tmp/perf-tid<TID>.txt
-        # - each per-TID text file is then collapsed and rendered independently
         if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
             sudo rm -rf /tmp/perf-tid*
+            # Split perf script output by TID. Process line-by-line so we don't rely on blank lines
+            # between samples; each line is appended to the file for the TID from the last seen
+            # header line (a line containing pid/tid).
             awk '
-                BEGIN { RS=""; ORS="" }
-                {
-                    split($0, lines, "\n")
-                    split(lines[1], w, /[ \t]+/)
-                    tid=""
-                    for (i = 1; i <= length(w); i++) {
+                BEGIN { cur_tid = "" }
+                /[0-9]+\/[0-9]+/ {
+                    n = split($0, w, /[ \t]+/)
+                    tid = ""
+                    for (i = 1; i <= n; i++) {
                         if (match(w[i], /^[0-9]+\/[0-9]+$/)) {
                             split(w[i], a, "/")
-                            tid=a[2]
+                            tid = a[2]
                             break
                         }
                     }
-                    if (tid == "") tid="unknown"
-                    file="/tmp/perf-tid" tid ".txt"
-                    print $0 "\n\n" >> file
+                    if (tid != "") cur_tid = tid
                 }
+                { file = "/tmp/perf-tid" (cur_tid == "" ? "unknown" : cur_tid) ".txt"; print >> file }
             ' /tmp/perf.txt
 
             # Count how many unique per-thread files were produced. Only generate per-thread
@@ -209,7 +169,7 @@ if [[ -f /tmp/perf.data ]]; then
             fi
         fi
 
-        # Optional final rename so multiple profiling runs can coexist under different names.
+        # Rename so multiple profiling runs can coexist under different names.
         if [[ ! -z $NAME_PREFIX ]]; then
             sudo mv -f $HOME/perf.svg.d $HOME/$NAME_PREFIX.perf.svg.d
             echo "Renamed output dir to $HOME/$NAME_PREFIX.perf.svg.d"
