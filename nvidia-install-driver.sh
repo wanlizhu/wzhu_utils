@@ -5,11 +5,14 @@ rm -rf /tmp/cmd
 
 # Installing nvidia drivers on Linux requires to unload all nvidia kernel modules first
 shutdown_graphical_env() {
+    if [[ ! -z $(pidof Xorg) || ! -z $(pidof Xwayland) ]]; then 
+        sudo systemctl isolate multi-user && echo "sudo systemctl isolate graphical" >/tmp/cmd
+    fi 
+
     # Unload all active nvidia kernel modules 
     if [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]]; then 
         lsmod | awk '$1 ~ /^nvidia/ {print $1}'
         read -p "Press [Enter] to unload nvidia kernel modules: "
-        sudo systemctl isolate multi-user && echo "sudo systemctl isolate graphical" >/tmp/cmd
         sudo systemctl stop nvidia-persistenced 2>/dev/null || sudo nvidia-smi -pm 0 2>/dev/null 
         sudo rmmod nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null && sleep 3
         # Remove all remaining nvidia modules 
