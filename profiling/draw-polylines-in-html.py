@@ -378,10 +378,6 @@ def build_html(
             align-items: flex-start;
             gap: 8px;
             padding: 3px 0;
-            transition: opacity 120ms ease-in-out;
-        }
-        .metric-item.disabled {
-            opacity: 0.45;
         }
         .metric-text {
             display: flex;
@@ -468,7 +464,6 @@ def build_html(
                 <div class=panel-title>Visual style</div>
                 <div class=toolbar>
                     <button type=button onclick=resetZoom()>Reset zoom</button>
-                    <button type=button id=dump_csv_btn onclick=dumpSamplesAsCsv()>Dump samples as .csv</button>
                     <span class=zoom-info id=zoom_info>Zoom: 100%</span>
                 </div>
                 <div class=sub-title>Y axis mode</div>
@@ -503,6 +498,7 @@ def build_html(
                 <div class=toolbar>
                     <button type=button onclick=selectAll()>Select all</button>
                     <button type=button onclick=selectNone()>Select none</button>
+                    <button type=button id=dump_csv_btn onclick=dumpSamplesAsCsv()>Dump metrics</button>
                 </div>
                 <div class=row>
                     <label for=group_mode>Group attributes by:</label>
@@ -671,7 +667,7 @@ def build_html(
             textWrap.className = "metric-text";
             const nameSpan = document.createElement("span");
             nameSpan.className = "metric-name";
-            nameSpan.style.color = selectionState[name] ? getColorForMetric(name) : "#8a8a8a";
+            nameSpan.style.color = getColorForMetric(name);
             nameSpan.textContent = name;
             if (metricIsComparable(name)) {
                 const badge = document.createElement("span");
@@ -683,9 +679,6 @@ def build_html(
             const avgSpan = document.createElement("span");
             avgSpan.className = "metric-avg";
             avgSpan.textContent = `avg=${meta.avg_label}   min=${meta.min_label}   max=${meta.max_label}`;
-            if (!selectionState[name]) {
-                row.classList.add("disabled");
-            }
             textWrap.appendChild(nameSpan);
             textWrap.appendChild(avgSpan);
             row.appendChild(cb);
