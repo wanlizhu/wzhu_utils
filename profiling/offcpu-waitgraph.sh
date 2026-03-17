@@ -113,21 +113,21 @@ if [[ -f /tmp/offwake.folded ]]; then
 
     # If the process has multiple threads, also generate one SVG per thread.
     if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
-        echo "$COMM ($PID) has $(ls /proc/$PID/task 2>/dev/null | wc -l) threads"
+        echo >/dev/null 
         # TODO
     fi
 fi
 
-# Post-process: show waker output 
+# Post-process: show waker output
 if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
-    echo "Waker log: $HOME/${COMM}_wakers.txt"
+    TOP3=
     if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
-        echo "Top wakers (waker_pid,waker_comm count):"
-        tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -20
+        TOP3=$(tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -3 | awk '{printf "%s%s: %s", (NR>1?", ":""), $3, $1}')
     fi
+    [[ -n "$TOP3" ]] && echo "Generated $HOME/${COMM}_wakers.txt ($TOP3)" || echo "Generated $HOME/${COMM}_wakers.txt"
 fi
 
 # Post-process: show lock contention output 
 if [[ $LOCK_CONTENTION == true ]] && [[ -f "$HOME/${COMM}_lock_contention.txt" ]]; then 
-    echo "Lock contention: $HOME/${COMM}_lock_contention.txt"
+    echo "Generated $HOME/${COMM}_lock_contention.txt"
 fi 

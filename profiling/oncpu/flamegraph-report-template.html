@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flame graphs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1116;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --tab-active: #21262d;
+      --highlight: rgba(88, 166, 255, 0.25);
+      --tree-hover: rgba(88, 166, 255, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .tabbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .tabbtn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .tabbtn:hover {
+      background: var(--tab-active);
+      border-color: var(--accent);
+    }
+    .tabbtn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--bg);
+    }
+    .tabpanel {
+      display: none;
+      padding: 24px;
+      max-width: 100%;
+    }
+    .tabpanel.active {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .panel-main {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 16px;
+      min-height: 0;
+    }
+    .svg-zoom-wrap {
+      overflow: auto;
+      max-height: 60vh;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: grab;
+    }
+    .svg-zoom-wrap:active { cursor: grabbing; }
+    .svg-zoom-inner {
+      display: inline-block;
+      min-width: 100%;
+      transform-origin: 0 0;
+      padding: 12px;
+    }
+    .svg-zoom-inner svg {
+      display: block;
+      max-width: none;
+      height: auto;
+    }
+    .svg-zoom-inner svg rect.highlight-rect {
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+    .tree-section {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px;
+      max-height: 35vh;
+      overflow: auto;
+    }
+    .tree-section h3 {
+      margin: 0 0 12px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .tree-ul {
+      list-style: none;
+      margin: 0;
+      padding-left: 0;
+    }
+    .tree-ul .tree-ul { padding-left: 20px; }
+    .tree-li {
+      margin: 2px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    .tree-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .tree-node:hover { background: var(--tree-hover); }
+    .tree-node.highlight { background: var(--highlight); }
+    .tree-pct {
+      flex-shrink: 0;
+      min-width: 48px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .tree-toggle {
+      flex-shrink: 0;
+      width: 16px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .tree-name { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 id="page-title">Flame graphs</h1>
+  </div>
+  <div class="tabbar" id="tabbar"></div>
+  <div id="panels"></div>
+
+  <script>
+    (function() {
+      // Injected by generate-html-report.sh (do not edit placeholders by hand in output)
+      window.PAGE_TITLE = __PAGE_TITLE_JS__;
+      window.TAB_LABELS = __TAB_LABELS_JSON__;
+      window.FOLDED_B64 = __FOLDED_B64_JSON__;
+      window.TAB_SVG_B64 = __TAB_SVG_B64_JSON__;
+
+      function buildTreeFromFolded(foldedText) {
+        if (!foldedText || !foldedText.trim()) return { name: '(root)', count: 0, pct: 100, children: [] };
+        var root = { name: '(root)', count: 0, children: {} };
+        var lines = foldedText.trim().split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          var lastSpace = line.lastIndexOf(' ');
+          if (lastSpace === -1) continue;
+          var stack = line.slice(0, lastSpace).trim();
+          var count = parseInt(line.slice(lastSpace + 1), 10) || 0;
+          if (!stack || isNaN(count)) continue;
+          var frames = stack.split(';');
+          var node = root;
+          node.count += count;
+          for (var j = 0; j < frames.length; j++) {
+            var name = frames[j].trim();
+            if (!name) continue;
+            if (!node.children[name]) node.children[name] = { name: name, count: 0, children: {} };
+            node.children[name].count += count;
+            node = node.children[name];
+          }
+        }
+        function toArray(node, parentCount) {
+          var pct = parentCount > 0 ? (100 * node.count / parentCount).toFixed(2) : '100.00';
+          var arr = { name: node.name, count: node.count, pct: pct, children: [] };
+          var kids = Object.keys(node.children).sort(function(a,b) { return node.children[b].count - node.children[a].count; });
+          for (var k = 0; k < kids.length; k++) {
+            arr.children.push(toArray(node.children[kids[k]], node.count));
+          }
+          return arr;
+        }
+        return toArray(root, root.count);
+      }
+
+      function renderTree(parentEl, tree, pathPrefix, tabIndex) {
+        pathPrefix = pathPrefix || [];
+        var ul = document.createElement('ul');
+        ul.className = 'tree-ul';
+        if (tree.children && tree.children.length) {
+          tree.children.forEach(function(child, idx) {
+            var path = pathPrefix.concat([child.name]);
+            var li = document.createElement('li');
+            li.className = 'tree-li';
+            li.dataset.path = path.join(';');
+            li.dataset.tabIndex = String(tabIndex);
+            var toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = '▶';
+            toggle.onclick = function(e) {
+              e.stopPropagation();
+              var sub = li.querySelector('.tree-ul');
+              if (sub) {
+                sub.style.display = sub.style.display === 'none' ? '' : 'none';
+                toggle.textContent = sub.style.display === 'none' ? '▶' : '▼';
+              }
+            };
+            var pct = document.createElement('span');
+            pct.className = 'tree-pct';
+            pct.textContent = child.pct + '%';
+            var name = document.createElement('span');
+            name.className = 'tree-name';
+            name.textContent = child.name;
+            var div = document.createElement('div');
+            div.className = 'tree-node';
+            div.appendChild(toggle);
+            div.appendChild(pct);
+            div.appendChild(name);
+            div.onclick = function() {
+              document.querySelectorAll('.tree-node.highlight').forEach(function(n) { n.classList.remove('highlight'); });
+              div.classList.add('highlight');
+              highlightSvgRect(tabIndex, path);
+            };
+            li.appendChild(div);
+            if (child.children && child.children.length) {
+              var subUl = renderTree(li, { children: child.children }, path, tabIndex);
+              subUl.style.display = 'none';
+              toggle.textContent = '▶';
+              li.appendChild(subUl);
+            } else {
+              toggle.textContent = '';
+            }
+            ul.appendChild(li);
+          });
+        }
+        parentEl.appendChild(ul);
+        return ul;
+      }
+
+      function highlightSvgRect(tabIndex, path) {
+        var panel = document.getElementById('panel' + tabIndex);
+        if (!panel) return;
+        var svg = panel.querySelector('.svg-zoom-inner svg');
+        if (!svg) return;
+        panel.querySelectorAll('.highlight-rect').forEach(function(r) { r.classList.remove('highlight-rect'); });
+        var rects = svg.querySelectorAll('rect[width]');
+        for (var i = 0; i < rects.length; i++) {
+          var r = rects[i];
+          var stack = getTitleStack(r);
+          if (stack && stack.length && path.length && path[path.length-1] === stack[stack.length-1]) {
+            var match = path.length <= stack.length;
+            for (var j = 0; match && j < path.length; j++) match = stack[j] === path[j];
+            if (match) {
+              r.classList.add('highlight-rect');
+              r.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              break;
+            }
+          }
+        }
+      }
+
+      function getTitleStack(el) {
+        var stack = [];
+        el = el && el.parentNode;
+        while (el && el.tagName !== 'svg' && el.tagName !== 'SVG') {
+          if (el.tagName === 'g' || el.tagName === 'G') {
+            var titles = el.getElementsByTagName('title');
+            if (titles.length && titles[0].parentNode === el) {
+              var s = titles[0].textContent.trim().split(/\s/)[0];
+              if (s) stack.unshift(s);
+            }
+          }
+          el = el.parentNode;
+        }
+        return stack;
+      }
+
+      function setupZoom(zoomWrap) {
+        var inner = zoomWrap.querySelector('.svg-zoom-inner');
+        var scale = 1, min = 0.2, max = 5;
+        zoomWrap.addEventListener('wheel', function(e) {
+          if (!inner) return;
+          e.preventDefault();
+          var delta = e.deltaY > 0 ? -0.1 : 0.1;
+          scale = Math.min(max, Math.max(min, scale + delta));
+          inner.style.transform = 'scale(' + scale + ')';
+        }, { passive: false });
+      }
+
+      function init() {
+        document.getElementById('page-title').textContent = (window.PAGE_TITLE || 'Flame graphs');
+        if (!window.TAB_LABELS || !window.TAB_LABELS.length) return;
+        var tabbar = document.getElementById('tabbar');
+        var panels = document.getElementById('panels');
+        for (var i = 0; i < window.TAB_LABELS.length; i++) {
+          var btn = document.createElement('button');
+          btn.className = 'tabbtn' + (i === 0 ? ' active' : '');
+          btn.textContent = window.TAB_LABELS[i];
+          btn.onclick = (function(idx) { return function() { showTab(idx); }; })(i);
+          tabbar.appendChild(btn);
+
+          var panel = document.createElement('div');
+          panel.id = 'panel' + i;
+          panel.className = 'tabpanel' + (i === 0 ? ' active' : '');
+          var main = document.createElement('div');
+          main.className = 'panel-main';
+
+          var zoomWrap = document.createElement('div');
+          zoomWrap.className = 'svg-zoom-wrap';
+          var inner = document.createElement('div');
+          inner.className = 'svg-zoom-inner';
+          try {
+            inner.innerHTML = window.TAB_SVG_B64 && window.TAB_SVG_B64[i] ? atob(window.TAB_SVG_B64[i]) : '';
+          } catch (e) { inner.innerHTML = ''; }
+          zoomWrap.appendChild(inner);
+          setupZoom(zoomWrap);
+          main.appendChild(zoomWrap);
+
+          var treeSection = document.createElement('div');
+          treeSection.className = 'tree-section';
+          treeSection.innerHTML = '<h3>Call stack (expand/collapse, click to highlight in flame graph)</h3>';
+          var treeContainer = document.createElement('div');
+          treeContainer.className = 'tree-container';
+          treeSection.appendChild(treeContainer);
+          main.appendChild(treeSection);
+          panel.appendChild(main);
+          panels.appendChild(panel);
+
+          if (window.FOLDED_B64 && window.FOLDED_B64[i]) {
+            try {
+              var foldedText = atob(window.FOLDED_B64[i]);
+              var tree = buildTreeFromFolded(foldedText);
+              renderTree(treeContainer, tree, [], i);
+              var firstToggle = treeContainer.querySelector('.tree-toggle');
+              if (firstToggle) firstToggle.textContent = '▼';
+            } catch (e) {}
+          }
+
+          (function(panelIdx) {
+            var panel = document.getElementById('panel' + panelIdx);
+            var svg = panel ? panel.querySelector('.svg-zoom-inner svg') : null;
+            if (!svg) return;
+            svg.addEventListener('click', function(e) {
+              var t = e.target;
+              if (t.tagName !== 'rect') return;
+              panel.querySelectorAll('.highlight-rect').forEach(function(r) { r.classList.remove('highlight-rect'); });
+              var stack = getTitleStack(t);
+              if (!stack.length) return;
+              var path = stack.join(';');
+              document.querySelectorAll('#panel' + panelIdx + ' .tree-node.highlight').forEach(function(n) { n.classList.remove('highlight'); });
+              var nodeEl = null;
+              var lis = panel.querySelectorAll('.tree-li');
+              for (var li = 0; li < lis.length; li++) {
+                if (lis[li].dataset.path === path) { nodeEl = lis[li].querySelector('.tree-node'); break; }
+              }
+              if (!nodeEl && path) {
+                var parts = path.split(';');
+                for (var len = parts.length - 1; len >= 1; len--) {
+                  var sub = parts.slice(0, len).join(';');
+                  for (var li = 0; li < lis.length; li++) {
+                    if (lis[li].dataset.path === sub) { nodeEl = lis[li].querySelector('.tree-node'); break; }
+                  }
+                  if (nodeEl) break;
+                }
+              }
+              if (nodeEl) {
+                nodeEl.classList.add('highlight');
+                nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+            });
+          })(i);
+        }
+      }
+
+      function showTab(i) {
+        document.querySelectorAll('.tabpanel').forEach(function(p) { p.classList.remove('active'); });
+        document.querySelectorAll('.tabbtn').forEach(function(b) { b.classList.remove('active'); });
+        var panel = document.getElementById('panel' + i);
+        if (panel) panel.classList.add('active');
+        var btn = document.querySelectorAll('.tabbtn')[i];
+        if (btn) btn.classList.add('active');
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+      else init();
+    })();
+  </script>
+</body>
+</html>
