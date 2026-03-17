@@ -15,11 +15,12 @@ SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${B
 TEMPLATE="$SCRIPT_DIR/flamegraph-report-template.html"
 [[ -f "$TEMPLATE" ]] || { echo "generate-html-report.sh: template not found: $TEMPLATE" >&2; exit 1; }
 
-# Optional: folded data for tree view (base64 per tab)
+# Optional: folded data for tree view (gzip then base64 per tab to reduce size)
 declare -a folded_b64
 for i in "${!tab_files[@]}"; do
     if [[ ${#tab_folded_files[@]} -eq ${#tab_files[@]} ]] && [[ -f "${tab_folded_files[$i]:-}" ]]; then
-        folded_b64[i]=$(base64 -w0 < "${tab_folded_files[$i]}" 2>/dev/null || base64 < "${tab_folded_files[$i]}" 2>/dev/null | tr -d '\n')
+        folded_b64[i]=$(gzip -cn < "${tab_folded_files[$i]}" 2>/dev/null | base64 -w0 2>/dev/null) || folded_b64[i]=$(base64 -w0 < "${tab_folded_files[$i]}" 2>/dev/null)
+        [[ -z "${folded_b64[$i]:-}" ]] && folded_b64[i]=$(base64 < "${tab_folded_files[$i]}" 2>/dev/null | tr -d '\n')
     else
         folded_b64[i]=""
     fi

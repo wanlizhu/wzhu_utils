@@ -97,6 +97,7 @@
       height: 60vh;
       max-height: 60vh;
     }
+    .svg-resize-wrap[data-width-set="1"] { max-width: none; }
     .svg-resize-wrap[data-height-set="1"] { max-height: none; }
     .svg-zoom-wrap {
       overflow: hidden;
@@ -299,6 +300,36 @@
       window.TAB_LABELS = __TAB_LABELS_JSON__;
       window.FOLDED_B64 = __FOLDED_B64_JSON__;
       window.TAB_SVG_B64 = __TAB_SVG_B64_JSON__;
+
+      function decompressFoldedB64(b64) {
+        if (!b64) return Promise.resolve('');
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+        if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+          var reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+          function readChunks() {
+            return reader.read().then(function(r) {
+              if (r.done) return [];
+              return readChunks().then(function(rest) { return (r.value ? [r.value].concat(rest) : rest); });
+            });
+          }
+          return readChunks().then(function(chunks) {
+            var total = 0;
+            for (var i = 0; i < chunks.length; i++) total += chunks[i].length;
+            var out = new Uint8Array(total);
+            var off = 0;
+            for (var j = 0; j < chunks.length; j++) { out.set(chunks[j], off); off += chunks[j].length; }
+            return new TextDecoder().decode(out);
+          }).catch(function() { return new TextDecoder().decode(bytes); });
+        }
+        return Promise.resolve(new TextDecoder().decode(bytes));
+      }
+
+      function decompressAllFolded() {
+        var arr = window.FOLDED_B64 || [];
+        return Promise.all(arr.map(function(b64) { return decompressFoldedB64(b64 || ''); }));
+      }
 
       function buildTreeFromFolded(foldedText) {
         if (!foldedText || !foldedText.trim()) return { name: '(root)', count: 0, pct: 100, children: [] };
@@ -508,11 +539,11 @@
       function computeTabPercentages() {
         var totals = [];
         var allTotal = 0;
-        if (!window.FOLDED_B64 || !window.FOLDED_B64.length) return totals;
-        for (var i = 0; i < window.FOLDED_B64.length; i++) {
+        var dec = window._FOLDED_DECOMPRESSED || [];
+        if (!dec.length) return totals;
+        for (var i = 0; i < dec.length; i++) {
           try {
-            var text = window.FOLDED_B64[i] ? atob(window.FOLDED_B64[i]) : '';
-            var t = totalSamplesFromFolded(text);
+            var t = totalSamplesFromFolded(dec[i] || '');
             totals.push(t);
             if (i === 0) allTotal = t;
           } catch (e) { totals.push(0); }
@@ -525,9 +556,10 @@
         return totals;
       }
 
-      function init() {
+      async function init() {
         document.getElementById('page-title').textContent = (window.PAGE_TITLE || 'Flame graphs');
         if (!window.TAB_LABELS || !window.TAB_LABELS.length) return;
+        window._FOLDED_DECOMPRESSED = await decompressAllFolded();
         computeTabPercentages();
         var tabbar = document.getElementById('tabbar');
         var panels = document.getElementById('panels');
@@ -584,12 +616,13 @@
           dumpBtn.onclick = function() {
             var panelEl = this.closest('.tabpanel');
             var tabIdx = panelEl ? parseInt(panelEl.id.replace('panel', ''), 10) : 0;
-            if (!window.FOLDED_B64 || !window.FOLDED_B64[tabIdx]) {
+            var dec = window._FOLDED_DECOMPRESSED || [];
+            if (!dec[tabIdx]) {
               window.alert('No callstack data for this tab.');
               return;
             }
             try {
-              var text = atob(window.FOLDED_B64[tabIdx]);
+              var text = dec[tabIdx];
               var blob = new Blob([text], { type: 'text/plain' });
               var url = URL.createObjectURL(blob);
               var a = document.createElement('a');
@@ -623,6 +656,7 @@
             if (wrap) {
               wrap.style.width = '';
               wrap.style.height = '';
+              wrap.removeAttribute('data-width-set');
               wrap.removeAttribute('data-height-set');
             }
           };
@@ -672,6 +706,7 @@
             function startResizeW(e) {
               if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
+              wrap.setAttribute('data-width-set', '1');
               var startX = e.clientX, startW = wrap.offsetWidth;
               function move(ev) {
                 var w = Math.max(100, startW + (ev.clientX - startX));
@@ -707,8 +742,9 @@
             function startResizeCorner(e) {
               if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
-              var startX = e.clientX, startY = e.clientY, startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+              wrap.setAttribute('data-width-set', '1');
               wrap.setAttribute('data-height-set', '1');
+              var startX = e.clientX, startY = e.clientY, startW = wrap.offsetWidth, startH = wrap.offsetHeight;
               function move(ev) {
                 var w = Math.max(100, startW + (ev.clientX - startX));
                 var h = Math.max(100, startH + (ev.clientY - startY));
@@ -753,10 +789,10 @@
           panel.appendChild(main);
           panels.appendChild(panel);
 
-          if (window.FOLDED_B64 && window.FOLDED_B64[i]) {
+          var dec = window._FOLDED_DECOMPRESSED || [];
+          if (dec[i]) {
             try {
-              var foldedText = atob(window.FOLDED_B64[i]);
-              var tree = buildTreeFromFolded(foldedText);
+              var tree = buildTreeFromFolded(dec[i]);
               renderTree(treeContainer, tree, [], i);
               var firstToggle = treeContainer.querySelector('.tree-toggle');
               if (firstToggle) firstToggle.textContent = '▼';
@@ -775,8 +811,8 @@
         if (btn) btn.classList.add('active');
       }
 
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-      else init();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function() { init().catch(function(e) { console.error(e); }); });
+      else init().catch(function(e) { console.error(e); });
     })();
   </script>
 </body>
