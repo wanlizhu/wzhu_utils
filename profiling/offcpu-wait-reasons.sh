@@ -330,7 +330,23 @@ import html
 import os
 import re
 import sys
+import time
 from collections import Counter, defaultdict
+
+
+def format_elapsed(seconds):
+    """Format seconds as 'Xm Ys' or 'Xh Ym Zs' for progress display."""
+    if seconds < 0 or seconds != seconds:
+        return '?'
+    if seconds < 60:
+        return '{:.1f}s'.format(seconds)
+    minutes = int(seconds // 60)
+    secs = seconds % 60
+    if minutes < 60:
+        return '{}m {:.0f}s'.format(minutes, secs)
+    hours = minutes // 60
+    minutes = minutes % 60
+    return '{}h {}m {:.0f}s'.format(hours, minutes, secs)
 
 
 def h(s):
@@ -550,21 +566,37 @@ def most_common_kernel_wait_reason(kernel_wait_reason_samples, tid, start_s, end
     return counter.most_common(1)[0][0] if counter else '-'
 
 
-def nearest_stack_event(stack_events, kind, tid, ts, window_s):
+def build_stack_index(stack_events):
+    """
+    Index stack_events by (kind, tid) so nearest_stack_event can scan only
+    relevant events. Avoids O(W * S) full scans when many waits and many
+    stack events (would hang for minutes/hours on large captures).
+    """
+    index = defaultdict(list)
+    for event in stack_events:
+        k = event['kind']
+        if k == 'switch_out':
+            tid_key = event['actor_tid']
+        elif k == 'wakeup':
+            tid_key = event.get('target_tid') or 0
+        else:
+            continue
+        index[(k, tid_key)].append(event)
+    for key in index:
+        index[key].sort(key=lambda e: e['ts'])
+    return index
+
+
+def nearest_stack_event(stack_index, kind, tid, ts, window_s):
     """
     Find the closest captured stack snapshot near a scheduler timestamp of
-    interest. This is how a wait record gains nearby sleep-out or wakeup stack
-    context even though stacks and scheduler events come from separate streams.
+    interest. Uses pre-built index by (kind, tid) so only relevant events
+    are scanned (avoids O(all_events) per call).
     """
+    candidates = stack_index.get((kind, tid), [])
     best_event = None
     best_dt = None
-    for event in stack_events:
-        if event['kind'] != kind:
-            continue
-        if kind == 'switch_out' and event['actor_tid'] != tid:
-            continue
-        if kind == 'wakeup' and event['target_tid'] != tid:
-            continue
+    for event in candidates:
         dt = abs(event['ts'] - ts)
         if dt > window_s:
             continue
@@ -637,6 +669,7 @@ status('  [4/4] Python: loading kernel wait reason samples...')
 kernel_wait_reason_samples, sampled_tids = load_kernel_wait_reason_samples(kernel_wait_reason_file)
 status('  [4/4] Python: loading stack events...')
 stack_events = load_stack_events(stack_file, enable_stacks)
+stack_index = build_stack_index(stack_events) if enable_stacks and stack_events else {}
 interesting_tids = set(sampled_tids) | set(function_trace_tids)
 
 # Parse perf script and reconstruct blocked intervals, wakeup timing, waker
@@ -653,9 +686,27 @@ migration_records = []
 all_times = []
 
 if os.path.isfile(perf_script_file):
-    with open(perf_script_file, 'r', encoding='utf-8', errors='replace') as f:
+    line_count = 0
+    progress_interval = 200000
+    total_size = os.path.getsize(perf_script_file)
+    start_time = time.time()
+    with open(perf_script_file, 'rb') as f:
         for raw_line in f:
-            line = raw_line.rstrip('\n')
+            line_count += 1
+            if line_count % progress_interval == 0:
+                current_pos = f.tell()
+                elapsed = time.time() - start_time
+                rate = line_count / elapsed if elapsed > 0 else 0
+                if current_pos > 0 and current_pos < total_size:
+                    remaining_bytes = total_size - current_pos
+                    estimated_remaining = int(remaining_bytes * line_count / current_pos)
+                    eta_sec = estimated_remaining / rate if rate > 0 else 0
+                    status('  [4/4] Python: parsing perf script... {} lines (est. {} remaining), {} wait records | elapsed {} | ETA {}'.format(
+                        line_count, estimated_remaining, len(wait_records), format_elapsed(elapsed), format_elapsed(eta_sec)))
+                else:
+                    status('  [4/4] Python: parsing perf script... {} lines, {} wait records | elapsed {}'.format(
+                        line_count, len(wait_records), format_elapsed(elapsed)))
+            line = raw_line.decode('utf-8', errors='replace').rstrip()
             match = header_re.match(line)
             if not match:
                 continue
@@ -713,8 +764,8 @@ if os.path.isfile(perf_script_file):
                         record['wait_ms'] = (record['wake_time'] - record['wait_start']) * 1000.0
                         record['kernel_wait_reason'] = most_common_kernel_wait_reason(kernel_wait_reason_samples, next_tid, record['wait_start'], record['wake_time'])
                         if enable_stacks:
-                            record['sleep_stack_event'] = nearest_stack_event(stack_events, 'switch_out', next_tid, record['wait_start'], 0.002)
-                            record['wake_stack_event'] = nearest_stack_event(stack_events, 'wakeup', next_tid, record['wake_time'], 0.002)
+                            record['sleep_stack_event'] = nearest_stack_event(stack_index, 'switch_out', next_tid, record['wait_start'], 0.002)
+                            record['wake_stack_event'] = nearest_stack_event(stack_index, 'wakeup', next_tid, record['wake_time'], 0.002)
                         if event_is_in_scope(analysis_scope, function_intervals, next_tid, record['wait_start'], record['run_time']):
                             wait_records.append(record)
                     wake_time.pop(next_tid, None)
