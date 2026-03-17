@@ -66,7 +66,7 @@
 
 set -o pipefail
 
-CAPTURE_SECONDS=10
+CAPTURE_SECONDS=0  # when 0, capture continues until interrupted by Ctrl-C
 SAMPLE_MS=10
 LONG_WAIT_MS=2.0
 OUT_DIR=./offcpu_wait_reasons.d
@@ -134,7 +134,7 @@ print_help() {
     echo "    $OUT_DIR/out_report.html"
     echo
     echo "Config variables near top of script:"
-    echo "    CAPTURE_SECONDS"
+    echo "    CAPTURE_SECONDS  (0 = capture until Ctrl-C)"
     echo "    SAMPLE_MS"
     echo "    LONG_WAIT_MS"
     echo "    OUT_DIR"
@@ -1347,9 +1347,13 @@ if [[ $CAPTURE_SECONDS -gt 0 ]]; then
         kill -INT $perf_pid 2>/dev/null
     ) &
     timeout_pid=$!
+    echo "Capturing for $CAPTURE_SECONDS seconds (or until target process exits)..."
+else
+    echo "Capturing until interrupted by Ctrl-C..."
 fi
 
-while kill -0 $perf_pid 2>/dev/null && sudo test -d /proc/$TARGET_PID 2>/dev/null; do
+# Wait until perf is stopped (by timeout, or by Ctrl-C when CAPTURE_SECONDS=0). Do not wait for target process.
+while kill -0 $perf_pid 2>/dev/null; do
     sleep 0.2
 done
 
@@ -1390,6 +1394,4 @@ if ! run_python_postprocessor; then
     exit 1
 fi
 
-echo
-echo "done"
-echo "report:    $OUT_DIR/out_report.html"
+echo "generated: $OUT_DIR/out_report.html"
