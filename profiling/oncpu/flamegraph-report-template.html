@@ -73,6 +73,85 @@
       border-color: var(--accent);
       color: #fff;
     }
+    /* Top 3 threads by % of All threads: red (1st), orange (2nd), yellow (3rd) */
+    .tabbtn.tab-top1 {
+      background: #f8d7da;
+      border-color: #f5c6cb;
+      color: #721c24;
+    }
+    .tabbtn.tab-top1:hover {
+      background: #f5c6cb;
+      border-color: #f1aeb5;
+      color: #721c24;
+    }
+    .tabbtn.tab-top1.active {
+      background: #dc3545;
+      border-color: #dc3545;
+      color: #fff;
+    }
+    .tabbtn.tab-top1.active:hover {
+      background: #c82333;
+      border-color: #bd2130;
+      color: #fff;
+    }
+    .tabbtn.tab-top1:disabled {
+      background: #f8d7da;
+      border-color: #f5c6cb;
+      opacity: 0.6;
+    }
+    .tabbtn.tab-top2 {
+      background: #ffe5d0;
+      border-color: #ffd9b8;
+      color: #7d4e0f;
+    }
+    .tabbtn.tab-top2:hover {
+      background: #ffd9b8;
+      border-color: #ffcc9e;
+      color: #7d4e0f;
+    }
+    .tabbtn.tab-top2.active {
+      background: #fd7e14;
+      border-color: #fd7e14;
+      color: #fff;
+    }
+    .tabbtn.tab-top2.active:hover {
+      background: #e96a00;
+      border-color: #e06200;
+      color: #fff;
+    }
+    .tabbtn.tab-top2:disabled {
+      background: #ffe5d0;
+      border-color: #ffd9b8;
+      opacity: 0.6;
+    }
+    .tabbtn.tab-top3 {
+      background: #fff3cd;
+      border-color: #ffe69c;
+      color: #856404;
+    }
+    .tabbtn.tab-top3:hover {
+      background: #ffe69c;
+      border-color: #ffda6a;
+      color: #856404;
+    }
+    .tabbtn.tab-top3.active {
+      background: #ffc107;
+      border-color: #ffc107;
+      color: #212529;
+    }
+    .tabbtn.tab-top3.active:hover {
+      background: #e0a800;
+      border-color: #d39e00;
+      color: #212529;
+    }
+    .tabbtn.tab-top3:disabled {
+      background: #fff3cd;
+      border-color: #ffe69c;
+      opacity: 0.6;
+    }
+    .tabbtn.tab-top1.active .tab-label-line2,
+    .tabbtn.tab-top2.active .tab-label-line2 { color: rgba(255,255,255,0.9); }
+    .tabbtn.tab-top3.active .tab-label-line2 { color: rgba(33,37,41,0.85); }
     .tabpanel {
       display: none;
       padding: 24px;
@@ -588,16 +667,31 @@
         return totals;
       }
 
+      /** Returns a map of tabIndex -> CSS class for the top 3 threads (by % of All). Index 0 is excluded. */
+      function getTop3TabRankClasses() {
+        var pct = window._tabPctOfAll;
+        if (!pct || pct.length <= 1) return {};
+        var indices = [];
+        for (var i = 1; i < pct.length; i++) indices.push(i);
+        indices.sort(function(a, b) { return (pct[b] || 0) - (pct[a] || 0); });
+        var map = {};
+        if (indices.length > 0) map[indices[0]] = 'tab-top1';
+        if (indices.length > 1) map[indices[1]] = 'tab-top2';
+        if (indices.length > 2) map[indices[2]] = 'tab-top3';
+        return map;
+      }
+
       async function init() {
         document.getElementById('page-title').textContent = (window.PAGE_TITLE || 'Flame graphs');
         if (!window.TAB_LABELS || !window.TAB_LABELS.length) return;
         window._FOLDED_DECOMPRESSED = await decompressAllFolded();
         computeTabPercentages();
+        var top3Classes = getTop3TabRankClasses();
         var tabbar = document.getElementById('tabbar');
         var panels = document.getElementById('panels');
         for (var i = 0; i < window.TAB_LABELS.length; i++) {
           var btn = document.createElement('button');
-          btn.className = 'tabbtn' + (i === 0 ? ' active' : '');
+          btn.className = 'tabbtn' + (i === 0 ? ' active' : '') + (top3Classes[i] ? ' ' + top3Classes[i] : '');
           if (i === 0) {
             btn.textContent = window.TAB_LABELS[i];
           } else {
