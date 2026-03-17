@@ -126,7 +126,20 @@ fi
 if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
     TOP3=
     if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
-        TOP3=$(tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -3 | awk '{printf "%s%s: %s", (NR>1?", ":""), $3, $1}')
+        # Columns: count, waker_pid, waker_comm. If comm is empty, resolve from /proc/PID/comm.
+        TOP3=$(tail -n +2 "$HOME/${COMM}_wakers.txt" | cut -d, -f2-3 | sort | uniq -c | sort -rn | head -3 | awk '
+            {
+                pid = $2
+                comm = $3
+                count = $1
+                if (comm == "" && pid != "") {
+                    getline comm < ("/proc/" pid "/comm")
+                    close("/proc/" pid "/comm")
+                    gsub(/\r?\n$/, "", comm)
+                }
+                if (comm == "") comm = "pid:" pid
+                printf "%s%s: %s", (NR > 1 ? ", " : ""), comm, count
+            }')
     fi
     if [[ -n "$TOP3" ]]; then
         echo "Generated $HOME/${COMM}_wakers.txt ($TOP3)"
