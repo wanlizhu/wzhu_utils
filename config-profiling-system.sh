@@ -23,9 +23,7 @@ if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then
 fi
 
 # patch ~/.bashrc
-if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then 
-    echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
-fi
+[[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]] && echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
 echo '#!/bin/bash' >~/nvidia-profiling.sh
 echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/nvidia-profiling.sh 
