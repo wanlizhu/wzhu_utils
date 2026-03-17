@@ -68,7 +68,7 @@ Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
         install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
     fi 
-    if [[ ! -z $(apt list '?upgradable !?phasing') ]]; then 
+    if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
         sudo apt update  
         sudo apt upgrade -y 
         sudo apt autoremove -y  

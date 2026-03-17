@@ -16,7 +16,7 @@ fi
 
 for pkg in "${required_pkgs[@]}"; do 
     dpkg -s $pkg &>/dev/null && continue 
-    sudo apt install -y $pkg || failed_pkgs+=("$pkg")
+    sudo apt install -y $pkg 2>/dev/null || failed_pkgs+=("$pkg")
 done 
 
 if (( ${#failed_pkgs[@]} )); then
