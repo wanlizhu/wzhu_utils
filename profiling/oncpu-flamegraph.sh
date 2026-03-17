@@ -69,13 +69,16 @@ echo "/proc/sys/kernel/kptr_restrict => $(cat /proc/sys/kernel/kptr_restrict)"
 echo "/proc/sys/kernel/perf_event_max_sample_rate => $(cat /proc/sys/kernel/perf_event_max_sample_rate)"
 echo
 
+# Avoid "Too many open files" / "stack traces lost" (tool opens /proc/PID/root per sample).
+[[ $(ulimit -n 2>/dev/null) -lt 65536 ]] 2>/dev/null && ulimit -n 65536 2>/dev/null || true
+
 # Install required tools on demand.
 [[ -z $(which eu-stack) ]] && sudo apt install -y elfutils >/dev/null 2>&1
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
 [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/perf.data $HOME/perf-system-wide.svg $HOME/perf.svg.d/
+sudo rm -rf /tmp/perf.data $HOME/oncpu-system-wide.svg $HOME/oncpu.svg.d/
 
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
@@ -126,10 +129,10 @@ if [[ -f /tmp/perf.data ]]; then
     chmod 666 /tmp/perf.txt
 
     if [[ -z $PID ]]; then
-        cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf-system-wide.svg && echo "Generated $HOME/perf-system-wide.svg"
+        cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/oncpu-system-wide.svg && echo "Generated $HOME/oncpu-system-wide.svg"
     else
-        mkdir -p $HOME/perf.svg.d/
-        cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/perf-all-threads.svg && echo "Generated $HOME/perf.svg.d/perf-all-threads.svg"
+        mkdir -p $HOME/oncpu.svg.d/
+        cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/oncpu.svg.d/all-threads.svg && echo "Generated $HOME/oncpu.svg.d/all-threads.svg"
 
         # If the process has multiple threads, also generate one SVG per thread.
         if [[ -d /proc/$PID/task ]] && (( $(ls /proc/$PID/task 2>/dev/null | wc -l) > 1 )); then
@@ -163,16 +166,16 @@ if [[ -f /tmp/perf.data ]]; then
                     tid=${file#/tmp/perf-tid}
                     tid=${tid%.txt}
                     [[ $tid == unknown ]] && continue
-                    cat $file | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/perf.svg.d/tid$tid.svg
-                    echo "Generated $HOME/perf.svg.d/tid$tid.svg"
+                    cat $file | stackcollapse-perf.pl 2>/dev/null | flamegraph.pl >$HOME/oncpu.svg.d/tid$tid.svg
+                    echo "Generated $HOME/oncpu.svg.d/tid$tid.svg"
                 done
             fi
         fi
 
         # Rename so multiple profiling runs can coexist under different names.
         if [[ ! -z $NAME_PREFIX ]]; then
-            sudo mv -f $HOME/perf.svg.d $HOME/$NAME_PREFIX.perf.svg.d
-            echo "Renamed output dir to $HOME/$NAME_PREFIX.perf.svg.d"
+            sudo mv -f $HOME/oncpu.svg.d $HOME/$NAME_PREFIX.oncpu.svg.d
+            echo "Renamed output dir to $HOME/$NAME_PREFIX.oncpu.svg.d"
         fi
     fi
 fi

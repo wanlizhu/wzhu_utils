@@ -23,6 +23,9 @@ if ! sudo -n true 2>/dev/null; then
     exit 1
 fi
 
+# Avoid "Too many open files" / "stack traces lost" (tool opens /proc/PID/root per sample).
+[[ $(ulimit -n 2>/dev/null) -lt 65536 ]] 2>/dev/null && ulimit -n 65536 2>/dev/null || true
+
 # Install required tools on demand.
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
 [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
@@ -71,14 +74,12 @@ fi
 
 # Start sampling (requires a target PID; pass a numeric PID or use steam/command launch above).
 echo "Recording for $RECORD_SECONDS seconds ..."
-# Avoid "Too many open files" / "stack traces lost" (tool opens /proc/PID/root per sample).
-[[ $(ulimit -n 2>/dev/null) -lt 65536 ]] 2>/dev/null && ulimit -n 65536 2>/dev/null || true
 sudo offwaketime-bpfcc -p $PID -f $RECORD_SECONDS >/tmp/offwake.folded || exit 1
 
 # Post-process folded stacks into flame graph.
 if [[ -f /tmp/offwake.folded ]]; then
     mkdir -p $HOME/offcpu.svg.d
-    cat /tmp/offwake.folded | flamegraph.pl >$HOME/offcpu.svg.d/offcpu-all-threads.svg
+    cat /tmp/offwake.folded | flamegraph.pl >$HOME/offcpu.svg.d/offcpu-all-threads.svg && echo "Generated: $HOME/offcpu.svg.d/offcpu-all-threads.svg"
 
     # TODO: If the process has multiple threads, also generate one SVG per thread. 
     # (this needs to remove -f option and generate folded callchains manually)
