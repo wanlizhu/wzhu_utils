@@ -172,6 +172,7 @@ print_help() {
 #     cases without leaving collectors running in the background.
 # -----------------------------------------------------------------------------
 cleanup() {
+    printf '\n'
     [[ -n $perf_pid ]] && kill -0 $perf_pid 2>/dev/null && kill -INT $perf_pid
     [[ -n $function_trace_pid ]] && kill -0 $function_trace_pid 2>/dev/null && kill -INT $function_trace_pid
     [[ -n $stack_trace_pid ]] && kill -0 $stack_trace_pid 2>/dev/null && kill -INT $stack_trace_pid
@@ -184,10 +185,40 @@ cleanup() {
     [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
     [[ -n $timeout_pid ]] && wait $timeout_pid 2>/dev/null || true
 
-    [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf "$TEMP_DIR"
+    if [[ -z $CLEANUP_PRESERVE_TEMP || $CLEANUP_PRESERVE_TEMP -ne 1 ]]; then
+        [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf "$TEMP_DIR"
+    else
+        # Interrupted (e.g. Ctrl-C): run post-processing on captured data, then preserve TEMP_DIR
+        if [[ -n $TEMP_DIR && -d $TEMP_DIR ]]; then
+            if has_perf_data; then
+                echo "Post-processing (perf script, report generation)..." >&2
+                if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
+                    -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt" 2>/dev/null; then
+                    : > "$TEMP_DIR/perf_script.txt"
+                fi
+                sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" 2>/dev/null || true
+                {
+                    echo "===== perf sched timehist ====="
+                    sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>/dev/null || true
+                    echo
+                    echo "===== perf sched latency ====="
+                    sudo perf sched latency -i "$TEMP_DIR/perf_sched.data" -p 2>/dev/null || true
+                    echo
+                    echo "===== perf sched map ====="
+                    sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact 2>/dev/null || true
+                } > "$TEMP_DIR/scheduler_views.txt"
+                run_python_postprocessor && echo "generated: $OUT_DIR/out_report.html" >&2
+            else
+                : > "$TEMP_DIR/perf_script.txt"
+                echo "perf data not available (perf_sched.data missing or empty)" > "$TEMP_DIR/scheduler_views.txt"
+            fi
+            echo "Data preserved in: $TEMP_DIR" >&2
+        fi
+    fi
 }
 
-trap cleanup EXIT INT TERM
+trap 'CLEANUP_PRESERVE_TEMP=1; cleanup' INT TERM
+trap cleanup EXIT
 
 # -----------------------------------------------------------------------------
 # sample_kernel_wait_reasons
@@ -1119,6 +1150,11 @@ mkdir -p "$TEMP_DIR" || {
     exit 1
 }
 
+# perf may write a regular file or a directory (depending on version/config)
+has_perf_data() {
+    [[ -n $TEMP_DIR ]] && { [[ -f "$TEMP_DIR/perf_sched.data" && -s "$TEMP_DIR/perf_sched.data" ]] || [[ -d "$TEMP_DIR/perf_sched.data" ]]; }
+}
+
 # Resolve symbol if needed.
 if [[ $ANALYSIS_SCOPE == function ]]; then
     mapfile -t mapped_exec_files < <(
@@ -1373,7 +1409,7 @@ wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
 
 echo "Post-processing (perf script, report generation)..."
 # Handle missing or empty perf data: skip perf script and produce minimal report.
-if [[ ! -f "$TEMP_DIR/perf_sched.data" || ! -s "$TEMP_DIR/perf_sched.data" ]]; then
+if ! has_perf_data; then
     echo "warning: no perf data captured (perf_sched.data missing or empty), generating minimal report" >&2
     : > "$TEMP_DIR/perf_script.txt"
 else
@@ -1388,7 +1424,7 @@ fi
 sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" || true
 
 # Scheduler views require valid perf data; otherwise write a placeholder.
-if [[ -f "$TEMP_DIR/perf_sched.data" && -s "$TEMP_DIR/perf_sched.data" ]]; then
+if has_perf_data; then
     {
         echo "===== perf sched timehist ====="
         sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S || true
