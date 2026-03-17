@@ -71,8 +71,9 @@ if [[ ! -z $1 ]]; then
     if [[ ! -z $(which find-dbgsym-packages) ]]; then 
         echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
         find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
+        [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
     fi 
-    if [[ $INSTALL_DEBUG_SYMBOL == true ]]; then
+    if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
         echo "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
             install-pkg.sh $pkg

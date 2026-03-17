@@ -26,6 +26,8 @@ Key relationships:
 
 from pathlib import Path
 import argparse
+import base64
+import gzip
 import json
 import math
 import sys
@@ -34,6 +36,12 @@ import pandas as pd
 
 INPUT_CSV = Path("dynamic_monitoring.csv")
 OUTPUT_HTML = Path("graph.html")
+
+
+def csv_to_base64_gzip(csv_bytes: bytes) -> str:
+    """Compress CSV bytes with gzip then base64-encode (same order as generate-html-report.sh)."""
+    compressed = gzip.compress(csv_bytes, mtime=0)
+    return base64.standard_b64encode(compressed).decode("ascii")
 
 
 def guess_unit_strict(col: str) -> str:
@@ -229,12 +237,23 @@ def build_report_payload(report_name: str, time_col: str, time_values: list[floa
     }
 
 
-def build_html(report_payload: dict) -> str:
-    """Produce the full HTML string: single-page app with embedded __PAYLOAD_JSON__ and Plotly; __TITLE__ set to fixed title."""
+def build_html(
+    report_payload: dict,
+    csv_b64_gzip: str = "",
+    default_y_mode: str = "normalized",
+    default_selected_attrs: list[str] | None = None,
+) -> str:
+    """Produce the full HTML string: single-page app with embedded __PAYLOAD_JSON__, optional __CSV_B64_GZIP_JSON__,
+    __DEFAULT_Y_MODE__, __DEFAULT_SELECTED_ATTRS_JSON__, and Plotly."""
     try:
         payload_json = json.dumps(report_payload, ensure_ascii=False)
     except (TypeError, ValueError) as e:
         raise ValueError(f"report payload is not JSON-serializable: {e}") from e
+    csv_b64_json = json.dumps(csv_b64_gzip)
+    default_attrs_json = json.dumps(default_selected_attrs) if default_selected_attrs is not None else "null"
+    checked_normalized = " checked" if default_y_mode == "normalized" else ""
+    checked_actual = " checked" if default_y_mode == "actual" else ""
+    checked_delta = " checked" if default_y_mode == "delta" else ""
     title = "Dynamic Monitoring Graph"
 
     html = r'''<!doctype html>
@@ -439,18 +458,23 @@ def build_html(report_payload: dict) -> str:
 </head>
 <body>
     <script id=report-data type=application/json>__PAYLOAD_JSON__</script>
+    <script>
+        window.CSV_B64_GZIP = __CSV_B64_GZIP_JSON__;
+        window.DEFAULT_SELECTED_ATTRS = __DEFAULT_SELECTED_ATTRS_JSON__;
+    </script>
     <div class=page>
         <div class=sidebar id=sidebar>
             <div class=panel>
                 <div class=panel-title>Visual style</div>
                 <div class=toolbar>
                     <button type=button onclick=resetZoom()>Reset zoom</button>
+                    <button type=button id=dump_csv_btn onclick=dumpSamplesAsCsv()>Dump samples as .csv</button>
                     <span class=zoom-info id=zoom_info>Zoom: 100%</span>
                 </div>
                 <div class=sub-title>Y axis mode</div>
-                <div class=row><label><input type=radio name=y_mode value=normalized checked onchange=renderPlot()> Normalized ratio</label></div>
-                <div class=row><label><input type=radio name=y_mode value=actual onchange=renderPlot()> Actual value</label></div>
-                <div class=row><label><input type=radio name=y_mode value=delta id=y_mode_delta onchange=renderPlot()> Delta view (only available in comparison mode)</label></div>
+                <div class=row><label><input type=radio name=y_mode value=normalized __CHECKED_NORMALIZED__ onchange=renderPlot()> Normalized ratio</label></div>
+                <div class=row><label><input type=radio name=y_mode value=actual __CHECKED_ACTUAL__ onchange=renderPlot()> Actual value</label></div>
+                <div class=row><label><input type=radio name=y_mode value=delta id=y_mode_delta __CHECKED_DELTA__ onchange=renderPlot()> Delta view (only available in comparison mode)</label></div>
                 <div class=sub-title>Line source</div>
                 <div class=row><label><input type=checkbox id=use_smooth checked onchange=rebuildAllDerivedAndRender()> Use smoothed values</label></div>
                 <div class=row><label for=window_size>Smoothing window:</label> <input id=window_size type=number min=1 step=2 value=7 onchange=rebuildAllDerivedAndRender() style="width:80px;"></div>
@@ -458,7 +482,7 @@ def build_html(report_payload: dict) -> str:
             </div>
 
             <div class=panel>
-                <div class=panel-title>Comparison</div>
+                <div class=panel-title>Compare with another report …</div>
                 <div class=status-line id=comparison_status_line>Comparison Mode: <span class=status-off>OFF</span></div>
                 <div class=toolbar>
                     <button type=button id=load_second_btn onclick=triggerComparisonLoad()>Load the second report</button>
@@ -475,7 +499,7 @@ def build_html(report_payload: dict) -> str:
             </div>
 
             <div class=panel>
-                <div class=panel-title>Attributes</div>
+                <div class=panel-title>Show/Hide metrics …</div>
                 <div class=toolbar>
                     <button type=button onclick=selectAll()>Select all</button>
                     <button type=button onclick=selectNone()>Select none</button>
@@ -508,6 +532,16 @@ def build_html(report_payload: dict) -> str:
         const colorCache = {};
         const selectionState = {};
         const groupState = {};
+
+        function getMetricNamesForInit(report) {
+            return report.metric_cols.filter(name => report.metrics[name]);
+        }
+        if (window.DEFAULT_SELECTED_ATTRS && Array.isArray(window.DEFAULT_SELECTED_ATTRS)) {
+            const names = getMetricNamesForInit(PRIMARY_REPORT);
+            for (const name of names) {
+                selectionState[name] = window.DEFAULT_SELECTED_ATTRS.indexOf(name) >= 0;
+            }
+        }
 
         function hashString(s) {
             let h = 0;
@@ -587,7 +621,8 @@ def build_html(report_payload: dict) -> str:
             for (const groupInfo of getSortedGroupKeys()) {
                 const stateKey = getStateGroupKey(groupInfo.mode, groupInfo.key);
                 if (!(stateKey in groupState)) {
-                    groupState[stateKey] = true;
+                    const names = getMetricsInGroup(groupInfo);
+                    groupState[stateKey] = names.length > 0 && names.every(name => !!selectionState[name]);
                 }
             }
         }
@@ -882,6 +917,51 @@ def build_html(report_payload: dict) -> str:
             toastTimer = setTimeout(() => {
                 node.style.display = "none";
             }, 3000);
+        }
+        function decompressCsvB64(b64) {
+            if (!b64) return Promise.resolve("");
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+            if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+                const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+                function readChunks() {
+                    return reader.read().then(function(r) {
+                        if (r.done) return [];
+                        return readChunks().then(function(rest) { return (r.value ? [r.value].concat(rest) : rest); });
+                    });
+                }
+                return readChunks().then(function(chunks) {
+                    let total = 0;
+                    for (let i = 0; i < chunks.length; i++) total += chunks[i].length;
+                    const out = new Uint8Array(total);
+                    let off = 0;
+                    for (let j = 0; j < chunks.length; j++) { out.set(chunks[j], off); off += chunks[j].length; }
+                    return new TextDecoder().decode(out);
+                }).catch(function() { return new TextDecoder().decode(bytes); });
+            }
+            return Promise.resolve(new TextDecoder().decode(bytes));
+        }
+        function dumpSamplesAsCsv() {
+            const b64 = window.CSV_B64_GZIP;
+            if (!b64 || typeof b64 !== "string") {
+                showToast("No embedded CSV data available.");
+                return;
+            }
+            decompressCsvB64(b64).then(function(csvText) {
+                const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = (PRIMARY_REPORT.report_name && PRIMARY_REPORT.report_name.endsWith(".csv")) ? PRIMARY_REPORT.report_name : "samples.csv";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("Download completed successfully.");
+            }).catch(function(err) {
+                showToast("Download failed: " + (err && err.message ? err.message : "unknown error"));
+            });
         }
         async function handleComparisonFile(event) {
             const file = event.target.files && event.target.files[0];
@@ -1383,6 +1463,7 @@ def build_html(report_payload: dict) -> str:
         updateComparisonUi();
         installShiftSensitiveSliderStep();
         installResizer();
+        if (!window.CSV_B64_GZIP) document.getElementById("dump_csv_btn").disabled = true;
         rebuildAllDerivedAndRender();
     </script>
 </body>
@@ -1390,10 +1471,18 @@ def build_html(report_payload: dict) -> str:
 '''
     html = html.replace("__TITLE__", title)
     html = html.replace("__PAYLOAD_JSON__", payload_json)
+    html = html.replace("__CSV_B64_GZIP_JSON__", csv_b64_json)
+    html = html.replace("__DEFAULT_SELECTED_ATTRS_JSON__", default_attrs_json)
+    html = html.replace("__CHECKED_NORMALIZED__", checked_normalized)
+    html = html.replace("__CHECKED_ACTUAL__", checked_actual)
+    html = html.replace("__CHECKED_DELTA__", checked_delta)
     return html
 
 
-def main():
+def main(
+    default_y_mode: str = "normalized",
+    default_selected_attrs: list[str] | None = None,
+):
     """Read INPUT_CSV, validate and convert, build report payload, generate HTML, write to OUTPUT_HTML.
 
     Relies on global INPUT_CSV and OUTPUT_HTML (set by __main__ per input file).
@@ -1425,7 +1514,18 @@ def main():
         metric_values=metric_values,
     )
 
-    html = build_html(report_payload)
+    try:
+        csv_bytes = INPUT_CSV.read_bytes()
+        csv_b64_gzip = csv_to_base64_gzip(csv_bytes)
+    except Exception:
+        csv_b64_gzip = ""
+
+    html = build_html(
+        report_payload,
+        csv_b64_gzip=csv_b64_gzip,
+        default_y_mode=default_y_mode,
+        default_selected_attrs=default_selected_attrs,
+    )
     try:
         OUTPUT_HTML.write_text(html, encoding="utf-8")
     except FileNotFoundError:
@@ -1444,6 +1544,19 @@ if __name__ == "__main__":
         nargs="*",
         help="Input CSV file(s). If omitted, all *.csv in the current directory are used.",
     )
+    parser.add_argument(
+        "--y-axis-mode",
+        choices=["normalized", "actual", "delta"],
+        default="normalized",
+        help="Default Y axis mode (default: normalized).",
+    )
+    parser.add_argument(
+        "--default-attributes",
+        metavar="ATTR",
+        nargs="*",
+        default=None,
+        help="Metric names to select by default (e.g. utilization_gpu_pct cpu_util_pct). If omitted, all attributes are selected.",
+    )
     args = parser.parse_args()
 
     if args.csv_files:
@@ -1455,13 +1568,18 @@ if __name__ == "__main__":
         print(f"no .csv files found in {Path.cwd()}", file=sys.stderr)
         raise SystemExit(1)
 
+    default_attrs = args.default_attributes if args.default_attributes else None
+
     # Per-file: set globals so main() reads/writes the right paths; output is <stem>.html.
     for csv_file in csv_files:
         if csv_file.is_file():
             INPUT_CSV = csv_file
             OUTPUT_HTML = INPUT_CSV.with_suffix(".html")
             try:
-                main()
+                main(
+                    default_y_mode=args.y_axis_mode,
+                    default_selected_attrs=default_attrs,
+                )
                 print(f"generated: {OUTPUT_HTML}")
             except Exception as e:
                 print(e)

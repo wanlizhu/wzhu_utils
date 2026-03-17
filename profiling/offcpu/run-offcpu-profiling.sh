@@ -6,6 +6,7 @@ WAIT_SECONDS=0 # delay before perf recording starts.
 RECORD_SECONDS=5 # recording duration in seconds.
 TRACE_WAKERS=true
 LOCK_CONTENTION=true
+INSTALL_DEBUG_SYMBOL=false
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 unset PID COMM
 
@@ -55,8 +56,12 @@ if [[ ! -z $1 ]]; then
     [[ -z $COMM ]] && COMM=untitled
 
     # Install debug symbol packages for the target process.
-    [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
-    if [[ $INSTALL_DEBUG_SYMBOL == true ]]; then
+    if [[ ! -z $(which find-dbgsym-packages) ]]; then 
+        echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
+        [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
+        [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
+    fi 
+    if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
         echo "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
             install-pkg.sh $pkg

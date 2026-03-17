@@ -675,5 +675,5 @@ merge_cpu_gpu_csv $TMP_CPU_FILE $TMP_GPU_FILE $OUT_CSV || {
 }
 
 if command -v draw-polylines-in-html.py >/dev/null 2>&1; then
-    python3 "$(command -v draw-polylines-in-html.py)" $OUT_CSV
+    python3 "$(command -v draw-polylines-in-html.py)" --y-axis-mode actual --default-attributes utilization_gpu_pct cpu_util_pct $OUT_CSV
 fi
