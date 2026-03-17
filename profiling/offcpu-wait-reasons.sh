@@ -326,12 +326,21 @@ sample_kernel_wait_reasons() {
 # -----------------------------------------------------------------------------
 run_python_postprocessor() {
     python3 - "$TARGET_PID" "$ANALYSIS_SCOPE" "$FUNCTION_NAME" "$LONG_WAIT_MS" "$OUT_DIR" "$ENABLE_STACKS" "$STACK_SCOPE" "$TEMP_DIR" <<'PYBLOCK'
+import bisect
 import html
 import os
 import re
 import sys
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+import multiprocessing
+
+try:
+    N_WORKERS = min(32, (os.cpu_count() or 4))
+except Exception:
+    N_WORKERS = 4
+
 
 
 def format_elapsed(seconds):
@@ -351,6 +360,45 @@ def format_elapsed(seconds):
 
 def h(s):
     return html.escape(str(s), quote=True)
+
+
+def _build_svg_wait_chunk(args):
+    """Worker: build SVG rect/line strings for a chunk of wait_records. Used by ProcessPoolExecutor."""
+    (records, lane_index, thread_names, left, top, lane_height, lane_gap, start_time, time_span, usable_width) = args
+    out = []
+    for record in records:
+        tid = record['tid']
+        if tid not in lane_index:
+            continue
+        y = top + lane_index[tid] * (lane_height + lane_gap)
+        event_id = record.get('event_id', '')
+        event_attr = ' data-event-id="{}"'.format(html.escape(event_id, quote=True)) if event_id else ''
+        onclick_attr = ' onclick="selectEvent(\'{}\'); return false;" style="cursor:pointer"'.format(html.escape(event_id, quote=True)) if event_id else ''
+        if record.get('wait_start') is not None and record.get('wake_time') is not None and record.get('wait_ms') is not None:
+            x1 = left + (record['wait_start'] - start_time) / time_span * usable_width
+            x2 = left + (record['wake_time'] - start_time) / time_span * usable_width
+            rect_width = max(1.0, x2 - x1)
+            tooltip = 'tid={} comm={} wait_ms={:.3f} state={} kernel_wait_reason={} waker={}[{}]'.format(
+                tid, html.escape(record['comm'], quote=True), record['wait_ms'],
+                html.escape(record['prev_state'], quote=True), html.escape(record['kernel_wait_reason'], quote=True),
+                html.escape(record['waker_comm'], quote=True), record.get('waker_tid'))
+            out.append('<rect x="{:.2f}" y="{:.2f}" width="{:.2f}" height="{:.2f}" class="wait"{}{}><title>{}</title></rect>'.format(
+                x1, y, rect_width, lane_height, event_attr, onclick_attr, tooltip))
+        if record.get('wake_time') is not None and record.get('run_time') is not None:
+            x1 = left + (record['wake_time'] - start_time) / time_span * usable_width
+            x2 = left + (record['run_time'] - start_time) / time_span * usable_width
+            rect_width = max(1.0, x2 - x1)
+            tooltip = 'tid={} comm={} scheduler_delay_ms={:.3f} target_cpu={}'.format(
+                tid, html.escape(record['comm'], quote=True), record['sched_delay_ms'], record.get('target_cpu'))
+            out.append('<rect x="{:.2f}" y="{:.2f}" width="{:.2f}" height="{:.2f}" class="delay"{}{}><title>{}</title></rect>'.format(
+                x1, y + 6, rect_width, max(4.0, lane_height - 12), event_attr, onclick_attr, tooltip))
+        waker_tid = record.get('waker_tid')
+        if waker_tid in lane_index and record.get('wake_time') is not None:
+            y1 = top + lane_index[waker_tid] * (lane_height + lane_gap) + lane_height / 2
+            y2 = top + lane_index[tid] * (lane_height + lane_gap) + lane_height / 2
+            x = left + (record['wake_time'] - start_time) / time_span * usable_width
+            out.append('<line x1="{:.2f}" y1="{:.2f}" x2="{:.2f}" y2="{:.2f}" class="wake"/>'.format(x, y1, x, y2))
+    return out
 
 
 def load_text_file(path, fallback):
@@ -540,29 +588,48 @@ def event_is_in_scope(analysis_scope, function_intervals, tid, start_s, end_s):
     Apply the selected scope rule to one reconstructed blocked interval.
     Process scope keeps all valid waits, while function scope keeps only waits
     whose blocked interval overlaps at least one traced function window on the
-    same thread.
+    same thread. Intervals are assumed sorted by begin_s; we break when begin_s > end_s.
     """
     if analysis_scope == 'process':
         return True
     for begin_s, end_scope_s in function_intervals.get(tid, []):
+        if begin_s > end_s:
+            break
         if start_s < end_scope_s and end_s > begin_s:
             return True
     return False
 
 
-def most_common_kernel_wait_reason(kernel_wait_reason_samples, tid, start_s, end_s):
+def build_kernel_wait_reason_index(samples_by_tid):
+    """
+    Build a sorted-by-ts index per tid so most_common_kernel_wait_reason can
+    use binary search and only iterate samples in [start_s, end_s]. Same results,
+    O(log n + k) per call instead of O(n) where k = samples in range.
+    """
+    index = {}
+    for tid, samples in samples_by_tid.items():
+        sorted_list = sorted(((item['ts'], item['kernel_wait_reason']) for item in samples), key=lambda x: x[0])
+        ts_only = [x[0] for x in sorted_list]
+        index[tid] = (sorted_list, ts_only)
+    return index
+
+
+def most_common_kernel_wait_reason(kernel_wait_reason_index, tid, start_s, end_s):
     """
     Infer the dominant kernel wait reason during one blocked interval by
-    counting /proc samples whose timestamps fall inside that interval. This is
-    the bridge between the scheduler timeline and the sampled semantic hint from
-    wchan.
+    counting /proc samples whose timestamps fall inside that interval. Uses
+    pre-built sorted index and bisect so only samples in range are counted.
     """
+    entry = kernel_wait_reason_index.get(tid)
+    if not entry:
+        return '-'
+    sorted_list, ts_only = entry
+    left = bisect.bisect_left(ts_only, start_s)
+    right = bisect.bisect_right(ts_only, end_s)
     counter = Counter()
-    for item in kernel_wait_reason_samples.get(tid, []):
-        if start_s <= item['ts'] <= end_s:
-            value = item['kernel_wait_reason']
-            if value not in ('-', '0', ''):
-                counter[value] += 1
+    for ts, value in sorted_list[left:right]:
+        if value not in ('-', '0', ''):
+            counter[value] += 1
     return counter.most_common(1)[0][0] if counter else '-'
 
 
@@ -660,21 +727,28 @@ def status(msg):
     print(msg, file=sys.stderr)
     sys.stderr.flush()
 
-status('  [4/4] Python: loading symbol resolution and scheduler views...')
-symbol_resolution_text = load_text_file(symbol_resolution_file, 'symbol resolution diagnostics unavailable')
-scheduler_views_text = load_text_file(scheduler_views_file, 'scheduler views unavailable')
-status('  [4/4] Python: loading function intervals...')
-function_intervals, function_trace_tids = load_function_intervals(function_trace_file)
-status('  [4/4] Python: loading kernel wait reason samples...')
-kernel_wait_reason_samples, sampled_tids = load_kernel_wait_reason_samples(kernel_wait_reason_file)
-status('  [4/4] Python: loading stack events...')
-stack_events = load_stack_events(stack_file, enable_stacks)
+status('  [4/4] Python: loading input files in parallel ({} workers)...'.format(N_WORKERS))
+with ThreadPoolExecutor(max_workers=min(5, N_WORKERS)) as executor:
+    fut_sym = executor.submit(load_text_file, symbol_resolution_file, 'symbol resolution diagnostics unavailable')
+    fut_sched = executor.submit(load_text_file, scheduler_views_file, 'scheduler views unavailable')
+    fut_func = executor.submit(load_function_intervals, function_trace_file)
+    fut_kernel = executor.submit(load_kernel_wait_reason_samples, kernel_wait_reason_file)
+    fut_stack = executor.submit(load_stack_events, stack_file, enable_stacks)
+    symbol_resolution_text = fut_sym.result()
+    scheduler_views_text = fut_sched.result()
+    function_intervals, function_trace_tids = fut_func.result()
+    kernel_wait_reason_samples, sampled_tids = fut_kernel.result()
+    stack_events = fut_stack.result()
+for tid in function_intervals:
+    function_intervals[tid].sort(key=lambda x: x[0])
+kernel_wait_reason_index = build_kernel_wait_reason_index(kernel_wait_reason_samples)
 stack_index = build_stack_index(stack_events) if enable_stacks and stack_events else {}
 interesting_tids = set(sampled_tids) | set(function_trace_tids)
 
 # Parse perf script and reconstruct blocked intervals, wakeup timing, waker
-# identity, scheduler delay, and migration markers. This is the main timeline
-# correlation step that turns raw scheduler events into user-meaningful waits.
+# identity, scheduler delay, and migration markers. This step must be sequential:
+# events are time-ordered and state (offcpu_start, wake_time, etc.) depends on
+# prior events, so the list cannot be split across workers without changing results.
 status('  [4/4] Python: parsing perf script and reconstructing wait records (may be slow for large captures)...')
 thread_names = {}
 offcpu_start = {}
@@ -683,7 +757,8 @@ wake_time = {}
 wake_info = {}
 wait_records = []
 migration_records = []
-all_times = []
+min_ts = None
+max_ts = None
 
 if os.path.isfile(perf_script_file):
     line_count = 0
@@ -718,7 +793,13 @@ if os.path.isfile(perf_script_file):
                 continue
             event_name = match.group('event').strip()
             trace = match.group('trace')
-            all_times.append(ts)
+            if min_ts is None:
+                min_ts = max_ts = ts
+            else:
+                if ts < min_ts:
+                    min_ts = ts
+                elif ts > max_ts:
+                    max_ts = ts
             thread_names.setdefault(current_tid, current_comm)
 
             if event_name == 'sched:sched_switch':
@@ -762,7 +843,7 @@ if os.path.isfile(perf_script_file):
                     }
                     if record['wait_start'] is not None and record['wake_time'] >= record['wait_start']:
                         record['wait_ms'] = (record['wake_time'] - record['wait_start']) * 1000.0
-                        record['kernel_wait_reason'] = most_common_kernel_wait_reason(kernel_wait_reason_samples, next_tid, record['wait_start'], record['wake_time'])
+                        record['kernel_wait_reason'] = most_common_kernel_wait_reason(kernel_wait_reason_index, next_tid, record['wait_start'], record['wake_time'])
                         if enable_stacks:
                             record['sleep_stack_event'] = nearest_stack_event(stack_index, 'switch_out', next_tid, record['wait_start'], 0.002)
                             record['wake_stack_event'] = nearest_stack_event(stack_index, 'wakeup', next_tid, record['wake_time'], 0.002)
@@ -815,7 +896,7 @@ if os.path.isfile(perf_script_file):
 
 status('  [4/4] Python: parsed {} wait records, {} migrations. Building aggregates...'.format(len(wait_records), len(migration_records)))
 
-if not all_times:
+if min_ts is None:
     report = f'<!DOCTYPE html><html><head><meta charset="utf-8"><title>offcpu wait reasons report</title></head><body><h1>no scheduler events parsed</h1><h2>symbol resolution</h2><pre>{h(symbol_resolution_text)}</pre><h2>scheduler views</h2><pre>{h(scheduler_views_text)}</pre></body></html>'
     with open(report_file, 'w', encoding='utf-8') as f:
         f.write(report)
@@ -826,8 +907,8 @@ wait_records = [record for record in wait_records if record['tid'] in active_tid
 migration_records = [record for record in migration_records if record['tid'] in active_tids]
 
 lane_index = {tid: i for i, tid in enumerate(active_tids)}
-start_time = min(all_times)
-end_time = max(all_times)
+start_time = min_ts
+end_time = max_ts
 time_span = max(end_time - start_time, 0.001)
 width = 1800
 left = 280
@@ -921,12 +1002,13 @@ def summarize_bucket_map(bucket_map, title):
     rows.sort(key=lambda x: (x['max_wait'], x['count']), reverse=True)
     return title, rows[:20]
 
-bucket_sections = [
-    summarize_bucket_map(bucket_by_wait_reason, 'root-cause bucket: kernel wait reason'),
-    summarize_bucket_map(bucket_by_waker, 'root-cause bucket: waker thread'),
-    summarize_bucket_map(bucket_by_sleep_top, 'root-cause bucket: sleep-out top kernel frame'),
-    summarize_bucket_map(bucket_by_wake_top, 'root-cause bucket: wakeup top kernel frame'),
-]
+status('  [4/4] Python: building bucket sections in parallel...')
+with ThreadPoolExecutor(max_workers=min(4, N_WORKERS)) as executor:
+    fut1 = executor.submit(summarize_bucket_map, bucket_by_wait_reason, 'root-cause bucket: kernel wait reason')
+    fut2 = executor.submit(summarize_bucket_map, bucket_by_waker, 'root-cause bucket: waker thread')
+    fut3 = executor.submit(summarize_bucket_map, bucket_by_sleep_top, 'root-cause bucket: sleep-out top kernel frame')
+    fut4 = executor.submit(summarize_bucket_map, bucket_by_wake_top, 'root-cause bucket: wakeup top kernel frame')
+    bucket_sections = [fut1.result(), fut2.result(), fut3.result(), fut4.result()]
 
 status('  [4/4] Python: building summary text and SVG graph...')
 stack_focus = top_global
@@ -981,32 +1063,46 @@ for i, tid in enumerate(active_tids):
     name = thread_names.get(tid, str(tid))
     svg_parts.append(f'<line x1="{left}" y1="{y + lane_height / 2}" x2="{width - right}" y2="{y + lane_height / 2}" class="lane"/>')
     svg_parts.append(f'<text x="12" y="{y + 14}" class="label">{h(name)} [{tid}]</text>')
-for record in wait_records:
-    tid = record['tid']
-    if tid not in lane_index:
-        continue
-    y = top + lane_index[tid] * (lane_height + lane_gap)
-    event_id = record.get('event_id', '')
-    event_attr = f' data-event-id="{h(event_id)}"' if event_id else ''
-    onclick_attr = f' onclick="selectEvent(\'{h(event_id)}\'); return false;" style="cursor:pointer"' if event_id else ''
-    if record['wait_start'] is not None and record['wake_time'] is not None and record['wait_ms'] is not None:
-        x1 = x_of(record['wait_start'])
-        x2 = x_of(record['wake_time'])
-        rect_width = max(1.0, x2 - x1)
-        tooltip = f"tid={tid} comm={record['comm']} wait_ms={record['wait_ms']:.3f} state={record['prev_state']} kernel_wait_reason={record['kernel_wait_reason']} waker={record['waker_comm']}[{record['waker_tid']}]"
-        svg_parts.append(f'<rect x="{x1:.2f}" y="{y:.2f}" width="{rect_width:.2f}" height="{lane_height:.2f}" class="wait"{event_attr}{onclick_attr}><title>{h(tooltip)}</title></rect>')
-    if record['wake_time'] is not None and record['run_time'] is not None:
-        x1 = x_of(record['wake_time'])
-        x2 = x_of(record['run_time'])
-        rect_width = max(1.0, x2 - x1)
-        tooltip = f"tid={tid} comm={record['comm']} scheduler_delay_ms={record['sched_delay_ms']:.3f} target_cpu={record['target_cpu']}"
-        svg_parts.append(f'<rect x="{x1:.2f}" y="{y + 6:.2f}" width="{rect_width:.2f}" height="{max(4.0, lane_height - 12):.2f}" class="delay"{event_attr}{onclick_attr}><title>{h(tooltip)}</title></rect>')
-    waker_tid = record.get('waker_tid')
-    if waker_tid in lane_index and record['wake_time'] is not None:
-        y1 = top + lane_index[waker_tid] * (lane_height + lane_gap) + lane_height / 2
-        y2 = top + lane_index[tid] * (lane_height + lane_gap) + lane_height / 2
-        x = x_of(record['wake_time'])
-        svg_parts.append(f'<line x1="{x:.2f}" y1="{y1:.2f}" x2="{x:.2f}" y2="{y2:.2f}" class="wake"/>')
+svg_chunk_args = (lane_index, thread_names, left, top, lane_height, lane_gap, start_time, time_span, usable_width)
+if len(wait_records) >= 500 and N_WORKERS > 1:
+    n_chunks = min(N_WORKERS, len(wait_records))
+    chunk_size = (len(wait_records) + n_chunks - 1) // n_chunks
+    chunks = [(wait_records[i:i + chunk_size],) + svg_chunk_args for i in range(0, len(wait_records), chunk_size)]
+    try:
+        ctx = multiprocessing.get_context('fork')
+        pool_class = lambda w: ProcessPoolExecutor(max_workers=w, mp_context=ctx)
+    except (AttributeError, ValueError):
+        pool_class = ThreadPoolExecutor
+    with pool_class(n_chunks) as executor:
+        for chunk_result in executor.map(_build_svg_wait_chunk, chunks):
+            svg_parts.extend(chunk_result)
+else:
+    for record in wait_records:
+        tid = record['tid']
+        if tid not in lane_index:
+            continue
+        y = top + lane_index[tid] * (lane_height + lane_gap)
+        event_id = record.get('event_id', '')
+        event_attr = f' data-event-id="{h(event_id)}"' if event_id else ''
+        onclick_attr = f' onclick="selectEvent(\'{h(event_id)}\'); return false;" style="cursor:pointer"' if event_id else ''
+        if record['wait_start'] is not None and record['wake_time'] is not None and record['wait_ms'] is not None:
+            x1 = x_of(record['wait_start'])
+            x2 = x_of(record['wake_time'])
+            rect_width = max(1.0, x2 - x1)
+            tooltip = f"tid={tid} comm={record['comm']} wait_ms={record['wait_ms']:.3f} state={record['prev_state']} kernel_wait_reason={record['kernel_wait_reason']} waker={record['waker_comm']}[{record['waker_tid']}]"
+            svg_parts.append(f'<rect x="{x1:.2f}" y="{y:.2f}" width="{rect_width:.2f}" height="{lane_height:.2f}" class="wait"{event_attr}{onclick_attr}><title>{h(tooltip)}</title></rect>')
+        if record['wake_time'] is not None and record['run_time'] is not None:
+            x1 = x_of(record['wake_time'])
+            x2 = x_of(record['run_time'])
+            rect_width = max(1.0, x2 - x1)
+            tooltip = f"tid={tid} comm={record['comm']} scheduler_delay_ms={record['sched_delay_ms']:.3f} target_cpu={record['target_cpu']}"
+            svg_parts.append(f'<rect x="{x1:.2f}" y="{y + 6:.2f}" width="{rect_width:.2f}" height="{max(4.0, lane_height - 12):.2f}" class="delay"{event_attr}{onclick_attr}><title>{h(tooltip)}</title></rect>')
+        waker_tid = record.get('waker_tid')
+        if waker_tid in lane_index and record['wake_time'] is not None:
+            y1 = top + lane_index[waker_tid] * (lane_height + lane_gap) + lane_height / 2
+            y2 = top + lane_index[tid] * (lane_height + lane_gap) + lane_height / 2
+            x = x_of(record['wake_time'])
+            svg_parts.append(f'<line x1="{x:.2f}" y1="{y1:.2f}" x2="{x:.2f}" y2="{y2:.2f}" class="wake"/>')
 for migration in migration_records:
     tid = migration['tid']
     if tid not in lane_index:
