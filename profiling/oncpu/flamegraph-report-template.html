@@ -9,16 +9,16 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f1116;
-      --surface: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --accent-hover: #79b8ff;
-      --tab-active: #21262d;
-      --highlight: rgba(88, 166, 255, 0.25);
-      --tree-hover: rgba(88, 166, 255, 0.12);
+      --bg: #f6f8fa;
+      --surface: #ffffff;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --text-muted: #656d76;
+      --accent: #0969da;
+      --accent-hover: #0550ae;
+      --tab-active: #eaeef2;
+      --highlight: rgba(9, 105, 218, 0.12);
+      --tree-hover: rgba(9, 105, 218, 0.06);
     }
     * { box-sizing: border-box; }
     body {
@@ -49,6 +49,9 @@
       background: var(--surface);
     }
     .tabbtn {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
       padding: 8px 16px;
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -59,6 +62,7 @@
       font-weight: 500;
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
+      text-align: center;
     }
     .tabbtn:hover {
       background: var(--tab-active);
@@ -67,7 +71,7 @@
     .tabbtn.active {
       background: var(--accent);
       border-color: var(--accent);
-      color: var(--bg);
+      color: #fff;
     }
     .tabpanel {
       display: none;
@@ -109,6 +113,19 @@
       stroke: var(--accent);
       stroke-width: 2;
     }
+    .tabbtn.active:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .tabbtn .tab-label-line1 { display: block; }
+    .tabbtn .tab-label-line2 {
+      display: block;
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .tabbtn.active .tab-label-line2 { color: rgba(255,255,255,0.9); }
     .tree-section {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -158,6 +175,59 @@
       color: var(--text-muted);
     }
     .tree-name { word-break: break-all; }
+    .svg-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .svg-toolbar button {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .svg-toolbar button:hover:not(:disabled) {
+      background: var(--tab-active);
+      border-color: var(--accent);
+    }
+    .svg-toolbar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .svg-toolbar input[type="file"] { display: none; }
+    .tree-context-menu {
+      position: fixed;
+      z-index: 10000;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 4px 0;
+      min-width: 180px;
+    }
+    .tree-context-menu button {
+      display: block;
+      width: 100%;
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .tree-context-menu button:hover {
+      background: var(--tree-hover);
+    }
   </style>
 </head>
 <body>
@@ -171,6 +241,7 @@
     (function() {
       // Injected by generate-html-report.sh (do not edit placeholders by hand in output)
       window.PAGE_TITLE = __PAGE_TITLE_JS__;
+      window.COMM = __COMM_JS__;
       window.TAB_LABELS = __TAB_LABELS_JSON__;
       window.FOLDED_B64 = __FOLDED_B64_JSON__;
       window.TAB_SVG_B64 = __TAB_SVG_B64_JSON__;
@@ -243,10 +314,15 @@
             div.appendChild(pct);
             div.appendChild(name);
             div.onclick = function() {
+              setSelection(path.join(';'), tabIndex);
               document.querySelectorAll('.tree-node.highlight').forEach(function(n) { n.classList.remove('highlight'); });
               div.classList.add('highlight');
               highlightSvgRect(tabIndex, path);
             };
+            div.addEventListener('contextmenu', function(e) {
+              e.preventDefault();
+              showTreeContextMenu(e, path.join(';'));
+            });
             li.appendChild(div);
             if (child.children && child.children.length) {
               var subUl = renderTree(li, { children: child.children }, path, tabIndex);
@@ -286,42 +362,187 @@
       }
 
       function getTitleStack(el) {
+        if (!el) return [];
+        var g = (el.tagName === 'g' || el.tagName === 'G') ? el : el.parentNode;
+        if (!g || (g.tagName !== 'g' && g.tagName !== 'G')) g = el ? el.parentNode : null;
+        if (!g) return [];
+        var titles = g.getElementsByTagName('title');
+        var titleText = titles.length && titles[0].parentNode === g ? titles[0].textContent.trim() : '';
+        if (titleText) {
+          var part = titleText.split(/\s+/)[0];
+          if (part) {
+            if (part.indexOf(';') !== -1) return part.split(';').filter(Boolean);
+            return [part];
+          }
+        }
         var stack = [];
-        el = el && el.parentNode;
-        while (el && el.tagName !== 'svg' && el.tagName !== 'SVG') {
-          if (el.tagName === 'g' || el.tagName === 'G') {
-            var titles = el.getElementsByTagName('title');
-            if (titles.length && titles[0].parentNode === el) {
-              var s = titles[0].textContent.trim().split(/\s/)[0];
+        var walk = g;
+        while (walk && walk.tagName !== 'svg' && walk.tagName !== 'SVG') {
+          if (walk.tagName === 'g' || walk.tagName === 'G') {
+            var t = walk.getElementsByTagName('title');
+            if (t.length && t[0].parentNode === walk) {
+              var s = t[0].textContent.trim().split(/\s/)[0];
               if (s) stack.unshift(s);
             }
           }
-          el = el.parentNode;
+          walk = walk.parentNode;
         }
         return stack;
       }
 
+      function expandTreeToNode(treeNodeEl) {
+        if (!treeNodeEl) return;
+        var li = treeNodeEl.closest ? treeNodeEl.closest('.tree-li') : (treeNodeEl.parentNode && treeNodeEl.parentNode.classList && treeNodeEl.parentNode.classList.contains('tree-li') ? treeNodeEl.parentNode : null);
+        if (!li) return;
+        var p = li.parentNode;
+        while (p && p.classList && !p.classList.contains('tree-container')) {
+          if (p.classList.contains('tree-ul')) {
+            p.style.display = '';
+            var parentLi = p.parentNode;
+            if (parentLi && parentLi.classList && parentLi.classList.contains('tree-li')) {
+              var toggle = parentLi.querySelector('.tree-toggle');
+              if (toggle) toggle.textContent = '▼';
+            }
+          }
+          p = p.parentNode;
+        }
+      }
+
+      window._selectedPath = null;
+      window._selectedTabIndex = null;
+
+      function updateCopyButtonState() {
+        for (var idx = 0; idx < (window.TAB_LABELS || []).length; idx++) {
+          var panel = document.getElementById('panel' + idx);
+          if (!panel) continue;
+          var copyBtn = panel.querySelector('.btn-copy-callchain');
+          if (copyBtn) copyBtn.disabled = (window._selectedTabIndex !== idx || !window._selectedPath);
+        }
+      }
+
+      function setSelection(path, tabIndex) {
+        window._selectedPath = path;
+        window._selectedTabIndex = tabIndex;
+        updateCopyButtonState();
+      }
+
+      function copyCallchainToClipboard(path) {
+        if (!path) return;
+        var text = path.indexOf(';') !== -1 ? path.split(';').join('\n') : path;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(function() {});
+        }
+      }
+
+      function getDumpFilename(tabIndex) {
+        var comm = (window.COMM || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+        if (tabIndex === 0) return comm + '-callstacks-dumped.txt';
+        var label = (window.TAB_LABELS && window.TAB_LABELS[tabIndex]) ? window.TAB_LABELS[tabIndex] : 'thread' + tabIndex;
+        var threadPart = label.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '');
+        return comm + '-' + (threadPart || 'thread' + tabIndex) + '-callstacks-dumped.txt';
+      }
+
       function setupZoom(zoomWrap) {
         var inner = zoomWrap.querySelector('.svg-zoom-inner');
-        var scale = 1, min = 0.2, max = 5;
+        zoomWrap._scale = 1;
+        var min = 0.2, max = 5;
         zoomWrap.addEventListener('wheel', function(e) {
           if (!inner) return;
           e.preventDefault();
           var delta = e.deltaY > 0 ? -0.1 : 0.1;
-          scale = Math.min(max, Math.max(min, scale + delta));
-          inner.style.transform = 'scale(' + scale + ')';
+          zoomWrap._scale = Math.min(max, Math.max(min, zoomWrap._scale + delta));
+          inner.style.transform = 'scale(' + zoomWrap._scale + ')';
         }, { passive: false });
+      }
+
+      function resetZoom(zoomWrap) {
+        var inner = zoomWrap && zoomWrap.querySelector('.svg-zoom-inner');
+        if (inner) {
+          zoomWrap._scale = 1;
+          inner.style.transform = 'scale(1)';
+        }
+      }
+
+      var treeContextMenu = null;
+      function showTreeContextMenu(e, path) {
+        e.preventDefault();
+        if (!treeContextMenu) {
+          treeContextMenu = document.createElement('div');
+          treeContextMenu.className = 'tree-context-menu';
+          var copyItem = document.createElement('button');
+          copyItem.textContent = 'Copy selected callchain';
+          copyItem.onclick = function(e) {
+            e.stopPropagation();
+            if (treeContextMenu._path) copyCallchainToClipboard(treeContextMenu._path);
+            treeContextMenu.style.display = 'none';
+          };
+          treeContextMenu.appendChild(copyItem);
+          document.body.appendChild(treeContextMenu);
+          document.addEventListener('click', function() { treeContextMenu.style.display = 'none'; });
+        }
+        treeContextMenu._path = path;
+        treeContextMenu.style.display = 'block';
+        treeContextMenu.style.left = (e.clientX + 2) + 'px';
+        treeContextMenu.style.top = (e.clientY + 2) + 'px';
+      }
+
+      function totalSamplesFromFolded(foldedText) {
+        if (!foldedText || !foldedText.trim()) return 0;
+        var total = 0;
+        var lines = foldedText.trim().split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          var lastSpace = line.lastIndexOf(' ');
+          if (lastSpace === -1) continue;
+          var count = parseInt(line.slice(lastSpace + 1), 10);
+          if (!isNaN(count)) total += count;
+        }
+        return total;
+      }
+
+      function computeTabPercentages() {
+        var totals = [];
+        var allTotal = 0;
+        if (!window.FOLDED_B64 || !window.FOLDED_B64.length) return totals;
+        for (var i = 0; i < window.FOLDED_B64.length; i++) {
+          try {
+            var text = window.FOLDED_B64[i] ? atob(window.FOLDED_B64[i]) : '';
+            var t = totalSamplesFromFolded(text);
+            totals.push(t);
+            if (i === 0) allTotal = t;
+          } catch (e) { totals.push(0); }
+        }
+        if (allTotal <= 0) return totals;
+        window._tabPctOfAll = [];
+        for (var j = 0; j < totals.length; j++) {
+          window._tabPctOfAll.push(j === 0 ? 100 : (totals[j] / allTotal * 100));
+        }
+        return totals;
       }
 
       function init() {
         document.getElementById('page-title').textContent = (window.PAGE_TITLE || 'Flame graphs');
         if (!window.TAB_LABELS || !window.TAB_LABELS.length) return;
+        computeTabPercentages();
         var tabbar = document.getElementById('tabbar');
         var panels = document.getElementById('panels');
         for (var i = 0; i < window.TAB_LABELS.length; i++) {
           var btn = document.createElement('button');
           btn.className = 'tabbtn' + (i === 0 ? ' active' : '');
-          btn.textContent = window.TAB_LABELS[i];
+          if (i === 0) {
+            btn.textContent = window.TAB_LABELS[i];
+          } else {
+            var line1 = document.createElement('span');
+            line1.className = 'tab-label-line1';
+            line1.textContent = window.TAB_LABELS[i];
+            btn.appendChild(line1);
+            if (window._tabPctOfAll && window._tabPctOfAll[i] !== undefined) {
+              var line2 = document.createElement('span');
+              line2.className = 'tab-label-line2';
+              line2.textContent = (window._tabPctOfAll[i].toFixed(1)) + '% of All threads';
+              btn.appendChild(line2);
+            }
+          }
           btn.onclick = (function(idx) { return function() { showTab(idx); }; })(i);
           tabbar.appendChild(btn);
 
@@ -330,6 +551,70 @@
           panel.className = 'tabpanel' + (i === 0 ? ' active' : '');
           var main = document.createElement('div');
           main.className = 'panel-main';
+
+          var toolbar = document.createElement('div');
+          toolbar.className = 'svg-toolbar';
+
+          var resolveInput = document.createElement('input');
+          resolveInput.type = 'file';
+          resolveInput.multiple = true;
+          resolveInput.setAttribute('webkitdirectory', '');
+          resolveInput.setAttribute('directory', '');
+          toolbar.appendChild(resolveInput);
+          var resolveBtn = document.createElement('button');
+          resolveBtn.type = 'button';
+          resolveBtn.title = 'Select debug symbol files or a directory to search. Symbol resolution (addr2line) must be run locally: use Dump callstacks to export, then run your resolver with the exported file and symbol path.';
+          resolveBtn.textContent = 'Resolve symbol names';
+          resolveBtn.onclick = function() { resolveInput.click(); };
+          resolveInput.onchange = function() {
+            if (resolveInput.files && resolveInput.files.length) window.alert('Symbol resolution (addr2line) cannot run in the browser. Use "Dump callstacks" to export the folded stacks, then run addr2line (or your script) locally with the selected symbol path and the exported file.');
+            resolveInput.value = '';
+          };
+          toolbar.appendChild(resolveBtn);
+
+          var dumpBtn = document.createElement('button');
+          dumpBtn.type = 'button';
+          dumpBtn.title = 'Save the callstack data (folded format) used to generate this flame graph to a text file. Choose a directory to save; filename will be suggested.';
+          dumpBtn.textContent = 'Dump callstacks';
+          dumpBtn.onclick = (function(tabIdx) {
+            return function() {
+              if (!window.FOLDED_B64 || !window.FOLDED_B64[tabIdx]) return;
+              try {
+                var text = atob(window.FOLDED_B64[tabIdx]);
+                var blob = new Blob([text], { type: 'text/plain' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = getDumpFilename(tabIdx);
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) {}
+            };
+          })(i);
+          toolbar.appendChild(dumpBtn);
+
+          var copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'btn-copy-callchain';
+          copyBtn.title = 'Copy the selected callchain from root to leaf (enable after selecting a function in the SVG or tree).';
+          copyBtn.textContent = 'Copy selected callchain';
+          copyBtn.disabled = true;
+          copyBtn.onclick = function() { copyCallchainToClipboard(window._selectedPath); };
+          toolbar.appendChild(copyBtn);
+
+          var resetZoomBtn = document.createElement('button');
+          resetZoomBtn.type = 'button';
+          resetZoomBtn.title = 'Reset SVG zoom to 100%.';
+          resetZoomBtn.textContent = 'Reset Zoom';
+          resetZoomBtn.onclick = (function(panelEl) {
+            return function() {
+              var zw = panelEl.querySelector('.svg-zoom-wrap');
+              resetZoom(zw);
+            };
+          })(panel);
+          toolbar.appendChild(resetZoomBtn);
+
+          main.appendChild(toolbar);
 
           var zoomWrap = document.createElement('div');
           zoomWrap.className = 'svg-zoom-wrap';
@@ -373,6 +658,7 @@
               var stack = getTitleStack(t);
               if (!stack.length) return;
               var path = stack.join(';');
+              setSelection(path, panelIdx);
               document.querySelectorAll('#panel' + panelIdx + ' .tree-node.highlight').forEach(function(n) { n.classList.remove('highlight'); });
               var nodeEl = null;
               var lis = panel.querySelectorAll('.tree-li');
@@ -383,13 +669,15 @@
                 var parts = path.split(';');
                 for (var len = parts.length - 1; len >= 1; len--) {
                   var sub = parts.slice(0, len).join(';');
-                  for (var li = 0; li < lis.length; li++) {
-                    if (lis[li].dataset.path === sub) { nodeEl = lis[li].querySelector('.tree-node'); break; }
+                  for (var li2 = 0; li2 < lis.length; li2++) {
+                    if (lis[li2].dataset.path === sub) { nodeEl = lis[li2].querySelector('.tree-node'); break; }
                   }
                   if (nodeEl) break;
                 }
               }
               if (nodeEl) {
+                setSelection(path, panelIdx);
+                expandTreeToNode(nodeEl);
                 nodeEl.classList.add('highlight');
                 nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
               }

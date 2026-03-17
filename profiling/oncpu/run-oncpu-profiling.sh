@@ -7,6 +7,7 @@ RECORD_SECONDS=5 # perf recording duration in seconds.
 RECORD_FREQ=1000 # perf sampling frequency in Hz.
 UNWIND_METHOD=dwarf # dwarf or fp (frame pointer)
 INSTALL_DEBUG_SYMBOL=false
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 unset PID COMM
 
 while (( $# )); do
@@ -52,6 +53,7 @@ fi
 if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then
         PID=$1
+        echo "Received PID: $PID"
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then
         pstree -aspT $(pidof steam)
         read -p "Select steam game PID: " PID
@@ -66,7 +68,10 @@ if [[ ! -z $1 ]]; then
     [[ -z $COMM ]] && COMM=untitled
 
     # Install debug symbol packages for the target process.
-    [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
+    if [[ ! -z $(which find-dbgsym-packages) ]]; then 
+        echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
+        find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
+    fi 
     if [[ $INSTALL_DEBUG_SYMBOL == true ]]; then
         echo "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
@@ -82,5 +87,4 @@ fi
 [[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
 # Perf record and postprocess (flamegraphs); HTML report is generated inside when applicable.
-SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 . "$SCRIPT_DIR/perf-record-and-postprocess.sh"

@@ -32,12 +32,17 @@ f_page="$tmpdir/grep_page_$pid"
 f_labels="$tmpdir/grep_labels_$pid"
 f_folded="$tmpdir/grep_folded_$pid"
 f_svg="$tmpdir/grep_svg_$pid"
-cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg"; }
+f_comm="$tmpdir/grep_comm_$pid"
+cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg" "$f_comm"; }
 trap cleanup EXIT
 
 # Build replacement for __PAGE_TITLE_JS__ (full assignment line; 6 spaces to match template)
 page_title_escaped=$(echo "$COMM flame graphs" | sed 's/\\/\\\\/g; s/"/\\"/g')
 printf '      window.PAGE_TITLE = "%s";\n' "$page_title_escaped" > "$f_page"
+
+# Build replacement for __COMM_JS__ (for dump filename)
+comm_escaped=$(echo "$COMM" | sed 's/\\/\\\\/g; s/"/\\"/g')
+printf '      window.COMM = "%s";\n' "$comm_escaped" > "$f_comm"
 
 # Build JSON array for tab labels (escape each element for JSON)
 printf '      window.TAB_LABELS = ' > "$f_labels"
@@ -75,9 +80,10 @@ echo '];' >> "$f_svg"
 # Substitute placeholders: replace the line containing each placeholder with the contents of the temp file.
 # POSIX sed requires newline after 'r filename'; each -e is one fragment, so we use $'\n' for newline.
 sed -e "/__PAGE_TITLE_JS__/{ r $f_page" -e $'\nd}' \
-    -e "/__TAB_LABELS_JSON__/{ r $f_labels" -e $'\nd}' \
-    -e "/__FOLDED_B64_JSON__/{ r $f_folded" -e $'\nd}' \
-    -e "/__TAB_SVG_B64_JSON__/{ r $f_svg" -e $'\nd}' \
-    "$TEMPLATE" > "$html_file"
+   -e "/__COMM_JS__/{ r $f_comm" -e $'\nd}' \
+   -e "/__TAB_LABELS_JSON__/{ r $f_labels" -e $'\nd}' \
+   -e "/__FOLDED_B64_JSON__/{ r $f_folded" -e $'\nd}' \
+   -e "/__TAB_SVG_B64_JSON__/{ r $f_svg" -e $'\nd}' \
+   "$TEMPLATE" > "$html_file"
 
 echo "    - $html_file (tab view)"

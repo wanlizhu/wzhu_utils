@@ -13,6 +13,8 @@ set -o pipefail
 [[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "perf-record-and-postprocess.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
 [[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "perf-record-and-postprocess.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
+
 # Remove previous output from earlier runs so the new result is easier to inspect.
 sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg $HOME/${COMM}_flamegraph_tabs.html
 
@@ -32,7 +34,6 @@ if [[ -f /tmp/perf.data ]]; then
         cat /tmp/perf.txt | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | flamegraph.pl >$HOME/${COMM}_flamegraph.svg && echo "Generated $HOME/${COMM}_flamegraph.svg"
 
         # Per-thread flamegraphs and tabbed HTML (when multiple threads) are generated here.
-        SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
         . "$SCRIPT_DIR/generate-perthread-flamegraph.sh"
     fi
 fi
