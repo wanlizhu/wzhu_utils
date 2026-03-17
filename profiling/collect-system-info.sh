@@ -1,38 +1,5 @@
 #!/usr/bin/env bash
-#
-# collect-system-info.sh - Collect system hardware and environment information.
-#
-# DESCRIPTION
-#   This script gathers static system information (CPU, memory, GPU, kernel,
-#   environment) and writes it to a file or prints a brief summary. It supports
-#   two modes:
-#
-#   Full mode (default): Appends multiple sections to OUTPUT_FILE (default
-#   ~/system_info.txt): basic header (hostname, OS, kernel, CPU model, GPUs),
-#   environment variables, CPU static info (lscpu, power limits, per-CPU
-#   cpufreq/governor), memory static info (dmidecode summary and per-DIMM
-#   table), NVIDIA kernel module parameters, and full nvidia-smi/lspci output
-#   per GPU. Used for detailed system profiling or debugging.
-#
-#   Brief mode (first positional argument "brief"): Writes a short summary to
-#   /tmp/brief (hostname, OS, kernel, memory summary, CPU summary including
-#   P-core/E-core on Intel, GPU list with key attributes) and displays it via
-#   print-ascii-tree.sh if available, else cat. Exits after printing.
-#
-# KEY RELATIONSHIPS
-#   - print_mem_brief() is used both in brief mode and by append_mem_static_info().
-#   - print_cpu_* and count_cpu_core_list() are used in brief mode and by
-#     append_cpu_static_info().
-#   - print_gpu_info() is used in brief mode (fixed attribute list) and by
-#     append_nvidia_smi_query() (full attribute list).
-#   - All append_* functions write to the same OUTPUT_FILE in sequence to
-#     build the full report.
-#
-# REQUIREMENTS
-#   Bash; optional: dmidecode (sudo), nvidia-smi, powerprofilesctl, lsb_release,
-#   print-ascii-tree.sh. Some sections output "N/A" when tools or sysfs paths
-#   are missing (e.g. non-Intel, no NVIDIA GPU).
-#
+
 set -o pipefail
 
 OUTPUT_FILE=~/system_info.txt
