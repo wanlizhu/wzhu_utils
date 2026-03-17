@@ -90,6 +90,12 @@ stack_trace_pid=
 kernel_wait_reason_sampler_pid=
 timeout_pid=
 
+# Set to 1 only while the script is in the capture wait loop. Used by INT/TERM trap:
+# - If CAPTURING=1: stop capture and run post-processing, then preserve TEMP_DIR.
+# - If CAPTURING=0: exit gracefully (kill children, remove TEMP_DIR, no post-processing).
+CAPTURING=0
+CLEANUP_IN_PROGRESS=
+
 # -----------------------------------------------------------------------------
 # print_help
 #
@@ -166,19 +172,35 @@ print_help() {
 #     kernel wait reason sampler, and the timeout helper. It also removes the
 #     temporary working directory created for intermediate artifacts.
 #
-#     The cleanup path is intentionally tolerant of partial setup and partial
-#     failure. It checks every process handle before kill/wait so the script can
-#     exit cleanly after startup failures, Ctrl-C, timeout, or missing-symbol
-#     cases without leaving collectors running in the background.
+#     Ctrl-C (INT/TERM) works in two modes:
+#     - Capturing: script is in the capture wait loop or reaping children.
+#       Ctrl-C stops capture, runs post-processing on collected data, and
+#       preserves TEMP_DIR.
+#     - Not capturing: script is in setup or post-processing. Ctrl-C exits
+#       gracefully (kill children, remove TEMP_DIR, no post-processing).
+#
+#     All capture children are independent (no lock or ordering dependency).
+#     Re-entrant cleanup (e.g. second Ctrl-C during post-processing) returns
+#     immediately; the running command receives SIGINT and exits.
 # -----------------------------------------------------------------------------
 cleanup() {
     printf '\n'
+    # Re-entrancy: second Ctrl-C during post-processing (or nested signal) → do nothing and return.
+    # (The running post-processing command, e.g. python, will receive SIGINT and exit; then first cleanup continues.)
+    if [[ -n $CLEANUP_IN_PROGRESS ]]; then
+        return 0
+    fi
+    CLEANUP_IN_PROGRESS=1
+
+    # Stop all capture children. Order does not matter; they do not depend on each other.
+    # perf record and bpftrace flush on SIGINT; kernel sampler and timeout subshell exit on SIGTERM.
     [[ -n $perf_pid ]] && kill -0 $perf_pid 2>/dev/null && kill -INT $perf_pid
     [[ -n $function_trace_pid ]] && kill -0 $function_trace_pid 2>/dev/null && kill -INT $function_trace_pid
     [[ -n $stack_trace_pid ]] && kill -0 $stack_trace_pid 2>/dev/null && kill -INT $stack_trace_pid
     [[ -n $kernel_wait_reason_sampler_pid ]] && kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null && kill -TERM $kernel_wait_reason_sampler_pid
     [[ -n $timeout_pid ]] && kill -0 $timeout_pid 2>/dev/null && kill $timeout_pid
 
+    # Wait for each in turn. No circular dependency; all are independent background jobs.
     [[ -n $perf_pid ]] && wait $perf_pid 2>/dev/null || true
     [[ -n $function_trace_pid ]] && wait $function_trace_pid 2>/dev/null || true
     [[ -n $stack_trace_pid ]] && wait $stack_trace_pid 2>/dev/null || true
@@ -192,11 +214,14 @@ cleanup() {
         if [[ -n $TEMP_DIR && -d $TEMP_DIR ]]; then
             if has_perf_data; then
                 echo "Post-processing (perf script, report generation)..." >&2
+                echo "  [1/4] Running perf script..." >&2
                 if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
                     -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt" 2>/dev/null; then
                     : > "$TEMP_DIR/perf_script.txt"
                 fi
+                echo "  [2/4] Fixing file ownership..." >&2
                 sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" 2>/dev/null || true
+                echo "  [3/4] Building scheduler views..." >&2
                 {
                     echo "===== perf sched timehist ====="
                     sudo perf sched timehist -i "$TEMP_DIR/perf_sched.data" -p $TARGET_PID -w -M -n --state -S 2>/dev/null || true
@@ -207,6 +232,7 @@ cleanup() {
                     echo "===== perf sched map ====="
                     sudo perf sched map -i "$TEMP_DIR/perf_sched.data" --compact 2>/dev/null || true
                 } > "$TEMP_DIR/scheduler_views.txt"
+                echo "  [4/4] Running Python report generator..." >&2
                 run_python_postprocessor && echo "generated: $OUT_DIR/out_report.html" >&2
             else
                 : > "$TEMP_DIR/perf_script.txt"
@@ -217,7 +243,8 @@ cleanup() {
     fi
 }
 
-trap 'CLEANUP_PRESERVE_TEMP=1; cleanup' INT TERM
+# INT/TERM: if we are in the capture wait loop, stop capture and run post-processing; else exit gracefully.
+trap 'if [[ -n "$CAPTURING" && "$CAPTURING" -eq 1 ]]; then CLEANUP_PRESERVE_TEMP=1; fi; cleanup' INT TERM
 trap cleanup EXIT
 
 # -----------------------------------------------------------------------------
@@ -1391,6 +1418,8 @@ else
 fi
 
 # Wait until perf is stopped (by timeout, or by Ctrl-C when CAPTURE_SECONDS=0). Do not wait for target process.
+# CAPTURING=1 for the whole capture + reap phase so Ctrl-C here means "stop and run post-processing".
+CAPTURING=1
 while kill -0 $perf_pid 2>/dev/null; do
     sleep 0.2
 done
@@ -1407,12 +1436,14 @@ wait $perf_pid 2>/dev/null || true
 kill -0 $kernel_wait_reason_sampler_pid 2>/dev/null && kill -TERM $kernel_wait_reason_sampler_pid
 wait $kernel_wait_reason_sampler_pid 2>/dev/null || true
 
+CAPTURING=0
 echo "Post-processing (perf script, report generation)..."
 # Handle missing or empty perf data: skip perf script and produce minimal report.
 if ! has_perf_data; then
     echo "warning: no perf data captured (perf_sched.data missing or empty), generating minimal report" >&2
     : > "$TEMP_DIR/perf_script.txt"
 else
+    echo "  [1/4] Running perf script (may take a while for large captures)..."
     if ! sudo perf script -i "$TEMP_DIR/perf_sched.data" \
         -F comm,pid,tid,cpu,time,event,trace > "$TEMP_DIR/perf_script.txt"; then
         echo "warning: perf script failed, generating minimal report" >&2
@@ -1420,10 +1451,11 @@ else
     fi
 fi
 
-# Make sudo-created files in TEMP_DIR readable by the current user for the Python postprocessor.
+echo "  [2/4] Fixing file ownership (chown)..."
 sudo chown -R $REAL_UID:$REAL_GID "$TEMP_DIR" || true
 
 # Scheduler views require valid perf data; otherwise write a placeholder.
+echo "  [3/4] Building scheduler views (timehist, latency, map)..."
 if has_perf_data; then
     {
         echo "===== perf sched timehist ====="
@@ -1439,6 +1471,7 @@ else
     echo "perf data not available (perf_sched.data missing or empty)" > "$TEMP_DIR/scheduler_views.txt"
 fi
 
+echo "  [4/4] Running Python report generator..."
 if ! run_python_postprocessor; then
     echo "error: Python post-processing failed" >&2
     exit 1
