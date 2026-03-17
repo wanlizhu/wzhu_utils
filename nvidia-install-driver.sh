@@ -39,6 +39,7 @@ install_local_file() {
     local file=$1 
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
     [[ -z $file || ! -e $file ]] && return 1
+    [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && return 1
     [[ -z $(which expect) ]] && sudo apt install -y expect 
 
     sudo chmod +x $file 2>/dev/null 
