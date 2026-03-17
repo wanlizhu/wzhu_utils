@@ -669,39 +669,25 @@
           resizeWrap.appendChild(resizeB);
           resizeWrap.appendChild(resizeCorner);
           (function (wrap, rHandle, bHandle, cornerHandle) {
-            function attachListeners(move, stop) {
-              document.addEventListener('mousemove', move);
-              document.addEventListener('mouseup', stop);
-              var obj = wrap.querySelector('object');
-              var doc2 = obj && obj.contentDocument;
-              if (doc2) {
-                doc2.addEventListener('mousemove', move);
-                doc2.addEventListener('mouseup', stop);
-              }
-            }
-            function removeListeners(move, stop) {
-              document.removeEventListener('mousemove', move);
-              document.removeEventListener('mouseup', stop);
-              var obj = wrap.querySelector('object');
-              var doc2 = obj && obj.contentDocument;
-              if (doc2) {
-                doc2.removeEventListener('mousemove', move);
-                doc2.removeEventListener('mouseup', stop);
-              }
-            }
             function startResizeW(e) {
-              if (e.button !== 0) return;
+              if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
               var startX = e.clientX, startW = wrap.offsetWidth;
               function move(ev) {
                 var w = Math.max(100, startW + (ev.clientX - startX));
                 wrap.style.width = w + 'px';
               }
-              function stop() { removeListeners(move, stop); }
-              attachListeners(move, stop);
+              function stop(ev) {
+                rHandle.removeEventListener('pointermove', move);
+                rHandle.removeEventListener('pointerup', stop);
+                try { rHandle.releasePointerCapture(ev.pointerId); } catch (err) {}
+              }
+              rHandle.setPointerCapture(e.pointerId);
+              rHandle.addEventListener('pointermove', move);
+              rHandle.addEventListener('pointerup', stop);
             }
             function startResizeH(e) {
-              if (e.button !== 0) return;
+              if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
               var startY = e.clientY, startH = wrap.offsetHeight;
               wrap.setAttribute('data-height-set', '1');
@@ -709,11 +695,17 @@
                 var h = Math.max(100, startH + (ev.clientY - startY));
                 wrap.style.height = h + 'px';
               }
-              function stop() { removeListeners(move, stop); }
-              attachListeners(move, stop);
+              function stop(ev) {
+                bHandle.removeEventListener('pointermove', move);
+                bHandle.removeEventListener('pointerup', stop);
+                try { bHandle.releasePointerCapture(ev.pointerId); } catch (err) {}
+              }
+              bHandle.setPointerCapture(e.pointerId);
+              bHandle.addEventListener('pointermove', move);
+              bHandle.addEventListener('pointerup', stop);
             }
             function startResizeCorner(e) {
-              if (e.button !== 0) return;
+              if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
               var startX = e.clientX, startY = e.clientY, startW = wrap.offsetWidth, startH = wrap.offsetHeight;
               wrap.setAttribute('data-height-set', '1');
@@ -723,12 +715,18 @@
                 wrap.style.width = w + 'px';
                 wrap.style.height = h + 'px';
               }
-              function stop() { removeListeners(move, stop); }
-              attachListeners(move, stop);
+              function stop(ev) {
+                cornerHandle.removeEventListener('pointermove', move);
+                cornerHandle.removeEventListener('pointerup', stop);
+                try { cornerHandle.releasePointerCapture(ev.pointerId); } catch (err) {}
+              }
+              cornerHandle.setPointerCapture(e.pointerId);
+              cornerHandle.addEventListener('pointermove', move);
+              cornerHandle.addEventListener('pointerup', stop);
             }
-            rHandle.addEventListener('mousedown', startResizeW);
-            bHandle.addEventListener('mousedown', startResizeH);
-            cornerHandle.addEventListener('mousedown', startResizeCorner);
+            rHandle.addEventListener('pointerdown', startResizeW);
+            bHandle.addEventListener('pointerdown', startResizeH);
+            cornerHandle.addEventListener('pointerdown', startResizeCorner);
           })(resizeWrap, resizeR, resizeB, resizeCorner);
           svgToolbarWrap.appendChild(resizeWrap);
           main.appendChild(svgToolbarWrap);
