@@ -50,7 +50,11 @@
 #     that cannot be visualized is embedded into its own HTML tab.
 #
 # Implementation overview:
-#     - perf record captures scheduler tracepoints system-wide
+#     - perf record captures scheduler tracepoints system-wide (-a). This is required
+#       so that wakeup events from external processes (e.g. another process releasing
+#       a semaphore that unblocks the target) are recorded; -p would miss those and
+#       the wait-wake graph would lose waker identity and wake-side context.
+#       Tracepoints record every event (no sampling rate); expect large data on busy systems.
 #     - optional bpftrace uprobe/uretprobe traces FUNCTION_NAME enter/exit
 #     - optional bpftrace captures stack context around scheduler events
 #     - /proc sampling collects thread state and kernel wait reason
@@ -67,7 +71,7 @@
 set -o pipefail
 
 CAPTURE_SECONDS=0  # when 0, capture continues until interrupted by Ctrl-C
-SAMPLE_MS=10
+SAMPLE_MS=10       # only for kernel wait reason /proc sampler (polling interval in ms)
 LONG_WAIT_MS=2.0
 OUT_DIR=./offcpu_wait_reasons.d
 
@@ -140,7 +144,7 @@ print_help() {
     echo "    $OUT_DIR/out_report.html"
     echo
     echo "Config variables near top of script:"
-    echo "    CAPTURE_SECONDS  (0 = capture until Ctrl-C)"
+    echo "    CAPTURE_SECONDS  (0 = capture until Ctrl-C; perf is system-wide so data grows quickly)"
     echo "    SAMPLE_MS"
     echo "    LONG_WAIT_MS"
     echo "    OUT_DIR"
@@ -620,16 +624,25 @@ migrate_re = re.compile(
     r'comm=(?P<comm>.+?)\s+pid=(?P<tid>\d+)\s+prio=(?P<prio>\d+)\s+orig_cpu=(?P<orig>\d+)\s+dest_cpu=(?P<dest>\d+)'
 )
 
+def status(msg):
+    print(msg, file=sys.stderr)
+    sys.stderr.flush()
+
+status('  [4/4] Python: loading symbol resolution and scheduler views...')
 symbol_resolution_text = load_text_file(symbol_resolution_file, 'symbol resolution diagnostics unavailable')
 scheduler_views_text = load_text_file(scheduler_views_file, 'scheduler views unavailable')
+status('  [4/4] Python: loading function intervals...')
 function_intervals, function_trace_tids = load_function_intervals(function_trace_file)
+status('  [4/4] Python: loading kernel wait reason samples...')
 kernel_wait_reason_samples, sampled_tids = load_kernel_wait_reason_samples(kernel_wait_reason_file)
+status('  [4/4] Python: loading stack events...')
 stack_events = load_stack_events(stack_file, enable_stacks)
 interesting_tids = set(sampled_tids) | set(function_trace_tids)
 
 # Parse perf script and reconstruct blocked intervals, wakeup timing, waker
 # identity, scheduler delay, and migration markers. This is the main timeline
 # correlation step that turns raw scheduler events into user-meaningful waits.
+status('  [4/4] Python: parsing perf script and reconstructing wait records (may be slow for large captures)...')
 thread_names = {}
 offcpu_start = {}
 offcpu_state = {}
@@ -749,6 +762,8 @@ if os.path.isfile(perf_script_file):
                         'dest_cpu': dest_cpu,
                     })
 
+status('  [4/4] Python: parsed {} wait records, {} migrations. Building aggregates...'.format(len(wait_records), len(migration_records)))
+
 if not all_times:
     report = f'<!DOCTYPE html><html><head><meta charset="utf-8"><title>offcpu wait reasons report</title></head><body><h1>no scheduler events parsed</h1><h2>symbol resolution</h2><pre>{h(symbol_resolution_text)}</pre><h2>scheduler views</h2><pre>{h(scheduler_views_text)}</pre></body></html>'
     with open(report_file, 'w', encoding='utf-8') as f:
@@ -862,6 +877,7 @@ bucket_sections = [
     summarize_bucket_map(bucket_by_wake_top, 'root-cause bucket: wakeup top kernel frame'),
 ]
 
+status('  [4/4] Python: building summary text and SVG graph...')
 stack_focus = top_global
 if stack_scope == 'long_wait':
     stack_focus = [record for record in top_global if record['wait_ms'] is not None and record['wait_ms'] >= long_wait_ms]
@@ -956,6 +972,7 @@ for i in range(11):
 svg_parts.append('</svg>')
 svg_text = ''.join(svg_parts)
 
+status('  [4/4] Python: building HTML report...')
 header_text = f'pid={target_pid} scope={analysis_scope} active_threads={len(active_tids)} long_wait_ms={long_wait_ms}'
 if function_name:
     header_text += f' function_name={function_name}'
@@ -1099,8 +1116,10 @@ html_parts.append(f'<div id="tab-sched" class="tabpanel"><h2>scheduler views</h2
 html_parts.append(f'<div id="tab-raw" class="tabpanel"><h2>raw summary</h2><pre>{h(summary_text)}</pre></div>')
 html_parts.append('</body></html>')
 
+status('  [4/4] Python: writing report to {}...'.format(report_file))
 with open(report_file, 'w', encoding='utf-8') as f:
     f.write(''.join(html_parts))
+status('  [4/4] Python: done.')
 PYBLOCK
 }
 
@@ -1391,6 +1410,8 @@ if ! kill -0 $kernel_wait_reason_sampler_pid; then
     exit 1
 fi
 
+# System-wide (-a) so we capture wakeups where an external process wakes the target (waker != target).
+# No sampling; every sched event is recorded — use short CAPTURE_SECONDS if data volume is a concern.
 sudo perf record -a \
     -o "$TEMP_DIR/perf_sched.data" \
     -e sched:sched_switch \
