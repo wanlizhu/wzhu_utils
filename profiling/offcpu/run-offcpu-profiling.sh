@@ -126,11 +126,10 @@ fi
 if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
     TOP3=
     if [[ $(wc -l <"$HOME/${COMM}_wakers.txt") -gt 1 ]]; then
-        # CSV: timestamp,waker_pid,waker_comm,waker_tid,woke_tid. Aggregate by waker_pid, take top 3, show resolved name only.
+        # CSV: timestamp,waker_pid,waker_comm,waker_tid,woke_tid. Aggregate by waker_pid, take top 3, show names only.
         TOP3=$(awk -F',' 'NR>1 { n[$2]++ }
             END { for (p in n) print n[p], p }' "$HOME/${COMM}_wakers.txt" | sort -rn | head -3 | awk '
             {
-                count = $1
                 pid = $2
                 comm = ""
                 if ((getline comm < ("/proc/" pid "/comm")) > 0) {
@@ -138,7 +137,7 @@ if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
                     gsub(/\r?\n$/, "", comm)
                 }
                 if (comm == "") comm = "?"
-                printf "%s%s: %s", (NR > 1 ? ", " : ""), comm, count
+                printf "%s%s", (NR > 1 ? ", " : ""), comm
             }')
     fi
     if [[ -n "$TOP3" ]]; then
