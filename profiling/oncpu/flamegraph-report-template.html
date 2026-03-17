@@ -107,32 +107,63 @@
     .svg-resize-r, .svg-resize-b, .svg-resize-corner {
       position: absolute;
       z-index: 2;
-      background: transparent;
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
     .svg-resize-r {
       top: 0;
       right: 0;
-      width: 8px;
+      width: 10px;
       height: 100%;
       cursor: col-resize;
+      border-right: 2px solid var(--accent);
+    }
+    .svg-resize-r:hover {
+      background: rgba(0, 0, 0, 0.08);
+      border-color: var(--accent);
+      box-shadow: -2px 0 6px rgba(0, 0, 0, 0.1);
     }
     .svg-resize-b {
       bottom: 0;
       left: 0;
       width: 100%;
-      height: 8px;
+      height: 10px;
       cursor: row-resize;
+      border-bottom: 2px solid var(--accent);
+    }
+    .svg-resize-b:hover {
+      background: rgba(0, 0, 0, 0.08);
+      border-color: var(--accent);
+      box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
     }
     .svg-resize-corner {
       right: 0;
       bottom: 0;
-      width: 14px;
-      height: 14px;
+      width: 18px;
+      height: 18px;
       cursor: nwse-resize;
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.06) 0%, transparent 50%, rgba(0, 0, 0, 0.06) 100%);
+      border-radius: 2px;
     }
-    .svg-resize-r:hover, .svg-resize-b:hover, .svg-resize-corner:hover {
-      background: var(--accent);
-      opacity: 0.2;
+    .svg-resize-corner::after {
+      content: '';
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--accent);
+      border-bottom: 2px solid var(--accent);
+      border-radius: 0 0 2px 0;
+    }
+    .svg-resize-corner:hover {
+      background: rgba(0, 0, 0, 0.1);
+      border-color: var(--accent);
+      box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.12);
+    }
+    .svg-resize-corner:hover::after {
+      border-color: var(--accent);
     }
     .svg-zoom-inner {
       display: block;
@@ -147,7 +178,7 @@
       height: 100%;
       vertical-align: top;
       object-fit: contain;
-      object-position: left top;
+      object-position: center center;
     }
     .tabbtn.active:hover {
       background: var(--accent-hover);
@@ -706,8 +737,10 @@
             function startResizeW(e) {
               if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
+              var startW = wrap.offsetWidth;
+              wrap.style.width = startW + 'px';
               wrap.setAttribute('data-width-set', '1');
-              var startX = e.clientX, startW = wrap.offsetWidth;
+              var startX = e.clientX;
               function move(ev) {
                 var w = Math.max(100, startW + (ev.clientX - startX));
                 wrap.style.width = w + 'px';
@@ -724,8 +757,10 @@
             function startResizeH(e) {
               if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
-              var startY = e.clientY, startH = wrap.offsetHeight;
+              var startH = wrap.offsetHeight;
+              wrap.style.height = startH + 'px';
               wrap.setAttribute('data-height-set', '1');
+              var startY = e.clientY;
               function move(ev) {
                 var h = Math.max(100, startH + (ev.clientY - startY));
                 wrap.style.height = h + 'px';
@@ -742,9 +777,12 @@
             function startResizeCorner(e) {
               if (e.button !== 0 || e.pointerType !== 'mouse') return;
               e.preventDefault();
+              var startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+              wrap.style.width = startW + 'px';
+              wrap.style.height = startH + 'px';
               wrap.setAttribute('data-width-set', '1');
               wrap.setAttribute('data-height-set', '1');
-              var startX = e.clientX, startY = e.clientY, startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+              var startX = e.clientX, startY = e.clientY;
               function move(ev) {
                 var w = Math.max(100, startW + (ev.clientX - startX));
                 var h = Math.max(100, startH + (ev.clientY - startY));
