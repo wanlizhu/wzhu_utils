@@ -65,7 +65,7 @@ if [[ ! -z $1 ]]; then
 fi
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg $HOME/${COMM}_wakers.txt $HOME/${COMM}_lock_contention.txt
+sudo rm -rf /tmp/offwake.folded $HOME/${COMM}_waitgraph.svg $HOME/${COMM}_tid*_waitgraph.svg $HOME/${COMM}_wakers.txt $HOME/${COMM}_lock_contention.txt $HOME/${COMM}_profiling_stderr.log
 
 # Running waker tracer in background (logs which PID/comm wakes the target).
 WAKER_PID=
@@ -73,7 +73,7 @@ if [[ $TRACE_WAKERS == true ]]; then
     echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS s -> $HOME/${COMM}_wakers.txt"
     ( 
         echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"; 
-        sudo timeout $RECORD_SECONDS bpftrace $SCRIPT_DIR/trace-wakers-bpftrace.bt $PID 2>/dev/null 
+        sudo timeout $RECORD_SECONDS bpftrace "$SCRIPT_DIR/trace-wakers-bpftrace.bt" $PID 2>>"$HOME/${COMM}_profiling_stderr.log"
     ) >$HOME/${COMM}_wakers.txt &
     WAKER_PID=$!
 fi
@@ -85,10 +85,12 @@ if [[ $LOCK_CONTENTION == true ]]; then
         # perf was built without BPF skeleton; use two-step record then report.
         echo "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
         (
-            sudo perf lock record -p $PID -o /tmp/perf_lock_$$.data sleep $RECORD_SECONDS 2>/dev/null
+            sudo perf lock record -p $PID -o /tmp/perf_lock_$$.data sleep $RECORD_SECONDS 2>>"$HOME/${COMM}_profiling_stderr.log"
             if [[ -f /tmp/perf_lock_$$.data ]]; then
                 sudo perf lock contention -i /tmp/perf_lock_$$.data 2>&1 | tee $HOME/${COMM}_lock_contention.txt
                 sudo rm -f /tmp/perf_lock_$$.data
+            else
+                echo "perf lock record produced no data (no lock events?). Check $HOME/${COMM}_profiling_stderr.log" >>$HOME/${COMM}_lock_contention.txt
             fi
         ) &
         LOCK_PID=$!

@@ -25,13 +25,14 @@ $target_pid = $1;
 kprobe:try_to_wake_up
 {
     $p = (struct task_struct *)arg0;
-    $woke_pid = $p->pid;
-    if ($woke_pid != $target_pid)
+    // Match by tgid (process ID) so we record wakeups for any thread in the target process.
+    // $p->pid is kernel thread ID; $p->tgid is the process ID the user passes.
+    if ($p->tgid != $target_pid)
         return;
     $waker_pid = pid;
     $waker_comm = comm;
     $waker_tid = tid;
-    $woke_tid = $p->tid;
+    $woke_tid = $p->pid;
     printf("%d,%d,%s,%d,%d\n", nsecs / 1000000000, $waker_pid, $waker_comm, $waker_tid, $woke_tid);
 }
 
