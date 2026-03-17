@@ -72,7 +72,7 @@ WAKER_PID=
 if [[ $TRACE_WAKERS == true ]]; then
     # Pass PID (main thread) then up to 9 more tids so we catch wakeups for any thread in the process.
     WAKER_TIDS="$PID $(ls /proc/$PID/task 2>/dev/null | grep -v "^${PID}$" | sort -n | head -9 | tr '\n' ' ')"
-    echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS s -> $HOME/${COMM}_wakers.txt"
+    echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS seconds -> $HOME/${COMM}_wakers.txt"
     (
         echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"
         sudo timeout $RECORD_SECONDS bpftrace "$SCRIPT_DIR/trace-wakers-bpftrace.bt" $WAKER_TIDS 2>>"$HOME/${COMM}_profiling_stderr.log"
@@ -85,7 +85,7 @@ LOCK_PID=
 if [[ $LOCK_CONTENTION == true ]]; then
     if [[ ! -z $(perf lock contention -h 2>&1 | grep "no BUILD_BPF_SKEL") ]]; then
         # perf was built without BPF skeleton; use two-step record then report.
-        echo "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
+        echo "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
         (
             sudo perf lock record -p $PID -o /tmp/perf_lock_$$.data sleep $RECORD_SECONDS 2>>"$HOME/${COMM}_profiling_stderr.log"
             if [[ -f /tmp/perf_lock_$$.data ]]; then
@@ -97,7 +97,7 @@ if [[ $LOCK_CONTENTION == true ]]; then
         ) &
         LOCK_PID=$!
     else
-        echo "[Detached] Running perf lock contention --use-bpf -p $PID for $RECORD_SECONDS s -> $HOME/${COMM}_lock_contention.txt"
+        echo "[Detached] Running perf lock contention --use-bpf -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
         sudo timeout $RECORD_SECONDS perf lock contention --use-bpf -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
         LOCK_PID=$!
     fi
@@ -156,7 +156,10 @@ if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
                     close("/proc/" pid "/comm")
                     gsub(/\r?\n$/, "", comm)
                 }
-                if (comm == "") comm = "?"
+                if (comm == "") {
+                    if (pid == 0) comm = "swapper (idle)"
+                    else comm = "pid:" pid
+                }
                 pct = (total > 0) ? sprintf("%.0f", count * 100 / total) : 0
                 printf "%s%s (%s%%)", (NR > 1 ? ", " : ""), comm, pct
             }')
