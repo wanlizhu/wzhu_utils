@@ -70,10 +70,9 @@ if [[ ! -z $1 ]]; then
 fi
 
 # Start sampling (requires a target PID; pass a numeric PID or use steam/command launch above).
-if [[ -z $PID ]]; then
-    echo "Error: no target PID. Usage: $0 [options] <pid|steam|command...>" >&2
-    exit 1
-fi
+echo "Recording for $RECORD_SECONDS seconds ..."
+# Avoid "Too many open files" / "stack traces lost" (tool opens /proc/PID/root per sample).
+[[ $(ulimit -n 2>/dev/null) -lt 65536 ]] 2>/dev/null && ulimit -n 65536 2>/dev/null || true
 sudo offwaketime-bpfcc -p $PID -f $RECORD_SECONDS >/tmp/offwake.folded || exit 1
 
 # Post-process folded stacks into flame graph.
