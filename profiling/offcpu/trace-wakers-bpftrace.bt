@@ -9,8 +9,7 @@
 //
 // Output: timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid
 //
-
-param $1;
+// Positional args: $1 = target_pid (main thread), $2..$10 = optional extra tids.
 
 if ($1 == 0) {
     printf("Usage: sudo bpftrace %s <target_pid> [tid2 tid3 ...]\n", $0);
