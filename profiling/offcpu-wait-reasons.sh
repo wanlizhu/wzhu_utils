@@ -178,13 +178,13 @@ cleanup() {
     [[ -n $kernel_wait_reason_sampler_pid ]] && kill -TERM $kernel_wait_reason_sampler_pid 2>/dev/null
     [[ -n $timeout_pid ]] && kill $timeout_pid 2>/dev/null
 
-    wait $perf_pid 2>/dev/null
-    wait $function_trace_pid 2>/dev/null
-    wait $stack_trace_pid 2>/dev/null
-    wait $kernel_wait_reason_sampler_pid 2>/dev/null
-    wait $timeout_pid 2>/dev/null
+    [[ -n $perf_pid ]] && wait $perf_pid 2>/dev/null
+    [[ -n $function_trace_pid ]] && wait $function_trace_pid 2>/dev/null
+    [[ -n $stack_trace_pid ]] && wait $stack_trace_pid 2>/dev/null
+    [[ -n $kernel_wait_reason_sampler_pid ]] && wait $kernel_wait_reason_sampler_pid 2>/dev/null
+    [[ -n $timeout_pid ]] && wait $timeout_pid 2>/dev/null
 
-    [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf $TEMP_DIR
+    [[ -n $TEMP_DIR && -d $TEMP_DIR ]] && rm -rf "$TEMP_DIR"
 }
 
 trap cleanup EXIT INT TERM

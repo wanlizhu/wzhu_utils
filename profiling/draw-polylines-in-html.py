@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+"""Generate interactive HTML line charts from time-series CSV monitoring data.
+
+This script reads one or more CSV files whose first column is a timestamp and
+remaining columns are numeric metrics (with naming conventions that imply units).
+It validates structure, converts values to finite floats, and builds a JSON
+payload containing raw/smoothed series, normalized series, and per-metric min/max
+and hover text. That payload is embedded into a single HTML file that uses Plotly
+for interactive polylines: zoom, pan, normalized/actual/delta Y modes, optional
+smoothing, metric selection and grouping, and optional comparison with a second
+report (same timestamp column and metric names).
+
+Key relationships:
+  - guess_unit_strict() / is_time_col_name() define column semantics; used by
+    validate_csv_structure() and validate_and_convert().
+  - to_finite_float_strict() normalizes every cell; rolling_mean, normalize_series,
+    diff_pct_series and fmt_* are used by build_report_payload() to produce
+    the payload that build_html() embeds.
+  - main() ties the pipeline: read CSV -> validate_csv_structure ->
+    validate_and_convert -> build_report_payload -> build_html -> write OUTPUT_HTML.
+  - Global INPUT_CSV and OUTPUT_HTML are set by the __main__ loop per file;
+    main() and build_report_payload() use them for default report name and output path.
+"""
 
 from pathlib import Path
+import argparse
 import json
 import math
 import sys
@@ -12,6 +37,11 @@ OUTPUT_HTML = Path("graph.html")
 
 
 def guess_unit_strict(col: str) -> str:
+    """Infer display unit from column name suffix. Used for axis labels and hover text.
+
+    Recognized suffixes: _pct, _util -> '%'; _mhz -> 'MHz'; _mb -> 'MB'; _w -> 'W';
+    _c -> '°C'; _int -> 'Integer'. Raises ValueError if none match.
+    """
     name = col.lower()
 
     if name.endswith("_pct") or name.endswith("_util"):
@@ -34,11 +64,13 @@ def guess_unit_strict(col: str) -> str:
 
 
 def is_time_col_name(name: str) -> bool:
+    """Return True if the column name looks like a timestamp (contains ts, time, or timestamp)."""
     s = name.strip().lower()
     return any(token in s for token in ["ts", "time", "timestamp"])
 
 
 def to_finite_float_strict(v, row_idx: int, col_name: str) -> float:
+    """Convert a cell value to a finite float; NaN/inf or non-numeric become 0.0. row_idx/col_name for diagnostics."""
     if pd.isna(v):
         return 0.0
 
@@ -54,12 +86,14 @@ def to_finite_float_strict(v, row_idx: int, col_name: str) -> float:
 
 
 def infer_time_type(values: list[float]) -> str:
+    """Return 'integer' if all time values are integral, else 'float'. Used for comparison compatibility."""
     if all(float(v).is_integer() for v in values):
         return "integer"
     return "float"
 
 
 def rolling_mean(values: list[float], window: int) -> list[float]:
+    """Centered rolling average; window <= 1 returns a copy of values. Used for smoothing in payload and JS."""
     if window <= 1:
         return values[:]
 
@@ -76,6 +110,7 @@ def rolling_mean(values: list[float], window: int) -> list[float]:
 
 
 def normalize_series(values: list[float], vmin: float, vmax: float) -> list[float]:
+    """Map values to [0, 1] using (v - vmin) / (vmax - vmin); constant range -> 0.0."""
     if vmax == vmin:
         return [0.0 for _ in values]
 
@@ -83,6 +118,7 @@ def normalize_series(values: list[float], vmin: float, vmax: float) -> list[floa
 
 
 def diff_pct_series(values: list[float], vmin: float, vmax: float) -> list[float]:
+    """Same normalization as normalize_series but scaled to 0..100 for percentage hover text."""
     if vmax == vmin:
         return [0.0 for _ in values]
 
@@ -90,14 +126,20 @@ def diff_pct_series(values: list[float], vmin: float, vmax: float) -> list[float
 
 
 def fmt_value(v: float, unit: str) -> str:
+    """Format a numeric value with two decimals; append unit if non-empty."""
     return f"{v:.2f} {unit}" if unit else f"{v:.2f}"
 
 
 def fmt_percent(v: float) -> str:
+    """Format a number as a percentage with two decimals."""
     return f"{v:.2f}%"
 
 
 def validate_csv_structure(df: pd.DataFrame) -> tuple[str, list[str]]:
+    """Ensure CSV has at least two columns: first is time (name hint), rest are metrics with known unit suffix.
+
+    Returns (time_col, metric_cols). Raises ValueError on failure. Calls guess_unit_strict for each metric column.
+    """
     if len(df.columns) < 2:
         raise ValueError("csv must contain at least 2 columns: 1 time column + 1 metric column")
 
@@ -117,6 +159,10 @@ def validate_csv_structure(df: pd.DataFrame) -> tuple[str, list[str]]:
 
 
 def validate_and_convert(df: pd.DataFrame, time_col: str, metric_cols: list[str]) -> tuple[list[float], dict[str, list[float]]]:
+    """Convert CSV rows to time_values list and metric_values dict; all cells via to_finite_float_strict.
+
+    Ensures time column is strictly increasing. Returns (time_values, metric_values) for build_report_payload.
+    """
     time_values = []
     metric_values = {col: [] for col in metric_cols}
 
@@ -142,6 +188,10 @@ def validate_and_convert(df: pd.DataFrame, time_col: str, metric_cols: list[str]
 
 
 def build_report_payload(report_name: str, time_col: str, time_values: list[float], x_sec: list[float], metric_cols: list[str], metric_values: dict[str, list[float]]) -> dict:
+    """Build the JSON payload embedded in the HTML: report_name, time_col, time_type, row_count, x_sec, metric_cols, metrics.
+
+    For each metric: unit, raw, smooth (window=7), norm_raw, norm_smooth, min/max/avg labels, hover_*_text. Used by build_html.
+    """
     metrics = {}
 
     for col in metric_cols:
@@ -180,7 +230,11 @@ def build_report_payload(report_name: str, time_col: str, time_values: list[floa
 
 
 def build_html(report_payload: dict) -> str:
-    payload_json = json.dumps(report_payload, ensure_ascii=False)
+    """Produce the full HTML string: single-page app with embedded __PAYLOAD_JSON__ and Plotly; __TITLE__ set to fixed title."""
+    try:
+        payload_json = json.dumps(report_payload, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"report payload is not JSON-serializable: {e}") from e
     title = "Dynamic Monitoring Graph"
 
     html = r'''<!doctype html>
@@ -1340,11 +1394,21 @@ def build_html(report_payload: dict) -> str:
 
 
 def main():
-    df = pd.read_csv(
-        INPUT_CSV,
-        keep_default_na=True,
-        na_values=["", "N/A", "n/a", "NA", "null", "None"],
-    )
+    """Read INPUT_CSV, validate and convert, build report payload, generate HTML, write to OUTPUT_HTML.
+
+    Relies on global INPUT_CSV and OUTPUT_HTML (set by __main__ per input file).
+    """
+    try:
+        df = pd.read_csv(
+            INPUT_CSV,
+            keep_default_na=True,
+            na_values=["", "N/A", "n/a", "NA", "null", "None"],
+            encoding="utf-8",
+        )
+    except FileNotFoundError:
+        raise SystemExit(f"error: CSV file not found: {INPUT_CSV}")
+    except PermissionError:
+        raise SystemExit(f"error: cannot read CSV file (permission denied): {INPUT_CSV}")
 
     time_col, metric_cols = validate_csv_structure(df)
     time_values, metric_values = validate_and_convert(df, time_col, metric_cols)
@@ -1362,18 +1426,36 @@ def main():
     )
 
     html = build_html(report_payload)
-    OUTPUT_HTML.write_text(html, encoding="utf-8")
+    try:
+        OUTPUT_HTML.write_text(html, encoding="utf-8")
+    except FileNotFoundError:
+        raise SystemExit(f"error: output path not found (e.g. parent directory missing): {OUTPUT_HTML}")
+    except PermissionError:
+        raise SystemExit(f"error: cannot write output file (permission denied): {OUTPUT_HTML}")
 
 
 if __name__ == "__main__":
-    csv_files = [Path(arg).resolve() for arg in sys.argv[1:]]
-    if not csv_files:
+    parser = argparse.ArgumentParser(
+        description="Generate interactive HTML line charts from time-series CSV monitoring data.",
+        epilog="If no CSV files are given, all *.csv in the current directory are used. Each CSV produces a .html file with the same stem.",
+    )
+    parser.add_argument(
+        "csv_files",
+        nargs="*",
+        help="Input CSV file(s). If omitted, all *.csv in the current directory are used.",
+    )
+    args = parser.parse_args()
+
+    if args.csv_files:
+        csv_files = [Path(p).resolve() for p in args.csv_files]
+    else:
         csv_files = sorted(Path.cwd().glob("*.csv"))
 
     if not csv_files:
         print(f"no .csv files found in {Path.cwd()}", file=sys.stderr)
         raise SystemExit(1)
 
+    # Per-file: set globals so main() reads/writes the right paths; output is <stem>.html.
     for csv_file in csv_files:
         if csv_file.is_file():
             INPUT_CSV = csv_file

@@ -17,7 +17,7 @@ fi
 # disable apparmor
 if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
     echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
-    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null 
+    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null # it's expected to append to the file
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 fi

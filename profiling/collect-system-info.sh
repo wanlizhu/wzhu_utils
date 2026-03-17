@@ -1,9 +1,88 @@
 #!/usr/bin/env bash
-
+#
+# collect-system-info.sh - Collect system hardware and environment information.
+#
+# DESCRIPTION
+#   This script gathers static system information (CPU, memory, GPU, kernel,
+#   environment) and writes it to a file or prints a brief summary. It supports
+#   two modes:
+#
+#   Full mode (default): Appends multiple sections to OUTPUT_FILE (default
+#   ~/system_info.txt): basic header (hostname, OS, kernel, CPU model, GPUs),
+#   environment variables, CPU static info (lscpu, power limits, per-CPU
+#   cpufreq/governor), memory static info (dmidecode summary and per-DIMM
+#   table), NVIDIA kernel module parameters, and full nvidia-smi/lspci output
+#   per GPU. Used for detailed system profiling or debugging.
+#
+#   Brief mode (first positional argument "brief"): Writes a short summary to
+#   /tmp/brief (hostname, OS, kernel, memory summary, CPU summary including
+#   P-core/E-core on Intel, GPU list with key attributes) and displays it via
+#   print-ascii-tree.sh if available, else cat. Exits after printing.
+#
+# KEY RELATIONSHIPS
+#   - print_mem_brief() is used both in brief mode and by append_mem_static_info().
+#   - print_cpu_* and count_cpu_core_list() are used in brief mode and by
+#     append_cpu_static_info().
+#   - print_gpu_info() is used in brief mode (fixed attribute list) and by
+#     append_nvidia_smi_query() (full attribute list).
+#   - All append_* functions write to the same OUTPUT_FILE in sequence to
+#     build the full report.
+#
+# REQUIREMENTS
+#   Bash; optional: dmidecode (sudo), nvidia-smi, powerprofilesctl, lsb_release,
+#   print-ascii-tree.sh. Some sections output "N/A" when tools or sysfs paths
+#   are missing (e.g. non-Intel, no NVIDIA GPU).
+#
 set -o pipefail
 
 OUTPUT_FILE=~/system_info.txt
 
+# Print usage and exit. Used for -h/--help.
+print_usage() {
+    cat <<'USAGE'
+Usage: collect-system-info.sh [OPTIONS] [brief]
+
+Collect system hardware and environment information.
+
+OPTIONS
+  -h, --help       Show this help and exit.
+  -o, --output F   Write full report to F (default: ~/system_info.txt).
+
+ARGUMENTS
+  brief            Print a brief summary to stdout and exit (writes to /tmp/brief).
+
+With no arguments, writes the full report to the output file.
+USAGE
+}
+
+# Parse -h/--help and -o/--output. Leaves positional args (e.g. "brief") in $@.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -o|--output)
+            if [[ -z ${2:-} ]]; then
+                echo "Error: -o/--output requires an argument." >&2
+                print_usage >&2
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# -----------------------------------------------------------------------------
+# Memory: parse dmidecode -t memory and output a one-line summary (total size,
+# type, configured speed, theoretical bandwidth, manufacturer). Uses awk to
+# parse "Memory Device" blocks and aggregate; flush_dev() commits each slot;
+# empty slots (No Module Installed) are skipped. Output is key: value lines.
+# -----------------------------------------------------------------------------
 print_mem_brief() {
     sudo dmidecode -t memory 2>/dev/null | awk '
         function trim(s) {
@@ -37,6 +116,7 @@ print_mem_brief() {
             total_mb = 0
             total_bandwidth_gbs = 0
         }
+        # State machine: in_dev = inside a "Memory Device" block; flush_dev() commits slot and resets for next block or END.
 
         /^Memory Device$/ {
             flush_dev()
@@ -154,6 +234,8 @@ print_mem_brief() {
     '
 }
 
+# Read Intel RAPL long-term power limit (microwatts) from sysfs. Outputs
+# "max_power_limit_uw: <value>" or "N/A" if not available (e.g. non-Intel).
 print_cpu_max_power_limit_uw() {
     if [[ -r /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw ]]; then
         echo max_power_limit_uw: "$(cat /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw)" 
@@ -162,6 +244,8 @@ print_cpu_max_power_limit_uw() {
     fi
 }
 
+# Read Intel P-state driver status (active/passive/off) from sysfs. Outputs
+# "intel_pstate: <value>" or "N/A" if not present.
 print_cpu_intel_pstate() {
     if [[ -r /sys/devices/system/cpu/intel_pstate/status ]]; then
         echo intel_pstate: "$(cat /sys/devices/system/cpu/intel_pstate/status)" 
@@ -170,6 +254,10 @@ print_cpu_intel_pstate() {
     fi
 }
 
+# For a given CPU index ($1), print max_freq_khz, scaling_driver,
+# scaling_governor, energy_perf_bias, energy_performance_preference from
+# sysfs. Used for one representative core in brief mode and referenced
+# by append_cpu_static_info for per-CPU table.
 print_cpu_core_info() {
     if [[ -e /sys/devices/system/cpu/cpu$1 ]]; then 
         cpu=/sys/devices/system/cpu/cpu$1 
@@ -181,6 +269,8 @@ print_cpu_core_info() {
     fi 
 }
 
+# Print current power profile (e.g. power-saver/balanced/performance) via
+# powerprofilesctl if available; otherwise "N/A". Linux power-profiles-daemon.
 print_cpu_power_profile() {
     if command -v powerprofilesctl >/dev/null 2>&1; then
         echo power_profile: "$(powerprofilesctl get 2>/dev/null || echo N/A)" 
@@ -189,6 +279,8 @@ print_cpu_power_profile() {
     fi
 }
 
+# Count logical cores from a CPU list on stdin (e.g. "0-3,8,10-11"). Expands
+# ranges and single numbers; used for P-core/E-core counts on Intel.
 count_cpu_core_list() {
     awk -F, '
         {
@@ -207,6 +299,9 @@ count_cpu_core_list() {
     '
 }
 
+# For GPU id $1 and comma-separated nvidia-smi attribute list $2, query each
+# attribute and print "key: value" lines. Used by brief mode and
+# append_nvidia_smi_query() with different attribute sets.
 print_gpu_info() {
     local gpu_id=$1
     local attributes=$2
@@ -224,7 +319,8 @@ print_gpu_info() {
     shopt -u extglob
 }
 
-if [[ $1 == brief ]]; then 
+# --- Brief mode: write summary to /tmp/brief and display (tree or cat), then exit. ---
+if [[ $1 == brief ]]; then
     hostname >/tmp/brief
     printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>/tmp/brief
     printf '\t\tKernel: %s\n' "$(uname -r)" >>/tmp/brief
@@ -236,6 +332,7 @@ if [[ $1 == brief ]]; then
     printf '\t\t%s\n' "$(print_cpu_max_power_limit_uw)" >>/tmp/brief
     printf '\t\t%s\n' "$(print_cpu_intel_pstate)" >>/tmp/brief
     printf '\t\t%s\n' "$(print_cpu_power_profile)" >>/tmp/brief
+    # Intel: report P-cores and E-cores separately from sysfs cpu_core/cpu_atom; else total cores and cpu0.
     if grep -qi '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo; then
         printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>/tmp/brief
         print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
@@ -244,8 +341,9 @@ if [[ $1 == brief ]]; then
     else
         printf '\t\tNumber of cores: %s\n' "$(grep -c '^processor' /proc/cpuinfo)" >>/tmp/brief
         print_cpu_core_info 0 | sed 's/^/\t\t\t/' >>/tmp/brief
-    fi 
-    
+    fi
+
+    # One subsection per GPU: name and key attributes via print_gpu_info.
     for gpu_id in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
         printf '\tGPU %s: %s\n' "$gpu_id" "$(nvidia-smi --id=$gpu_id --query-gpu=name --format=noheader)" >>/tmp/brief
         print_gpu_info $gpu_id "driver_version,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.max,display_attached,display_active,persistence_mode,vbios_version,memory.total,compute_cap,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total" | sed 's/^/\t\t/' >>/tmp/brief
@@ -257,9 +355,12 @@ if [[ $1 == brief ]]; then
         cat /tmp/brief 
     fi 
 
-    exit 
-fi 
+    exit
+fi
 
+# Write hostname, OS description (lsb_release), uname -srm, CPU model (lscpu),
+# and nvidia-smi -L to OUTPUT_FILE. Overwrites OUTPUT_FILE; later append_*
+# functions append.
 append_basic_header() {
     printf '%s\n' "$(hostname)" >$OUTPUT_FILE
 
@@ -279,12 +380,16 @@ append_basic_header() {
     printf '\n' >>$OUTPUT_FILE
 }
 
+# Append a filtered dump of environment variables to OUTPUT_FILE. Excludes
+# noisy or session-specific vars (e.g. PTYXIS_PROFILE, SSH_*, LS_COLORS).
 append_environment() {
     printf '[environment variables]\n' >>$OUTPUT_FILE
     env | grep -Ev 'PTYXIS_PROFILE|guid=|INVOCATION_ID=|LS_COLORS|MEMORY_PRESSURE_WRITE=|MEMORY_PRESSURE_WATCH=|SSH_CONNECTION=|SSH_CLIENT=|OLDPWD=' >>$OUTPUT_FILE
     printf '[environment variables] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
+# Append lscpu, RAPL power limit, intel_pstate, power profile, and a per-CPU
+# table (max_freq, scaling_driver, governor, energy_perf_*) to OUTPUT_FILE.
 append_cpu_static_info() {
     printf '[cpu static info]\n' >>$OUTPUT_FILE
 
@@ -310,6 +415,9 @@ append_cpu_static_info() {
     printf '[cpu static info] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
+# Append memory section: print_mem_brief summary, then a per-DIMM table from
+# dmidecode (locator, size, type, speed, ranks, width, manufacturer, part_number).
+# Uses awk to parse "Memory Device" blocks; flush() writes one row per installed DIMM.
 append_mem_static_info() {
     printf '[mem static info]\n' >>$OUTPUT_FILE
 
@@ -322,6 +430,8 @@ append_mem_static_info() {
     print_mem_brief >>$OUTPUT_FILE
     printf '\n' >>$OUTPUT_FILE
 
+    # Parse dmidecode -t memory into a table: one row per installed DIMM;
+    # flush() emits a row when leaving a device block; empty slots are skipped.
     sudo dmidecode -t memory 2>/dev/null | awk '
         function trim(s) {
             sub(/^[[:space:]]+/, "", s)
@@ -439,6 +549,8 @@ append_mem_static_info() {
     printf '[mem static info] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
+# Append names and parameters of all loaded kernel modules matching "nvidia"
+# (from lsmod). For each module, list /sys/module/<name>/parameters/*.
 append_nvidia_kernel_modules() {
     printf '[nvidia kernel modules]\n' >>$OUTPUT_FILE
 
@@ -467,6 +579,9 @@ append_nvidia_kernel_modules() {
     printf '[nvidia kernel modules] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
+# Append full nvidia-smi query (all listed fields) per GPU and lspci -vv for
+# each GPU's PCI bus. Uses print_gpu_info() with the full field list; then
+# sudo lspci -vv -s <bus_id> for detailed PCI config.
 append_nvidia_smi_query() {
     printf '[nvidia-smi gpu query]\n' >>$OUTPUT_FILE
 
@@ -495,7 +610,7 @@ append_nvidia_smi_query() {
     printf '[nvidia-smi gpu query] FINISHED\n\n' >>$OUTPUT_FILE
 }
 
-
+# --- Full report: run all append_* functions in order to build OUTPUT_FILE. ---
 append_basic_header
 append_environment
 append_cpu_static_info

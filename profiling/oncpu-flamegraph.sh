@@ -78,7 +78,7 @@ fi
 echo "=== sysctl knobs (runtime kernel params) ==="
 echo "/proc/sys/kernel/perf_event_paranoid => $(cat /proc/sys/kernel/perf_event_paranoid)"
 echo "/proc/sys/kernel/kptr_restrict => $(cat /proc/sys/kernel/kptr_restrict)"
-echo "/proc/sys/kernel/kptr_restrict => $(cat /proc/sys/kernel/perf_event_max_sample_rate)"
+echo "/proc/sys/kernel/perf_event_max_sample_rate => $(cat /proc/sys/kernel/perf_event_max_sample_rate)"
 echo
 
 # Install required tools on demand.
@@ -196,7 +196,7 @@ if [[ -f /tmp/perf.data ]]; then
 
             # Count how many unique per-thread files were produced. Only generate per-thread
             # SVGs when more than one thread was actually found in perf output.
-            tid_count=$(ls /tmp/perf-tid*.txt 2>/dev/null | sed -n 's|.*/perf\.tid\.\([0-9]\+\)\.txt$|\1|p' | sort -u | wc -l)
+            tid_count=$(ls /tmp/perf-tid*.txt 2>/dev/null | sed -n 's|.*/perf-tid\([0-9]\+\)\.txt$|\1|p' | sort -u | wc -l)
             if (( tid_count > 1 )); then
                 for file in /tmp/perf-tid*.txt; do
                     [[ -f $file ]] || continue
