@@ -65,7 +65,7 @@ if [[ ! -z $1 ]]; then
 
     # Resolve the command name of the target process.
     COMM=$(cat /proc/$PID/comm 2>/dev/null)
-    [[ -z $COMM ]] && COMM=unknown
+    [[ -z $COMM ]] && COMM=untitled
 
     # Install debug symbol packages for the target process.
     [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
@@ -78,7 +78,7 @@ if [[ ! -z $1 ]]; then
 fi
 
 # Remove previous output from earlier runs so the new result is easier to inspect.
-sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_tid*_flamegraph.svg
+sudo rm -rf /tmp/perf.data $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg
 
 # Start sampling
 echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
@@ -119,16 +119,21 @@ if [[ -f /tmp/perf.data ]]; then
                 { file = "/tmp/perf_tid" (cur_tid == "" ? "unknown" : cur_tid) ".txt"; print >> file }
             ' /tmp/perf.txt
 
-            # Count how many unique per-thread files were produced.
-            tid_count=$(ls /tmp/perf_tid*.txt 2>/dev/null | sed -n 's|.*/perf_tid\([0-9]\+\)\.txt$|\1|p' | sort -u | wc -l)
+            # List TIDs that have data, sorted numerically (smallest = oldest thread = thread1).
+            tid_list=$(ls /tmp/perf_tid*.txt 2>/dev/null | sed -n 's|.*/perf_tid\([0-9]\+\)\.txt$|\1|p' | sort -n -u)
+            tid_count=$(echo "$tid_list" | grep -c . || true)
             if (( tid_count > 1 )); then
-                for file in /tmp/perf_tid*.txt; do
+                index=1
+                for tid in $tid_list; do
+                    file=/tmp/perf_tid${tid}.txt
                     [[ -f $file ]] || continue
-                    tid=${file#/tmp/perf_tid}
-                    tid=${tid%.txt}
-                    [[ $tid == unknown ]] && continue
-                    cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | flamegraph.pl >$HOME/${COMM}_tid${tid}_flamegraph.svg
-                    echo "    - $HOME/${COMM}_tid${tid}_flamegraph.svg"
+                    # Use thread name from /proc/PID/task/TID/comm for a readable filename (sanitized).
+                    thread_name=$(cat /proc/$PID/task/$tid/comm 2>/dev/null | tr -d '\n' | sed 's/[^a-zA-Z0-9._-]/_/g' | head -c 48)
+                    [[ -z $thread_name ]] && thread_name="untitled"
+                    out_name="${COMM}_thread${index}_${thread_name}_flamegraph.svg"
+                    cat $file | stackcollapse-perf.pl 2>/dev/null | stackcollapse-recursive.pl 2>/dev/null | flamegraph.pl >"$HOME/$out_name"
+                    echo "    - $HOME/$out_name"
+                    (( index++ )) || true
                 done
             else
                 echo "Found 0 per-thread stack, skipping per-thread flamegraph"

@@ -51,7 +51,7 @@ if [[ ! -z $1 ]]; then
 
     # Resolve the command name of the target process.
     COMM=$(cat /proc/$PID/comm 2>/dev/null)
-    [[ -z $COMM ]] && COMM=unknown
+    [[ -z $COMM ]] && COMM=untitled
 
     # Install debug symbol packages for the target process.
     [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
