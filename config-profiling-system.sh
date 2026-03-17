@@ -65,49 +65,51 @@ nvparams() {
 }
 EOF
 cat >>~/nvidia-profiling.sh <<'EOF'
-tmp_htoprc=/tmp/htop.rc &&
-tmp_screenrc=/tmp/screen.rc &&
-printf '%s\n' \
-    'hide_kernel_threads=1' \
-    'hide_userland_threads=1' \
-    'shadow_other_users=0' \
-    'show_thread_names=0' \
-    'show_program_path=0' \
-    'highlight_base_name=1' \
-    'highlight_deleted_exe=1' \
-    'highlight_megabytes=1' \
-    'highlight_threads=1' \
-    'find_comm_in_cmdline=1' \
-    'strip_exe_from_cmdline=1' \
-    'show_merged_command=0' \
-    'header_margin=0' \
-    'screen_tabs=0' \
-    'detailed_cpu_time=0' \
-    'show_cpu_usage=1' \
-    'show_cpu_frequency=0' \
-    'show_cached_memory=1' \
-    'update_process_names=0' \
-    'account_guest_in_cpu_meter=0' \
-    'delay=15' \
-    'hide_function_bar=0' \
-    'tree_view=0' \
-    'sort_key=PERCENT_CPU' \
-    'sort_direction=-1' \
-    'screen:Main=PID NLWP PERCENT_CPU PERCENT_MEM COMM' \
-    '.sort_key=PERCENT_CPU' \
-    '.tree_sort_key=PERCENT_CPU' \
-    '.tree_view=0' \
-    '.sort_direction=-1' \
-> "$tmp_htoprc" &&
-printf '%s\n' \
-    "screen -t htop env HTOPRC=$tmp_htoprc htop -u $(id -un)" \
-    'split -v' \
-    'focus right' \
-    'screen -t nvtop nvtop' \
-    'focus left' \
-> "$tmp_screenrc" &&
-screen -S monitor -X quit >/dev/null 2>&1
-screen -S monitor -c "$tmp_screenrc"
+cgtop() {
+    tmp_htoprc=/tmp/htop.rc &&
+    tmp_screenrc=/tmp/screen.rc &&
+    printf '%s\n' \
+        'hide_kernel_threads=1' \
+        'hide_userland_threads=1' \
+        'shadow_other_users=0' \
+        'show_thread_names=0' \
+        'show_program_path=0' \
+        'highlight_base_name=1' \
+        'highlight_deleted_exe=1' \
+        'highlight_megabytes=1' \
+        'highlight_threads=1' \
+        'find_comm_in_cmdline=1' \
+        'strip_exe_from_cmdline=1' \
+        'show_merged_command=0' \
+        'header_margin=0' \
+        'screen_tabs=0' \
+        'detailed_cpu_time=0' \
+        'show_cpu_usage=1' \
+        'show_cpu_frequency=0' \
+        'show_cached_memory=1' \
+        'update_process_names=0' \
+        'account_guest_in_cpu_meter=0' \
+        'delay=15' \
+        'hide_function_bar=0' \
+        'tree_view=0' \
+        'sort_key=PERCENT_CPU' \
+        'sort_direction=-1' \
+        'screen:Main=PID NLWP PERCENT_CPU PERCENT_MEM COMM' \
+        '.sort_key=PERCENT_CPU' \
+        '.tree_sort_key=PERCENT_CPU' \
+        '.tree_view=0' \
+        '.sort_direction=-1' \
+    > "$tmp_htoprc" &&
+    printf '%s\n' \
+        "screen -t htop env HTOPRC=$tmp_htoprc htop -u $(id -un)" \
+        'split -v' \
+        'focus right' \
+        'screen -t nvtop nvtop' \
+        'focus left' \
+    > "$tmp_screenrc" &&
+    screen -S monitor -X quit >/dev/null 2>&1
+    screen -S monitor -c "$tmp_screenrc"
+}
 EOF
 source ~/nvidia-profiling.sh
 
