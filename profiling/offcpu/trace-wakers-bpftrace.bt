@@ -14,20 +14,21 @@
 BEGIN
 {
     if ($1 == 0) {
-        printf("Usage: sudo bpftrace %s <target_pid> [tid2 tid3 ...]\n", $0);
+        printf("Usage: sudo bpftrace trace-wakers-bpftrace.bt <target_pid> [tid2 tid3 ...]\n");
         printf("  target_pid: process (main thread tid). Optional: more tids to track (max 10 total).\n");
         exit(1);
     }
 }
 
 // Match woken task: main thread or any of the optional tid args ($2..$10).
+// Cast $N to int32 to match args->pid (pid_t) and avoid sign comparison warnings.
 tracepoint:sched:sched_waking
-/args->pid == $1 ||
- (($2 != 0 && args->pid == $2) || ($3 != 0 && args->pid == $3) ||
-  ($4 != 0 && args->pid == $4) || ($5 != 0 && args->pid == $5) ||
-  ($6 != 0 && args->pid == $6) || ($7 != 0 && args->pid == $7) ||
-  ($8 != 0 && args->pid == $8) || ($9 != 0 && args->pid == $9) ||
-  ($10 != 0 && args->pid == $10))/
+/args->pid == (int32)$1 ||
+ (((int32)$2 != 0 && args->pid == (int32)$2) || ((int32)$3 != 0 && args->pid == (int32)$3) ||
+  ((int32)$4 != 0 && args->pid == (int32)$4) || ((int32)$5 != 0 && args->pid == (int32)$5) ||
+  ((int32)$6 != 0 && args->pid == (int32)$6) || ((int32)$7 != 0 && args->pid == (int32)$7) ||
+  ((int32)$8 != 0 && args->pid == (int32)$8) || ((int32)$9 != 0 && args->pid == (int32)$9) ||
+  ((int32)$10 != 0 && args->pid == (int32)$10))/
 {
     printf("%d,%d,%s,%d,%d\n", nsecs / 1000000000, pid, comm, tid, args->pid);
 }
