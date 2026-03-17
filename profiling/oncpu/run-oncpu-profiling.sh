@@ -77,9 +77,9 @@ fi
 
 # Guardian: ensure required inputs for perf-record-and-postprocess.sh are set and valid.
 [[ -z "$COMM" ]] && COMM=untitled
-[[ "$RECORD_SECONDS" =~ ^[0-9]+$ ]] && [[ $RECORD_SECONDS -gt 0 ]] || { echo "run.sh: RECORD_SECONDS must be a positive integer" >&2; exit 1; }
-[[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "run.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
-[[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
+[[ "$RECORD_SECONDS" =~ ^[0-9]+$ ]] && [[ $RECORD_SECONDS -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_SECONDS must be a positive integer" >&2; exit 1; }
+[[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
+[[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
 # Perf record and postprocess (flamegraphs); HTML report is generated inside when applicable.
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")

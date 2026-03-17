@@ -28,7 +28,11 @@ if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then
 fi
 echo '#!/bin/bash' >~/nvidia-profiling.sh
 echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils:$HOME/wzhu_utils/profiling:$HOME/wzhu_utils/testcase:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/testcase:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/profiling:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m):/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh

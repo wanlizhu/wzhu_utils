@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Called from run.sh in the same dir. Do not run directly.
-# Expects: PID, COMM, RECORD_SECONDS, RECORD_FREQ, UNWIND_METHOD (from run.sh).
+# Called from run-oncpu-profiling.sh in the same dir. Do not run directly.
+# Expects: PID, COMM, RECORD_SECONDS, RECORD_FREQ, UNWIND_METHOD (from run-oncpu-profiling.sh).
 
 set -o pipefail
 
 # Guardian: required variables and values.
-: "${COMM:?perf-record-and-postprocess.sh: COMM must be set (e.g. from run.sh)}"
+: "${COMM:?perf-record-and-postprocess.sh: COMM must be set (e.g. from run-oncpu-profiling.sh)}"
 : "${RECORD_SECONDS:?perf-record-and-postprocess.sh: RECORD_SECONDS must be set}"
 : "${RECORD_FREQ:?perf-record-and-postprocess.sh: RECORD_FREQ must be set}"
 : "${UNWIND_METHOD:?perf-record-and-postprocess.sh: UNWIND_METHOD must be set}"
