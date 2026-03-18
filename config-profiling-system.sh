@@ -278,6 +278,7 @@ if [[ -d /data ]]; then
 fi 
 
 if [[ ! -z $(which collect-system-info.sh) ]]; then 
+    echo 
     collect-system-info.sh brief 
 fi 
 
