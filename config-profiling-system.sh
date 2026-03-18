@@ -2,6 +2,16 @@
 
 set -o pipefail 
 
+INIT_APT_PKG=
+
+while (( $# )); do
+    case $1 in
+        -init) INIT_APT_PKG=true ;;
+        *) break ;;
+    esac
+    shift
+ done
+
 # enable passwordless sudo 
 if [[ ! -f /etc/sudoers.d/99-$(id -un)-nopasswd ]]; then 
     echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
@@ -132,7 +142,7 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
 fi 
 
 # install required packages
-if [[ ! -z $(which install-pkg.sh) ]]; then 
+if [[ $INIT_APT_PKG == true && ! -z $(which install-pkg.sh) ]]; then 
     if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
         echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
@@ -170,18 +180,18 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         sudo apt purge -y libreoffice*
         sudo apt autoremove -y 
     fi 
+
+    # install amd gpu drivers 
+    if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which install-pkg.sh) ]]; then 
+        install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
+        dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
+    fi 
 fi 
 
 # config git env 
 git config --global user.email >/dev/null 2>&1 || git config --global user.email zhu.wanli@icloud.com
 git config --global user.name >/dev/null 2>&1 || git config --global user.name "Wanli Zhu"
 git config --global pull.rebase >/dev/null 2>&1 || git config --global pull.rebase false
-
-# install amd gpu drivers 
-if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which install-pkg.sh) ]]; then 
-    install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-    dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
-fi 
 
 # enable ssh server
 if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
