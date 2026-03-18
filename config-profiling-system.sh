@@ -65,14 +65,16 @@ nvparams() {
 }
 EOF
 cat >>~/nvidia-profiling.sh <<'EOF'
-cgtop() {
+vvtop() {
     tmp_htoprc=/tmp/htop.rc &&
     tmp_screenrc=/tmp/screen.rc &&
     printf '%s\n' \
+        'htop_version=3.4.1' \
+        'config_reader_min_version=3' \
         'hide_kernel_threads=1' \
-        'hide_userland_threads=1' \
+        'hide_userland_threads=0' \
         'shadow_other_users=0' \
-        'show_thread_names=0' \
+        'show_thread_names=1' \
         'show_program_path=0' \
         'highlight_base_name=1' \
         'highlight_deleted_exe=1' \
@@ -98,7 +100,9 @@ cgtop() {
         '.sort_key=PERCENT_CPU' \
         '.tree_sort_key=PERCENT_CPU' \
         '.tree_view=0' \
+        '.tree_view_always_by_pid=0' \
         '.sort_direction=-1' \
+        '.tree_sort_direction=-1' \
     > "$tmp_htoprc" &&
     printf '%s\n' \
         "screen -t htop env HTOPRC=$tmp_htoprc htop -u $(id -un)" \
