@@ -105,6 +105,8 @@ vvtop() {
         '.tree_sort_direction=-1' \
     > "$tmp_htoprc" &&
     printf '%s\n' \
+        'escape ^[^[' \
+        'bind ^[ quit' \
         "screen -t htop env HTOPRC=$tmp_htoprc htop -u $(id -un)" \
         'split -v' \
         'focus right' \
