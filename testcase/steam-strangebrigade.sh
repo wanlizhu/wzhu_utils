@@ -208,11 +208,22 @@ fi
 
 if [[ $1 == ngfx ]]; then 
     if [[ -z $(pidof steam) ]]; then 
-        ngfx --launch-detached \
+        ngfx --activity="GPU Trace Profiler" \
             --output-dir=$HOME \
             --exe="/usr/games/steam" \
             --dir="$HOME" \
-            --env="DISPLAY=:0" 
+            --env="DISPLAY=:0" \
+            --real-time-shader-profiler \
+            --no-timeout \
+            --auto-export \
+            --multi-pass-metrics \
+            --set-gpu-clocks=boost \
+            --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP \
+            --start-after-hotkey \
+            --limit-to-frames=3 \
+            --architecture="Blackwell GB20x" \
+            --metric-set-name="Top-Level Triage" \
+            --launch-detached 
         sleep 3
     else
         echo "Assume steam process $(pidof steam) was launched by Ngfx"
@@ -222,18 +233,7 @@ if [[ $1 == ngfx ]]; then
     read -p "Select steam game PID: " PID
     rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
     mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
-    ngfx --attach-pid=$PID \
-         --activity="GPU Trace Profiler" \
-         --real-time-shader-profiler \
-         --no-timeout \
-         --auto-export \
-         --multi-pass-metrics \
-         --set-gpu-clocks=boost \
-         --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP \
-         --start-after-hotkey \
-         --limit-to-frames=3 \
-         --architecture="Blackwell GB20x" \
-         --metric-set-name="Top-Level Triage"
+    ngfx --attach-pid=$PID 
 else 
     write_graphics_options
     run_benchmark
