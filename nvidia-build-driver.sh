@@ -62,7 +62,7 @@ function unix_build_nvmake() {
         )
     fi 
 
-    ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" || {
+    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" || {
         # retry with -j1 (to stop at the first error) and verbose options
         ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" verbose -j1 || return 1
     }
@@ -109,35 +109,46 @@ function post_build_install_dso() {
     return 1
 }
 
-if [[ -f makefile.nvmk ]]; then
-    if [[ -d drivers ]]; then 
-        NV_SOURCE=$(realpath $(pwd)/../..)
-    elif [[ -f opengl.nvmk ]]; then 
-        NV_SOURCE=$(realpath $(pwd)/../../../..)
+function detect_source_root() {
+    if [[ ! -z $NV_BRANCH && -d $HOME/wzhu_p4sw/branch/$NV_BRANCH ]]; then 
+        cd $HOME/wzhu_p4sw/branch/$NV_BRANCH || exit 1
+    fi 
+
+    if [[ -f makefile.nvmk ]]; then
+        if [[ -d drivers ]]; then 
+            NV_SOURCE=$(realpath $(pwd)/../..)
+        elif [[ -f opengl.nvmk ]]; then 
+            NV_SOURCE=$(realpath $(pwd)/../../../..)
+        else
+            echo "cd to branch root first"
+            echo "Aborting"
+            exit 1
+        fi 
+    elif [[ -d $HOME/wzhu_p4sw ]]; then 
+        NV_SOURCE=$HOME/wzhu_p4sw
     else
-        echo "cd to branch root first"
+        echo "~/wzhu_p4sw/ doesn't exist"
         echo "Aborting"
         exit 1
     fi 
-elif [[ -d $HOME/wzhu_p4sw ]]; then 
-    NV_SOURCE=$HOME/wzhu_p4sw
-else
-    echo "~/wzhu_p4sw/ doesn't exist"
-    echo "Aborting"
-    exit 1
-fi 
-NV_BRANCH=r595_00
+
+    pwd 
+} 
+
+NV_BRANCH=bugfix_main
 NV_TARGET_ARCH=$(uname -m | sed 's/x86_64/amd64/g')
 NV_BUILD_TYPE=develop
 POST_BUILD_INSTALL=
 
 while (( $# )); do 
     case $1 in 
+        branch=*) NV_BRANCH=${1#*=} ;;
         x86|amd64|aarch64) NV_TARGET_ARCH=$1 ;;
         debug|release|develop) NV_BUILD_TYPE=$1 ;;
         install) POST_BUILD_INSTALL=1 ;;
         ppp)
             shift  
+            detect_source_root || exit 1
             unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
             unix_build_nvmake $NV_SOURCE $NV_BRANCH x86   $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
             unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE post-process-packages "$@" && {
@@ -154,6 +165,7 @@ while (( $# )); do
         ;;
         dist)
             shift  
+            detect_source_root || exit 1
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" && {
                 run_installer=no
                 if [[ $POST_BUILD_INSTALL == 1 ]]; then 
@@ -168,6 +180,7 @@ while (( $# )); do
         ;;
         opengl)
             shift 
+            detect_source_root || exit 1
             cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL && 
             unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
             cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx &&
@@ -221,6 +234,7 @@ while (( $# )); do
         ;;
         restore)
             shift 
+            detect_source_root || exit 1
             sudo find /lib/$(uname -m)-linux-gnu -type f -name '*.backup' -exec bash -c '
                 for path; do 
                     mv -f "$path" "${path%.backup}"
@@ -231,6 +245,7 @@ while (( $# )); do
         ;;
         info)
             shift 
+            detect_source_root || exit 1
             nvidia_module_version=$(modinfo nvidia | grep ^version | awk '{print $2}')
             echo "Nvidia module version: $nvidia_module_version"
             shopt -s nullglob
@@ -245,6 +260,7 @@ while (( $# )); do
         ;;
         sync)
             shift 
+            detect_source_root || exit 1
             for cl in $(p4 changes -s pending -c $(p4 client -o | awk '/^Client:/ { print $2 }') | awk '{ print $2 }'); do
                 p4 opened -c $cl 2>/dev/null | grep -q . && p4 shelve -f -c $cl && p4 revert -c $cl //... && echo "Shelved pending change $cl"
             done
@@ -272,4 +288,5 @@ while (( $# )); do
     shift 
 done 
 
+detect_source_root || exit 1
 unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" 
