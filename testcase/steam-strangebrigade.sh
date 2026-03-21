@@ -220,7 +220,8 @@ if [[ $1 == ngfx ]]; then
     read -p "Press [Enter] when steam game launched: "
     pstree -aspT $(pidof steam)
     read -p "Select steam game PID: " PID
-    mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace
+    rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
+    mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
     ngfx --attach-pid=$PID \
          --activity="GPU Trace Profiler" \
          --real-time-shader-profiler \
@@ -228,7 +229,7 @@ if [[ $1 == ngfx ]]; then
          --auto-export \
          --multi-pass-metrics \
          --set-gpu-clocks=boost \
-         --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace \
+         --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP \
          --start-after-hotkey \
          --limit-to-frames=3 \
          --architecture="Blackwell GB20x" \
