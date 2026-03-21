@@ -127,6 +127,28 @@ vvtop() {
     screen -S monitor -c "$tmp_screenrc"
 }
 EOF
+cat >>~/nvidia-profiling.sh <<'EOF'
+mnt-nfs() {
+    sudo mkdir -p /mnt/$(basename $1)
+    sudo mount -t nfs $1 /mnt/$(basename $1) && echo "Mounted /mnt/$(basename $1)"
+}
+mnt-cifs() {
+    if [[ "$1" == \\\\* ]]; then 
+        uncpath="$1"
+    else
+        read -r -p "Windows UNC Path: " uncpath
+    fi 
+    unixpath="${uncpath//\\//}"
+    share_root=//$(cut -d/ -f3-4 <<< "$unixpath")
+    subpath=$(cut -d/ -f5- <<< "$unixpath")
+    mnt_dir=${share_root/#\/\//\/mnt\/}
+    sudo mkdir -p $mnt_dir
+    sudo mount -t cifs $share_root $mnt_dir -o username=wanliz,vers=3.0 && {
+        echo "Mounted $mnt_dir" 
+        [[ -e $mnt_dir/$subpath ]] && echo "$mnt_dir/$subpath"
+    }
+}
+EOF
 source ~/nvidia-profiling.sh
 
 # set kernel params
@@ -162,7 +184,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         btop htop nvtop sysprof pciutils nfs-common openssh-server \
         libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
         libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-        python3-pip python3-pandas cpufrequtils stress-ng glmark2
+        python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils
 
     find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
     while IFS= read -r -d '' file; do
