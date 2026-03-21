@@ -222,8 +222,11 @@ if [[ $1 == ngfx ]]; then
     read -p "Select steam game PID: " PID
     ngfx --attach-pid=$PID \
          --activity="GPU Trace Profiler" \
+         --real-time-shader-profiler \
          --no-timeout \
          --auto-export \
+         --multi-pass-metrics \
+         --set-gpu-clocks=boost \
          --output-dir=$HOME \
          --start-after-hotkey \
          --limit-to-frames=3 \
