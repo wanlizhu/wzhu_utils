@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail 
 
 if [[ -z $(which globalprotect) ]]; then 

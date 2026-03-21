@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail
 
 DM_SAMPLE_FREQ_MS=100

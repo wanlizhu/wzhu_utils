@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Called from run-oncpu-profiling.sh in the same dir. Do not run directly.
 # Expects: PID, COMM, RECORD_SECONDS, RECORD_FREQ, UNWIND_METHOD (from run-oncpu-profiling.sh).
-
 set -o pipefail
 
 # Guardian: required variables and values.
