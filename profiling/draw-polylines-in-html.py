@@ -18,8 +18,8 @@ Key relationships:
   - to_finite_float_strict() normalizes every cell; rolling_mean, normalize_series,
     diff_pct_series and fmt_* are used by build_report_payload() to produce
     the payload that build_html() embeds.
-  - main() ties the pipeline: read CSV -> validate_csv_structure ->
-    validate_and_convert -> build_report_payload -> build_html -> write OUTPUT_HTML.
+  - main() ties the pipeline: read CSV -> apply_metric_column_filters (optional) ->
+    validate_csv_structure -> validate_and_convert -> build_report_payload -> build_html -> write OUTPUT_HTML.
   - Global INPUT_CSV and OUTPUT_HTML are set by the __main__ loop per file;
     main() and build_report_payload() use them for default report name and output path.
 """
@@ -27,6 +27,7 @@ Key relationships:
 from pathlib import Path
 import argparse
 import base64
+from html import escape as html_escape
 import gzip
 import json
 import math
@@ -48,10 +49,13 @@ def guess_unit_strict(col: str) -> str:
     """Infer display unit from column name suffix. Used for axis labels and hover text.
 
     Recognized suffixes: _pct, _util -> '%'; _mhz -> 'MHz'; _mb -> 'MB'; _w -> 'W';
-    _c -> '°C'; _int -> 'Integer'. Raises ValueError if none match.
+    _c -> '°C'; _int -> 'Integer'; _dec, _float, _real, _ratio -> 'decimal' (real numbers).
+    Raises ValueError if none match.
     """
     name = col.lower()
 
+    if name.endswith("_dec") or name.endswith("_float") or name.endswith("_real") or name.endswith("_ratio"):
+        return "decimal"
     if name.endswith("_pct") or name.endswith("_util"):
         return "%"
     if name.endswith("_mhz"):
@@ -67,7 +71,7 @@ def guess_unit_strict(col: str) -> str:
 
     raise ValueError(
         f"unrecognized unit suffix for column: {col}. "
-        f"expected one of: _pct, _util, _mhz, _mb, _w, _c, _int"
+        f"expected one of: _pct, _util, _mhz, _mb, _w, _c, _int, _dec, _float, _real, _ratio"
     )
 
 
@@ -195,6 +199,61 @@ def validate_and_convert(df: pd.DataFrame, time_col: str, metric_cols: list[str]
     return time_values, metric_values
 
 
+def parse_comma_separated_names(s: str | None) -> list[str]:
+    """Split a comma-separated list of column names; strip whitespace; drop empties."""
+    if not s or not str(s).strip():
+        return []
+    return [part.strip() for part in str(s).split(",") if part.strip()]
+
+
+def metric_column_is_uninformative(series: pd.Series) -> bool:
+    """True if every cell maps to 0.0 via to_finite_float_strict (all-N/A, empty, non-numeric, all zeros, etc.)."""
+    if series.empty:
+        return True
+    return all(to_finite_float_strict(v, 0, "") == 0.0 for v in series)
+
+
+def apply_metric_column_filters(
+    df: pd.DataFrame,
+    hide_names: list[str],
+    hide_invalid: bool,
+) -> pd.DataFrame:
+    """Drop hidden and/or uninformative metric columns; returns a dataframe with time + remaining metrics. May raise SystemExit."""
+    if len(df.columns) < 2:
+        raise SystemExit("error: csv must contain at least 2 columns: 1 time column + 1 metric column")
+
+    time_col = df.columns[0]
+    if not is_time_col_name(time_col):
+        raise SystemExit(
+            f"error: first column does not look like a timestamp column: {time_col}. "
+            f"expected name containing ts, time, or timestamp"
+        )
+
+    metric_cols = list(df.columns[1:])
+    hide_set = set(hide_names)
+
+    if time_col in hide_set:
+        print(
+            f"warning: --hide-columns ignores {time_col!r} (timestamp column cannot be hidden)",
+            file=sys.stderr,
+        )
+        hide_set.discard(time_col)
+
+    unknown = hide_set - set(metric_cols)
+    for name in sorted(unknown):
+        print(f"warning: --hide-columns: unknown column {name!r}", file=sys.stderr)
+
+    metric_cols = [c for c in metric_cols if c not in hide_set]
+
+    if hide_invalid:
+        metric_cols = [c for c in metric_cols if not metric_column_is_uninformative(df[c])]
+
+    if not metric_cols:
+        raise SystemExit("error: no metric columns left after --hide-columns / --hide-invalid-columns")
+
+    return df[[time_col] + metric_cols].copy()
+
+
 def build_report_payload(report_name: str, time_col: str, time_values: list[float], x_sec: list[float], metric_cols: list[str], metric_values: dict[str, list[float]]) -> dict:
     """Build the JSON payload embedded in the HTML: report_name, time_col, time_type, row_count, x_sec, metric_cols, metrics.
 
@@ -242,9 +301,10 @@ def build_html(
     csv_b64_gzip: str = "",
     default_y_mode: str = "normalized",
     default_selected_attrs: list[str] | None = None,
+    page_description: str | None = None,
 ) -> str:
     """Produce the full HTML string: single-page app with embedded __PAYLOAD_JSON__, optional __CSV_B64_GZIP_JSON__,
-    __DEFAULT_Y_MODE__, __DEFAULT_SELECTED_ATTRS_JSON__, and Plotly."""
+    __DEFAULT_Y_MODE__, __DEFAULT_SELECTED_ATTRS_JSON__, optional page description under the title, and Plotly."""
     try:
         payload_json = json.dumps(report_payload, ensure_ascii=False)
     except (TypeError, ValueError) as e:
@@ -255,6 +315,9 @@ def build_html(
     checked_actual = " checked" if default_y_mode == "actual" else ""
     checked_delta = " checked" if default_y_mode == "delta" else ""
     title = "Dynamic Monitoring Graph"
+    page_desc_html = ""
+    if page_description is not None and page_description != "":
+        page_desc_html = f'<div class=page-desc>{html_escape(page_description)}</div>'
 
     html = r'''<!doctype html>
 <html lang=en>
@@ -450,6 +513,23 @@ def build_html(
         .hidden {
             display: none !important;
         }
+        .page-intro {
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .page-title {
+            font-size: 1.25rem;
+            margin: 0 0 6px 0;
+            font-weight: 600;
+        }
+        .page-desc {
+            color: var(--muted);
+            font-size: 13px;
+            white-space: pre-wrap;
+            line-height: 1.45;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -460,6 +540,10 @@ def build_html(
     </script>
     <div class=page>
         <div class=sidebar id=sidebar>
+            <div class=page-intro>
+                <h1 class=page-title>__PAGE_TITLE__</h1>
+                __PAGE_DESC_HTML__
+            </div>
             <div class=panel>
                 <div class=panel-title>Visual style</div>
                 <div class=toolbar>
@@ -1463,6 +1547,8 @@ def build_html(
 </html>
 '''
     html = html.replace("__TITLE__", title)
+    html = html.replace("__PAGE_TITLE__", html_escape(title))
+    html = html.replace("__PAGE_DESC_HTML__", page_desc_html)
     html = html.replace("__PAYLOAD_JSON__", payload_json)
     html = html.replace("__CSV_B64_GZIP_JSON__", csv_b64_json)
     html = html.replace("__DEFAULT_SELECTED_ATTRS_JSON__", default_attrs_json)
@@ -1475,6 +1561,9 @@ def build_html(
 def main(
     default_y_mode: str = "normalized",
     default_selected_attrs: list[str] | None = None,
+    page_description: str | None = None,
+    hide_column_names: list[str] | None = None,
+    hide_invalid_columns: bool = False,
 ):
     """Read INPUT_CSV, validate and convert, build report payload, generate HTML, write to OUTPUT_HTML.
 
@@ -1492,6 +1581,11 @@ def main(
     except PermissionError:
         raise SystemExit(f"error: cannot read CSV file (permission denied): {INPUT_CSV}")
 
+    df = apply_metric_column_filters(
+        df,
+        hide_names=hide_column_names or [],
+        hide_invalid=hide_invalid_columns,
+    )
     time_col, metric_cols = validate_csv_structure(df)
     time_values, metric_values = validate_and_convert(df, time_col, metric_cols)
 
@@ -1507,8 +1601,15 @@ def main(
         metric_values=metric_values,
     )
 
+    sel_attrs = default_selected_attrs
+    if sel_attrs is not None:
+        keep = set(metric_cols)
+        sel_attrs = [a for a in sel_attrs if a in keep]
+        if not sel_attrs:
+            sel_attrs = None
+
     try:
-        csv_bytes = INPUT_CSV.read_bytes()
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
         csv_b64_gzip = csv_to_base64_gzip(csv_bytes)
     except Exception:
         csv_b64_gzip = ""
@@ -1517,7 +1618,8 @@ def main(
         report_payload,
         csv_b64_gzip=csv_b64_gzip,
         default_y_mode=default_y_mode,
-        default_selected_attrs=default_selected_attrs,
+        default_selected_attrs=sel_attrs,
+        page_description=page_description,
     )
     try:
         OUTPUT_HTML.write_text(html, encoding="utf-8")
@@ -1550,6 +1652,23 @@ if __name__ == "__main__":
         default=None,
         help="Metric names to select by default (e.g. utilization_gpu_pct cpu_util_pct). If omitted, all attributes are selected.",
     )
+    parser.add_argument(
+        "--desc",
+        default=None,
+        metavar="TEXT",
+        help="Optional multi-line description shown under the page title in the HTML (shell quoting preserves newlines).",
+    )
+    parser.add_argument(
+        "--hide-columns",
+        default=None,
+        metavar="NAMES",
+        help="Comma-separated metric column names to omit from the chart and embedded CSV dump.",
+    )
+    parser.add_argument(
+        "--hide-invalid-columns",
+        action="store_true",
+        help="Omit metric columns where every value is uninformative (all empty/N/A/non-numeric, only dots/spaces, or all zeros after parsing).",
+    )
     args = parser.parse_args()
 
     if args.csv_files:
@@ -1572,6 +1691,9 @@ if __name__ == "__main__":
                 main(
                     default_y_mode=args.y_axis_mode,
                     default_selected_attrs=default_attrs,
+                    page_description=args.desc,
+                    hide_column_names=parse_comma_separated_names(args.hide_columns),
+                    hide_invalid_columns=args.hide_invalid_columns,
                 )
                 print(f"generated: {OUTPUT_HTML}")
             except Exception as e:

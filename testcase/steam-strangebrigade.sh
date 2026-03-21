@@ -66,21 +66,16 @@ run_benchmark()
         exit 1
     }
 
-    printf 'Launching steam benchmark\n'
     steam -applaunch $APP_ID -benchmark &
-    printf 'Steam launch command submitted\n'
-
     printf 'Waiting for game process to appear ...\n'
     while ! pgrep -f "$GAME_PROCESS_NAME" > /dev/null; do
         sleep 5
     done
-    printf 'Game process detected\n'
 
     printf 'Waiting for game process to finish ...\n'
     while pgrep -f "$GAME_PROCESS_NAME" > /dev/null; do
         sleep 5
     done
-    printf 'Game process finished\n'
 
     printf 'Waiting for benchmark result file\n'
     sleep 3
@@ -96,8 +91,70 @@ run_benchmark()
     echo "Result file $RESULT_FILE_GLOB doesn't exist"
     if [[ ! -z $(which mangohud) ]]; then 
         echo "Fallback to read mangohud loggings"
-        echo "Set up launch options in steam UI: "
-        echo "    MANGOHUD=1 MANGOHUD_CONFIG=autostart_log=1,output_folder=$HOME %command%"
+        latest_mangohud_log=$(find "$HOME" -maxdepth 1 -type f -name 'StrangeBrigade_*.csv' | sort | tail -n 1)
+        if [ -s "$latest_mangohud_log" ]; then
+            rm -rf /tmp/desc.txt /tmp/data.csv 
+            python3 - "$latest_mangohud_log" <<'PY'
+import csv
+import sys
+
+src = sys.argv[1]
+data_out = '/tmp/data.csv'
+desc_out = '/tmp/desc.txt'
+
+drop = {'frametime', 'swap_used', 'process_rss', 'elapsed'}
+rename = {
+    'fps': 'fps_dec',
+    'cpu_load': 'cpu_load_pct',
+    'gpu_load': 'gpu_load_pct',
+    'cpu_temp': 'cpu_temp_c',
+    'gpu_temp': 'gpu_temp_c',
+    'gpu_vram_used': 'gpu_vram_used_mb',
+    'gpu_power': 'gpu_power_w',
+    'ram_used': 'ram_used_mb',
+}
+
+with open(src, newline='') as f:
+    rows = list(csv.reader(f))
+
+if len(rows) < 3:
+    sys.exit(1)
+
+desc_lines = [f'{k}: {v}' for k, v in zip(rows[0], rows[1])]
+
+for line in desc_lines:
+    print(line)
+
+with open(desc_out, 'w') as f:
+    for line in desc_lines:
+        f.write(line + '\n')
+
+hdr = rows[2]
+keep = [i for i, c in enumerate(hdr) if c not in drop]
+
+new_hdr = []
+for c in hdr:
+    if c in drop:
+        continue
+    new_hdr.append(c + '_mhz' if c.endswith('_clock') else rename.get(c, c))
+
+with open(data_out, 'w', newline='') as f:
+    w = csv.writer(f)
+    w.writerow(new_hdr)
+    for row in rows[3:]:
+        w.writerow([row[i] if i < len(row) else '' for i in keep])
+
+print()
+print(desc_out)
+print(data_out)
+PY
+            if [[ -f /tmp/data.csv && -f /tmp/desc/.txt ]]; then 
+                draw-polylines-in-html.py --hide-invalid-columns --desc="$(cat /tmp/desc.txt)" /tmp/data.csv 
+            fi 
+        else
+            echo "Config launch options in steam UI: "
+            echo "    MANGOHUD=1 MANGOHUD_CONFIG=autostart_log=1,output_folder=$HOME %command%"
+        fi 
     fi 
 }
 
