@@ -155,7 +155,7 @@ PY
                 draw-polylines-in-html.py --hide-invalid-columns --desc="$(cat /tmp/desc.txt)" --y-axis-mode=actual --default-attributes="fps_dec" /tmp/data.csv && {
                     cp /tmp/data.html ${latest_mangohud_log%.csv}.html
                     echo "Generated ${latest_mangohud_log%.csv}.html"
-                }
+                } || echo "Failed to generate HTML report"
             fi 
         else
             echo "Config launch options in steam UI: "
@@ -206,5 +206,9 @@ if [ "$EUID" -eq 0 ]; then
     exit 1
 fi
 
-write_graphics_options
-run_benchmark
+if [[ $1 == ngfx ]]; then 
+    sudo $(which ngfx)  
+else 
+    write_graphics_options
+    run_benchmark
+fi 
