@@ -2,26 +2,21 @@
 set -o pipefail
 
 APP_ID=312670
-STEAM_COMMAND=steam
 GAME_PROCESS_NAME=StrangeBrigade_
-
 STEAM_ROOT=$HOME/.steam/steam
 PROTON_PREFIX=$STEAM_ROOT/steamapps/compatdata/$APP_ID/pfx
 
-GAME_CONFIG_DIR=$PROTON_PREFIX/drive_c/users/steamuser/Local\ Settings/Application\ Data/Strange\ Brigade
+GAME_CONFIG_DIR=$PROTON_PREFIX/drive_c/users/steamuser/'Local Settings'/'Application Data'/'Strange Brigade'
 GAME_CONFIG_FILE=$GAME_CONFIG_DIR/GraphicsOptions.ini
-
-BENCHMARK_RESULT_DIR=$PROTON_PREFIX/drive_c/users/steamuser/My\ Documents/StrangeBrigade_Benchmark
+BENCHMARK_RESULT_DIR=$PROTON_PREFIX/drive_c/users/steamuser/'My Documents'/StrangeBrigade_Benchmark
 RESULT_FILE_GLOB='SB__*.txt'
-
 BENCHMARK_WIDTH=3840
 BENCHMARK_HEIGHT=2160
 BENCHMARK_QUALITY=3
+BENCHMARK_RESULT_FILE=
 
 POLL_INTERVAL_SECONDS=2
 RESULT_SETTLE_SECONDS=3
-
-BENCHMARK_RESULT_FILE=
 
 write_graphics_options()
 {
@@ -75,7 +70,11 @@ run_benchmark()
     }
 
     printf 'launching steam benchmark\n'
-    "$STEAM_COMMAND" -applaunch "$APP_ID" -benchmark &
+    if [[ ! -z $(which mangohud) ]]; then 
+        MANGOHUD=1 MANGOHUD_CONFIG=position=top-right,output_folder=$HOME,log_duration=0 steam -applaunch $APP_ID -benchmark &
+    else
+        steam -applaunch $APP_ID -benchmark &
+    fi 
     printf 'steam launch command submitted\n'
 
     printf 'waiting for game process to appear: %s*\n' "$GAME_PROCESS_NAME"
@@ -91,32 +90,21 @@ run_benchmark()
     printf 'game process exited\n'
 
     printf 'waiting for benchmark result file\n'
-    while true; do
-        BENCHMARK_RESULT_FILE=$(
-            find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" | sort | tail -n 1
-        )
-
-        if [ -n "$BENCHMARK_RESULT_FILE" ] && [ -s "$BENCHMARK_RESULT_FILE" ]; then
-            sleep "$RESULT_SETTLE_SECONDS"
-
-            if [ -s "$BENCHMARK_RESULT_FILE" ]; then
-                printf 'result file detected: %s\n' "$BENCHMARK_RESULT_FILE"
-                break
-            fi
+    sleep $RESULT_SETTLE_SECONDS
+    BENCHMARK_RESULT_FILE=$(find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" | sort | tail -n 1)
+    if [ -n "$BENCHMARK_RESULT_FILE" ] && [ -s "$BENCHMARK_RESULT_FILE" ]; then
+        if [ -s "$BENCHMARK_RESULT_FILE" ]; then
+            printf 'result file detected: %s\n' "$BENCHMARK_RESULT_FILE"
+            print_results
+            return 
         fi
+    fi
 
-        sleep "$POLL_INTERVAL_SECONDS"
-    done
-
-    [ -n "$BENCHMARK_RESULT_FILE" ] || {
-        printf 'error: benchmark result file not found\n' >&2
-        exit 1
-    }
-
-    [ -s "$BENCHMARK_RESULT_FILE" ] || {
-        printf 'error: benchmark result file is empty\n' >&2
-        exit 1
-    }
+    echo "result file doesn't exist: $BENCHMARK_RESULT_FILE"
+    if [[ ! -z $(which mangohud) ]]; then 
+        echo "fallback to read mangohud loggings"
+        
+    fi 
 }
 
 print_results()
@@ -147,7 +135,7 @@ print_results()
     ' "$BENCHMARK_RESULT_FILE"
 }
 
-command -v "$STEAM_COMMAND" > /dev/null || {
+command -v steam > /dev/null || {
     printf 'error: steam command not found\n' >&2
     exit 1
 }
@@ -159,4 +147,3 @@ fi
 
 write_graphics_options
 run_benchmark
-print_results
