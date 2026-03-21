@@ -18,7 +18,6 @@ BENCHMARK_WIDTH=3840
 BENCHMARK_HEIGHT=2160
 BENCHMARK_QUALITY=3
 
-ASK_INTERVAL_SECONDS=60
 RESULT_SETTLE_SECONDS=3
 STATUS_PREFIX='[strange-brigade-bench]'
 
@@ -84,63 +83,18 @@ run_benchmark()
     printf '%s steam launcher pid: %s\n' "$STATUS_PREFIX" "$STEAM_LAUNCH_PID"
 
     printf '%s waiting for game process to appear: %s\n' "$STATUS_PREFIX" "$GAME_PROCESS_NAME"
-
-    while true; do
-        if pgrep -x "$GAME_PROCESS_NAME" > /dev/null; then
-            printf '%s game process detected\n' "$STATUS_PREFIX"
-            break
-        fi
-
-        printf '%s still waiting for the game to start\n' "$STATUS_PREFIX"
-        printf '%s terminate the game now? [y/N]: ' "$STATUS_PREFIX"
-
-        reply=
-        if read -r -t "$ASK_INTERVAL_SECONDS" reply; then
-            case $reply in
-                y|Y|yes|YES)
-                    printf '%s terminating benchmark processes by user request\n' "$STATUS_PREFIX"
-                    pkill -x "$GAME_PROCESS_NAME" 2>/dev/null
-                    exit 1
-                    ;;
-                *)
-                    printf '%s continue waiting\n' "$STATUS_PREFIX"
-                    ;;
-            esac
-        else
-            printf '\n'
-        fi
+    while ! pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
+        sleep 2
     done
+    printf '%s game process detected\n' "$STATUS_PREFIX"
 
     printf '%s waiting for benchmark process to exit\n' "$STATUS_PREFIX"
-
-    while true; do
-        if ! pgrep -x "$GAME_PROCESS_NAME" > /dev/null; then
-            printf '%s game process exited\n' "$STATUS_PREFIX"
-            break
-        fi
-
-        printf '%s benchmark is still running\n' "$STATUS_PREFIX"
-        printf '%s terminate the game now? [y/N]: ' "$STATUS_PREFIX"
-
-        reply=
-        if read -r -t "$ASK_INTERVAL_SECONDS" reply; then
-            case $reply in
-                y|Y|yes|YES)
-                    printf '%s terminating benchmark processes by user request\n' "$STATUS_PREFIX"
-                    pkill -x "$GAME_PROCESS_NAME" 2>/dev/null
-                    exit 1
-                    ;;
-                *)
-                    printf '%s continue waiting\n' "$STATUS_PREFIX"
-                    ;;
-            esac
-        else
-            printf '\n'
-        fi
+    while pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
+        sleep 2
     done
+    printf '%s game process exited\n' "$STATUS_PREFIX"
 
     printf '%s waiting for benchmark result file\n' "$STATUS_PREFIX"
-
     while true; do
         BENCHMARK_RESULT_FILE=$(
             find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" -newer "$RESULT_MARKER_FILE" -printf '%T@ %p\n' 2>/dev/null |
@@ -158,24 +112,7 @@ run_benchmark()
             fi
         fi
 
-        printf '%s result file is not ready yet\n' "$STATUS_PREFIX"
-        printf '%s terminate the game now? [y/N]: ' "$STATUS_PREFIX"
-
-        reply=
-        if read -r -t "$ASK_INTERVAL_SECONDS" reply; then
-            case $reply in
-                y|Y|yes|YES)
-                    printf '%s terminating benchmark processes by user request\n' "$STATUS_PREFIX"
-                    pkill -x "$GAME_PROCESS_NAME" 2>/dev/null
-                    exit 1
-                    ;;
-                *)
-                    printf '%s continue waiting\n' "$STATUS_PREFIX"
-                    ;;
-            esac
-        else
-            printf '\n'
-        fi
+        sleep 2
     done
 
     [ -n "$BENCHMARK_RESULT_FILE" ] || {
