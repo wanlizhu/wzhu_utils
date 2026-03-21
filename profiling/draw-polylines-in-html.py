@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-"""Generate interactive HTML line charts from time-series CSV monitoring data.
+"""Generate interactive HTML line charts from CSV monitoring data.
 
-This script reads one or more CSV files whose first column is a timestamp and
-remaining columns are numeric metrics (with naming conventions that imply units).
-It validates structure, converts values to finite floats, and builds a JSON
-payload containing raw/smoothed series, normalized series, and per-metric min/max
-and hover text. That payload is embedded into a single HTML file that uses Plotly
-for interactive polylines: zoom, pan, normalized/actual/delta Y modes, optional
-smoothing, metric selection and grouping, and optional comparison with a second
-report (same timestamp column and metric names).
+This script reads one or more CSV files whose columns are numeric metrics (with
+naming conventions that imply units). If the first column looks like a legacy
+timestamp column, it is dropped; ordering is always by row sequence (sample index
+1, 2, 3, …), not by time. It validates structure, converts values to finite
+floats, and builds a JSON payload containing raw/smoothed series, normalized
+series, and per-metric min/max and hover text. That payload is embedded into a
+single HTML file that uses Plotly for interactive polylines: zoom, pan,
+normalized/actual/delta Y modes, optional smoothing, metric selection and
+grouping, and optional comparison with a second report (same metric names and
+units).
 
 Key relationships:
-  - guess_unit_strict() / is_time_col_name() define column semantics; used by
-    validate_csv_structure() and validate_and_convert().
+  - guess_unit_strict() defines metric column suffix semantics; used by
+    validate_csv_structure() and build_report_payload().
+  - is_likely_timestamp_column_name() is used only to optionally drop a leading
+    legacy timestamp column.
   - to_finite_float_strict() normalizes every cell; rolling_mean, normalize_series,
     diff_pct_series and fmt_* are used by build_report_payload() to produce
     the payload that build_html() embeds.
@@ -75,10 +79,34 @@ def guess_unit_strict(col: str) -> str:
     )
 
 
-def is_time_col_name(name: str) -> bool:
-    """Return True if the column name looks like a timestamp (contains ts, time, or timestamp)."""
+def is_likely_timestamp_column_name(name: str) -> bool:
+    """Return True if the first column name looks like a legacy timestamp column to drop.
+
+    Avoids matching arbitrary metric names such as ``runtime_ms`` (substring ``time``).
+    """
     s = name.strip().lower()
-    return any(token in s for token in ["ts", "time", "timestamp"])
+    if "timestamp" in s:
+        return True
+    if s in ("ts", "t", "time"):
+        return True
+    if s.endswith("_ts") or s.endswith("_timestamp"):
+        return True
+    if s.startswith("ts_") or s.startswith("timestamp_"):
+        return True
+    parts = s.split("_")
+    if parts and parts[0] in ("ts", "time", "timestamp"):
+        return True
+    return False
+
+
+def drop_leading_timestamp_column_if_present(df: pd.DataFrame) -> pd.DataFrame:
+    """If the first column name looks like a timestamp column, drop it; else return df unchanged."""
+    if len(df.columns) == 0:
+        return df
+    first_key = df.columns[0]
+    if is_likely_timestamp_column_name(str(first_key)):
+        return df.drop(columns=[first_key]).copy()
+    return df
 
 
 def to_finite_float_strict(v, row_idx: int, col_name: str) -> float:
@@ -95,13 +123,6 @@ def to_finite_float_strict(v, row_idx: int, col_name: str) -> float:
         return 0.0
 
     return x
-
-
-def infer_time_type(values: list[float]) -> str:
-    """Return 'integer' if all time values are integral, else 'float'. Used for comparison compatibility."""
-    if all(float(v).is_integer() for v in values):
-        return "integer"
-    return "float"
 
 
 def rolling_mean(values: list[float], window: int) -> list[float]:
@@ -147,56 +168,38 @@ def fmt_percent(v: float) -> str:
     return f"{v:.2f}%"
 
 
-def validate_csv_structure(df: pd.DataFrame) -> tuple[str, list[str]]:
-    """Ensure CSV has at least two columns: first is time (name hint), rest are metrics with known unit suffix.
+def validate_csv_structure(df: pd.DataFrame) -> list[str]:
+    """Ensure CSV has at least one metric column with a recognized unit suffix.
 
-    Returns (time_col, metric_cols). Raises ValueError on failure. Calls guess_unit_strict for each metric column.
+    Returns metric_cols. Raises ValueError on failure. Calls guess_unit_strict for each column.
     """
-    if len(df.columns) < 2:
-        raise ValueError("csv must contain at least 2 columns: 1 time column + 1 metric column")
+    if len(df.columns) < 1:
+        raise ValueError("csv must contain at least one metric column")
 
-    time_col = df.columns[0]
-    metric_cols = list(df.columns[1:])
-
-    if not is_time_col_name(time_col):
-        raise ValueError(
-            f"first column does not look like a timestamp column: {time_col}. "
-            f"expected name containing ts, time, or timestamp"
-        )
+    metric_cols = list(df.columns)
 
     for col in metric_cols:
         guess_unit_strict(col)
 
-    return time_col, metric_cols
+    return metric_cols
 
 
-def validate_and_convert(df: pd.DataFrame, time_col: str, metric_cols: list[str]) -> tuple[list[float], dict[str, list[float]]]:
-    """Convert CSV rows to time_values list and metric_values dict; all cells via to_finite_float_strict.
+def validate_and_convert(df: pd.DataFrame, metric_cols: list[str]) -> dict[str, list[float]]:
+    """Convert CSV rows in order to metric_values dict; all cells via to_finite_float_strict.
 
-    Ensures time column is strictly increasing. Returns (time_values, metric_values) for build_report_payload.
+    Row order defines sample index 1..n (first data row = index 1). Raises ValueError if no rows.
     """
-    time_values = []
     metric_values = {col: [] for col in metric_cols}
 
     for row_pos, (_, row) in enumerate(df.iterrows(), start=2):
-        ts = to_finite_float_strict(row[time_col], row_pos, time_col)
-        time_values.append(ts)
-
         for col in metric_cols:
             x = to_finite_float_strict(row[col], row_pos, col)
             metric_values[col].append(x)
 
-    if not time_values:
+    if metric_cols and not metric_values[metric_cols[0]]:
         raise ValueError("csv has no data rows")
 
-    for i in range(1, len(time_values)):
-        if time_values[i] <= time_values[i - 1]:
-            raise ValueError(
-                f"time column is not strictly increasing at data row {i + 2}: "
-                f"{time_values[i - 1]} -> {time_values[i]}"
-            )
-
-    return time_values, metric_values
+    return metric_values
 
 
 def parse_comma_separated_names(s: str | None) -> list[str]:
@@ -218,26 +221,17 @@ def apply_metric_column_filters(
     hide_names: list[str],
     hide_invalid: bool,
 ) -> pd.DataFrame:
-    """Drop hidden and/or uninformative metric columns; returns a dataframe with time + remaining metrics. May raise SystemExit."""
-    if len(df.columns) < 2:
-        raise SystemExit("error: csv must contain at least 2 columns: 1 time column + 1 metric column")
+    """Drop a leading legacy timestamp column if present, then drop hidden/uninformative metrics.
 
-    time_col = df.columns[0]
-    if not is_time_col_name(time_col):
-        raise SystemExit(
-            f"error: first column does not look like a timestamp column: {time_col}. "
-            f"expected name containing ts, time, or timestamp"
-        )
+    Returns a dataframe of metric columns only. May raise SystemExit.
+    """
+    df = drop_leading_timestamp_column_if_present(df)
 
-    metric_cols = list(df.columns[1:])
+    if len(df.columns) < 1:
+        raise SystemExit("error: csv has no metric columns (empty or only a timestamp column)")
+
+    metric_cols = list(df.columns)
     hide_set = set(hide_names)
-
-    if time_col in hide_set:
-        print(
-            f"warning: --hide-columns ignores {time_col!r} (timestamp column cannot be hidden)",
-            file=sys.stderr,
-        )
-        hide_set.discard(time_col)
 
     unknown = hide_set - set(metric_cols)
     for name in sorted(unknown):
@@ -251,14 +245,17 @@ def apply_metric_column_filters(
     if not metric_cols:
         raise SystemExit("error: no metric columns left after --hide-columns / --hide-invalid-columns")
 
-    return df[[time_col] + metric_cols].copy()
+    return df[metric_cols].copy()
 
 
-def build_report_payload(report_name: str, time_col: str, time_values: list[float], x_sec: list[float], metric_cols: list[str], metric_values: dict[str, list[float]]) -> dict:
-    """Build the JSON payload embedded in the HTML: report_name, time_col, time_type, row_count, x_sec, metric_cols, metrics.
+def build_report_payload(report_name: str, metric_cols: list[str], metric_values: dict[str, list[float]]) -> dict:
+    """Build the JSON payload embedded in the HTML: report_name, row_count, x_index, metric_cols, metrics.
 
     For each metric: unit, raw, smooth (window=7), norm_raw, norm_smooth, min/max/avg labels, hover_*_text. Used by build_html.
     """
+    n = len(metric_values[metric_cols[0]]) if metric_cols else 0
+    x_index = [float(i + 1) for i in range(n)]
+
     metrics = {}
 
     for col in metric_cols:
@@ -287,10 +284,8 @@ def build_report_payload(report_name: str, time_col: str, time_values: list[floa
 
     return {
         "report_name": report_name,
-        "time_col": time_col,
-        "time_type": infer_time_type(time_values),
-        "row_count": len(time_values),
-        "x_sec": x_sec,
+        "row_count": n,
+        "x_index": x_index,
         "metric_cols": metric_cols,
         "metrics": metrics,
     }
@@ -574,7 +569,7 @@ def build_html(
                     <span id=comparison_shift_value>0.0</span>
                 </div>
                 <div class=hint>Hold Shift while dragging the slider to use finer 0.1-step movement.</div>
-                <div class=hint>Comparison requires matching timestamp column name, timestamp type, metric name, and unit.</div>
+                <div class=hint>Comparison requires matching metric names and units (sample indices align by row order).</div>
             </div>
 
             <div class=panel>
@@ -954,9 +949,6 @@ def build_html(
             }
             return getUseSmooth() ? metric.smooth : metric.raw;
         }
-        function comparisonTimestampCompatible(primaryReport, secondaryReport) {
-            return primaryReport.time_col === secondaryReport.time_col && primaryReport.time_type === secondaryReport.time_type;
-        }
         function updateComparisonUi() {
             const status = document.getElementById("comparison_status_line");
             const loadBtn = document.getElementById("load_second_btn");
@@ -1055,9 +1047,6 @@ def build_html(
                     throw new Error("selected HTML does not contain embedded report-data");
                 }
                 const report = JSON.parse(node.textContent);
-                if (!comparisonTimestampCompatible(PRIMARY_REPORT, report)) {
-                    throw new Error("the second report timestamp column name or timestamp type does not match the first report");
-                }
                 SECONDARY_REPORT = report;
                 comparisonShift = 0.0;
                 updateComparisonUi();
@@ -1111,7 +1100,7 @@ def build_html(
                     "metric=%{fullData.name}<br>" +
                     "source=%{customdata[5]}<br>" +
                     "sample_index=%{customdata[7]}<br>" +
-                    (currentPlotState.comparisonMode ? "x_position=%{x:.2f}<br>" : (`time_col=${PRIMARY_REPORT.time_col}<br>time=%{x:.3f} s<br>`)) +
+                    (currentPlotState.comparisonMode ? "x_position=%{x:.2f}<br>" : "x=%{x:.2f} (sample index)<br>") +
                     (currentPlotState.yMode === "normalized" ? "normalized=%{y:.4f}<br>" : "actual_y=%{y:.4f}<br>") +
                     "raw=%{customdata[0]}<br>" +
                     "smoothed=%{customdata[1]}<br>" +
@@ -1124,7 +1113,7 @@ def build_html(
         function buildStandardMetricTrace(report, name, role) {
             const metric = report.metrics[name];
             let y = getSeriesForMetric(report, name);
-            let x = report.x_sec;
+            let x = report.x_index;
             let custom = [];
             if (currentPlotState.comparisonMode) {
                 y = getComparisonSlice(y);
@@ -1136,7 +1125,7 @@ def build_html(
                 x = role === "secondary" ? buildSecondaryIndex(len) : index;
                 custom = index.map((idx, i) => [rawText[i], smoothText[i], metric.min_label, metric.max_label, diffText[i], report.report_name || (role === "secondary" ? "second" : "first"), metric.unit || "", idx]);
             } else {
-                custom = report.x_sec.map((_, i) => [metric.hover_raw_text[i], metric.hover_smooth_text[i], metric.min_label, metric.max_label, metric.hover_diff_text[i], report.report_name || "first", metric.unit || "", i + 1]);
+                custom = report.x_index.map((_, i) => [metric.hover_raw_text[i], metric.hover_smooth_text[i], metric.min_label, metric.max_label, metric.hover_diff_text[i], report.report_name || "first", metric.unit || "", i + 1]);
             }
             return createStandardTrace(name, x, y, custom, role);
         }
@@ -1512,7 +1501,7 @@ def build_html(
                 title: "Dynamic Monitoring Metrics",
                 dragmode: "zoom",
                 xaxis: {
-                    title: currentPlotState.comparisonMode ? "Sample index" : `Time since start from ${PRIMARY_REPORT.time_col} (sec)`,
+                    title: currentPlotState.comparisonMode ? "Sample index (shift second series)" : "Sample index (1 = first data row)",
                     range: [baseAxisRanges.x[0], baseAxisRanges.x[1]],
                     fixedrange: false,
                 },
@@ -1586,17 +1575,11 @@ def main(
         hide_names=hide_column_names or [],
         hide_invalid=hide_invalid_columns,
     )
-    time_col, metric_cols = validate_csv_structure(df)
-    time_values, metric_values = validate_and_convert(df, time_col, metric_cols)
-
-    start_ts = time_values[0]
-    x_sec = [(v - start_ts) / 1000.0 for v in time_values]
+    metric_cols = validate_csv_structure(df)
+    metric_values = validate_and_convert(df, metric_cols)
 
     report_payload = build_report_payload(
         report_name=INPUT_CSV.name,
-        time_col=time_col,
-        time_values=time_values,
-        x_sec=x_sec,
         metric_cols=metric_cols,
         metric_values=metric_values,
     )
@@ -1631,7 +1614,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Generate interactive HTML line charts from time-series CSV monitoring data.",
+        description="Generate interactive HTML line charts from CSV metric data (ordered by row sequence).",
         epilog="If no CSV files are given, all *.csv in the current directory are used. Each CSV produces a .html file with the same stem.",
     )
     parser.add_argument(
