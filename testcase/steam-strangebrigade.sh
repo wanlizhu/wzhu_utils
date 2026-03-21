@@ -67,24 +67,20 @@ run_benchmark()
     }
 
     printf 'Launching steam benchmark\n'
-    if [[ ! -z $(which mangohud) ]]; then 
-        MANGOHUD=1 MANGOHUD_CONFIG=position=top-right,output_folder=$HOME,log_duration=0 steam -applaunch $APP_ID -benchmark &
-    else
-        steam -applaunch $APP_ID -benchmark &
-    fi 
+    steam -applaunch $APP_ID -benchmark &
     printf 'Steam launch command submitted\n'
 
-    printf 'Waiting for game process to appear: %s*\n' "$GAME_PROCESS_NAME"
+    printf 'Waiting for game process to appear ...\n'
     while ! pgrep -f "$GAME_PROCESS_NAME" > /dev/null; do
         sleep 5
     done
     printf 'Game process detected\n'
 
-    printf 'Waiting for benchmark process to exit\n'
+    printf 'Waiting for game process to finish ...\n'
     while pgrep -f "$GAME_PROCESS_NAME" > /dev/null; do
         sleep 5
     done
-    printf 'Game process exited\n'
+    printf 'Game process finished\n'
 
     printf 'Waiting for benchmark result file\n'
     sleep 3
@@ -97,10 +93,11 @@ run_benchmark()
         fi
     fi
 
-    echo "Result file doesn't exist: $BENCHMARK_RESULT_FILE"
+    echo "Result file $RESULT_FILE_GLOB doesn't exist"
     if [[ ! -z $(which mangohud) ]]; then 
         echo "Fallback to read mangohud loggings"
-
+        echo "Set up launch options in steam UI: "
+        echo "    MANGOHUD=1 MANGOHUD_CONFIG=autostart_log=1,output_folder=$HOME %command%"
     fi 
 }
 
