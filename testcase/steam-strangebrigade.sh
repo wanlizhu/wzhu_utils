@@ -207,7 +207,28 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 if [[ $1 == ngfx ]]; then 
-    sudo $(which ngfx)  
+    if [[ -z $(which steam) ]]; then 
+        ngfx --launch-detached \
+            --output-dir=$HOME \
+            --exe="/usr/games/steam" \
+            --dir="$HOME" \
+            --env="DISPLAY=:0" 
+        sleep 3
+    else
+        echo "Assume steam process $(pidof steam) was launched by Ngfx"
+    fi 
+    read -p "Press [Enter] when steam game launched: "
+    pstree -aspT $(pidof steam)
+    read -p "Select steam game PID: " PID
+    ngfx --attach-pid=$PID \
+         --activity="GPU Trace Profiler" \
+         --no-timeout \
+         --auto-export \
+         --output-dir=$HOME \
+         --start-after-hotkey \
+         --limit-to-frames=3 \
+         --architecture="Blackwell GB20x" \
+         --metric-set-name="Top-Level Triage"
 else 
     write_graphics_options
     run_benchmark
