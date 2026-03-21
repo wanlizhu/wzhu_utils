@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Called from perf-record-and-postprocess.sh in the same dir. Do not run directly.
 # Expects: PID, COMM; /tmp/perf.txt must exist.
-
 set -o pipefail
 
 # Guardian: required variables and inputs.

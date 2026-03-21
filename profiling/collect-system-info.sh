@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail
 
 OUTPUT_FILE=$HOME/system_info.txt

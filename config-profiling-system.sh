@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail 
 
 INIT_APT_PKG=
@@ -43,6 +42,7 @@ echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling
 echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m):/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
@@ -184,7 +184,8 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         btop htop nvtop sysprof pciutils nfs-common openssh-server \
         libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
         libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-        python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils
+        python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
+        php-cli php-xml
 
     find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
     while IFS= read -r -d '' file; do

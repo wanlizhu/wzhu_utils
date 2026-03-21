@@ -3,7 +3,6 @@
 # Do not run directly. Expects: tab_labels, tab_files, COMM (from caller).
 # Optional: tab_folded_files (same length as tab_files) for tree view and SVG<->tree sync.
 # Uses flamegraph-report-template.html in the same dir; substitutes placeholders with data.
-
 set -o pipefail
 
 # Guardian: required variables and values.

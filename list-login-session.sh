@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail 
 
 if [[ $1 == -t0 ]]; then 

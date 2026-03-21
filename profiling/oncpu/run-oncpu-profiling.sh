@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail
 
 WAIT_SECONDS=0 # delay before perf recording starts.
