@@ -15,22 +15,19 @@ BENCHMARK_HEIGHT=2160
 BENCHMARK_QUALITY=3
 BENCHMARK_RESULT_FILE=
 
-POLL_INTERVAL_SECONDS=2
-RESULT_SETTLE_SECONDS=3
-
 write_graphics_options()
 {
     mkdir -p "$GAME_CONFIG_DIR" || {
-        printf 'error: failed to create game config directory\n' >&2
+        printf 'Error: failed to create game config directory\n' >&2
         exit 1
     }
 
     mkdir -p "$BENCHMARK_RESULT_DIR" || {
-        printf 'error: failed to create benchmark result directory\n' >&2
+        printf 'Error: failed to create benchmark result directory\n' >&2
         exit 1
     }
 
-    printf 'writing benchmark config to %s\n' "$GAME_CONFIG_FILE"
+    printf 'Writing benchmark config to %s\n' "$GAME_CONFIG_FILE"
 
     printf '%s\n' \
         '[Display Settings]' \
@@ -56,64 +53,64 @@ write_graphics_options()
         'ReverbQuality = 1' \
         'HDR = 0' \
         > "$GAME_CONFIG_FILE" || {
-        printf 'error: failed to write game config\n' >&2
+        printf 'Error: failed to write game config\n' >&2
         exit 1
     }
 }
 
 run_benchmark()
 {
-    printf 'removing old benchmark result files\n'
+    printf 'Removing old benchmark result files\n'
     find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" -delete || {
-        printf 'error: failed to remove old benchmark result files\n' >&2
+        printf 'Error: failed to remove old benchmark result files\n' >&2
         exit 1
     }
 
-    printf 'launching steam benchmark\n'
+    printf 'Launching steam benchmark\n'
     if [[ ! -z $(which mangohud) ]]; then 
         MANGOHUD=1 MANGOHUD_CONFIG=position=top-right,output_folder=$HOME,log_duration=0 steam -applaunch $APP_ID -benchmark &
     else
         steam -applaunch $APP_ID -benchmark &
     fi 
-    printf 'steam launch command submitted\n'
+    printf 'Steam launch command submitted\n'
 
-    printf 'waiting for game process to appear: %s*\n' "$GAME_PROCESS_NAME"
+    printf 'Waiting for game process to appear: %s*\n' "$GAME_PROCESS_NAME"
     while ! pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
-        sleep "$POLL_INTERVAL_SECONDS"
+        sleep 5
     done
-    printf 'game process detected\n'
+    printf 'Game process detected\n'
 
-    printf 'waiting for benchmark process to exit\n'
+    printf 'Waiting for benchmark process to exit\n'
     while pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
-        sleep "$POLL_INTERVAL_SECONDS"
+        sleep 5
     done
-    printf 'game process exited\n'
+    printf 'Game process exited\n'
 
-    printf 'waiting for benchmark result file\n'
-    sleep $RESULT_SETTLE_SECONDS
+    printf 'Waiting for benchmark result file\n'
+    sleep 3
     BENCHMARK_RESULT_FILE=$(find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" | sort | tail -n 1)
     if [ -n "$BENCHMARK_RESULT_FILE" ] && [ -s "$BENCHMARK_RESULT_FILE" ]; then
         if [ -s "$BENCHMARK_RESULT_FILE" ]; then
-            printf 'result file detected: %s\n' "$BENCHMARK_RESULT_FILE"
+            printf 'Result file detected: %s\n' "$BENCHMARK_RESULT_FILE"
             print_results
             return 
         fi
     fi
 
-    echo "result file doesn't exist: $BENCHMARK_RESULT_FILE"
+    echo "Result file doesn't exist: $BENCHMARK_RESULT_FILE"
     if [[ ! -z $(which mangohud) ]]; then 
-        echo "fallback to read mangohud loggings"
-        
+        echo "Fallback to read mangohud loggings"
+
     fi 
 }
 
 print_results()
 {
-    printf 'benchmark raw result file:\n'
+    printf 'Benchmark raw result file:\n'
     cat "$BENCHMARK_RESULT_FILE"
     printf '\n'
 
-    printf 'parsed summary:\n'
+    printf 'Parsed summary:\n'
     awk -F':' '
         /Average FPS/ {
             gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
@@ -136,12 +133,16 @@ print_results()
 }
 
 command -v steam > /dev/null || {
-    printf 'error: steam command not found\n' >&2
+    printf 'Error: steam command not found\n' >&2
     exit 1
 }
 
+command -v mangohud > /dev/null || {
+    sudo apt install -y mangohud 
+}
+
 if [ "$EUID" -eq 0 ]; then
-    printf 'error: do not run this script with sudo/root\n' >&2
+    printf 'Error: do not run this script with sudo/root\n' >&2
     exit 1
 fi
 
