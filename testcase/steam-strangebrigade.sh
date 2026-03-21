@@ -18,26 +18,24 @@ BENCHMARK_WIDTH=3840
 BENCHMARK_HEIGHT=2160
 BENCHMARK_QUALITY=3
 
+POLL_INTERVAL_SECONDS=2
 RESULT_SETTLE_SECONDS=3
-STATUS_PREFIX='[strange-brigade-bench]'
 
-RESULT_MARKER_FILE=/tmp/strange-brigade-result-marker.$$
 BENCHMARK_RESULT_FILE=
-STEAM_LAUNCH_PID=
 
 write_graphics_options()
 {
     mkdir -p "$GAME_CONFIG_DIR" || {
-        printf '%s error: failed to create game config directory\n' "$STATUS_PREFIX" >&2
+        printf 'error: failed to create game config directory\n' >&2
         exit 1
     }
 
     mkdir -p "$BENCHMARK_RESULT_DIR" || {
-        printf '%s error: failed to create benchmark result directory\n' "$STATUS_PREFIX" >&2
+        printf 'error: failed to create benchmark result directory\n' >&2
         exit 1
     }
 
-    printf '%s writing benchmark config to %s\n' "$STATUS_PREFIX" "$GAME_CONFIG_FILE"
+    printf 'writing benchmark config to %s\n' "$GAME_CONFIG_FILE"
 
     printf '%s\n' \
         '[Display Settings]' \
@@ -63,76 +61,71 @@ write_graphics_options()
         'ReverbQuality = 1' \
         'HDR = 0' \
         > "$GAME_CONFIG_FILE" || {
-        printf '%s error: failed to write game config\n' "$STATUS_PREFIX" >&2
+        printf 'error: failed to write game config\n' >&2
         exit 1
     }
 }
 
 run_benchmark()
 {
-    : > "$RESULT_MARKER_FILE" || {
-        printf '%s error: failed to create temporary marker file\n' "$STATUS_PREFIX" >&2
+    printf 'removing old benchmark result files\n'
+    find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" -delete || {
+        printf 'error: failed to remove old benchmark result files\n' >&2
         exit 1
     }
 
-    trap '[ -f "$RESULT_MARKER_FILE" ] && rm -f "$RESULT_MARKER_FILE"' EXIT
-
-    printf '%s launching steam benchmark\n' "$STATUS_PREFIX"
+    printf 'launching steam benchmark\n'
     "$STEAM_COMMAND" -applaunch "$APP_ID" -benchmark &
-    STEAM_LAUNCH_PID=$!
-    printf '%s steam launcher pid: %s\n' "$STATUS_PREFIX" "$STEAM_LAUNCH_PID"
+    printf 'steam launch command submitted\n'
 
-    printf '%s waiting for game process to appear: %s\n' "$STATUS_PREFIX" "$GAME_PROCESS_NAME"
+    printf 'waiting for game process to appear: %s\n' "$GAME_PROCESS_NAME"
     while ! pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
-        sleep 2
+        sleep "$POLL_INTERVAL_SECONDS"
     done
-    printf '%s game process detected\n' "$STATUS_PREFIX"
+    printf 'game process detected\n'
 
-    printf '%s waiting for benchmark process to exit\n' "$STATUS_PREFIX"
+    printf 'waiting for benchmark process to exit\n'
     while pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
-        sleep 2
+        sleep "$POLL_INTERVAL_SECONDS"
     done
-    printf '%s game process exited\n' "$STATUS_PREFIX"
+    printf 'game process exited\n'
 
-    printf '%s waiting for benchmark result file\n' "$STATUS_PREFIX"
+    printf 'waiting for benchmark result file\n'
     while true; do
         BENCHMARK_RESULT_FILE=$(
-            find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" -newer "$RESULT_MARKER_FILE" -printf '%T@ %p\n' 2>/dev/null |
-            sort -n |
-            tail -n 1 |
-            cut -d' ' -f2-
+            find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "$RESULT_FILE_GLOB" | sort | tail -n 1
         )
 
         if [ -n "$BENCHMARK_RESULT_FILE" ] && [ -s "$BENCHMARK_RESULT_FILE" ]; then
             sleep "$RESULT_SETTLE_SECONDS"
 
             if [ -s "$BENCHMARK_RESULT_FILE" ]; then
-                printf '%s result file detected: %s\n' "$STATUS_PREFIX" "$BENCHMARK_RESULT_FILE"
+                printf 'result file detected: %s\n' "$BENCHMARK_RESULT_FILE"
                 break
             fi
         fi
 
-        sleep 2
+        sleep "$POLL_INTERVAL_SECONDS"
     done
 
     [ -n "$BENCHMARK_RESULT_FILE" ] || {
-        printf '%s error: benchmark result file not found\n' "$STATUS_PREFIX" >&2
+        printf 'error: benchmark result file not found\n' >&2
         exit 1
     }
 
     [ -s "$BENCHMARK_RESULT_FILE" ] || {
-        printf '%s error: benchmark result file is empty\n' "$STATUS_PREFIX" >&2
+        printf 'error: benchmark result file is empty\n' >&2
         exit 1
     }
 }
 
 print_results()
 {
-    printf '%s benchmark raw result file:\n' "$STATUS_PREFIX"
+    printf 'benchmark raw result file:\n'
     cat "$BENCHMARK_RESULT_FILE"
     printf '\n'
 
-    printf '%s parsed summary:\n' "$STATUS_PREFIX"
+    printf 'parsed summary:\n'
     awk -F':' '
         /Average FPS/ {
             gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
@@ -155,12 +148,12 @@ print_results()
 }
 
 command -v "$STEAM_COMMAND" > /dev/null || {
-    printf '%s error: steam command not found\n' "$STATUS_PREFIX" >&2
+    printf 'error: steam command not found\n' >&2
     exit 1
 }
 
 if [ "$EUID" -eq 0 ]; then
-    printf '%s error: do not run this script with sudo/root\n' "$STATUS_PREFIX" >&2
+    printf 'error: do not run this script with sudo/root\n' >&2
     exit 1
 fi
 
