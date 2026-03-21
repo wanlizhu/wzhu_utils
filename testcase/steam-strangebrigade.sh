@@ -79,13 +79,13 @@ run_benchmark()
     printf 'steam launch command submitted\n'
 
     printf 'waiting for game process to appear: %s*\n' "$GAME_PROCESS_NAME"
-    while ! pgrep -x "${GAME_PROCESS_NAME}.*" > /dev/null; do
+    while ! pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
         sleep "$POLL_INTERVAL_SECONDS"
     done
     printf 'game process detected\n'
 
     printf 'waiting for benchmark process to exit\n'
-    while pgrep -x "${GAME_PROCESS_NAME}.*" > /dev/null; do
+    while pgrep -x "$GAME_PROCESS_NAME" > /dev/null; do
         sleep "$POLL_INTERVAL_SECONDS"
     done
     printf 'game process exited\n'
