@@ -149,7 +149,10 @@ print(desc_out)
 print(data_out)
 PY
             if [[ -f /tmp/data.csv && -f /tmp/desc/.txt ]]; then 
-                draw-polylines-in-html.py --hide-invalid-columns --desc="$(cat /tmp/desc.txt)" /tmp/data.csv 
+                draw-polylines-in-html.py --hide-invalid-columns --desc="$(cat /tmp/desc.txt)" --y-axis-mode=actual --default-attributes="fps_dec" /tmp/data.csv && {
+                    cp /tmp/data.html ${latest_mangohud_log%.csv}.html
+                    echo "Generated ${latest_mangohud_log%.csv}.html"
+                }
             fi 
         else
             echo "Config launch options in steam UI: "
