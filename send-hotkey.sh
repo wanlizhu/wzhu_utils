@@ -10,8 +10,10 @@ type=$(loginctl show-session $(loginctl | awk '/tty|pts/ { print $1; exit }') -p
 if [[ $type == "Type=wayland" ]]; then 
     sudo pkill ydotoold
     sudo ydotoold --socket-path=/tmp/ydotool.sock &
-    sleep 1
-    sudo YDOTOOL_SOCKET=/tmp/ydotool.sock ydotool key 87:1 87:0  # F11
+    sleep 0.2
+    sudo YDOTOOL_SOCKET=/tmp/.ydotool_socket ydotool key 87:1
+    sleep 0.2
+    sudo YDOTOOL_SOCKET=/tmp/.ydotool_socket ydotool key 87:0
 else
     if [[ -e /run/user/$(id -u)/gdm/Xauthority ]]; then 
         DISPLAY=:0 XAUTHORITY=/run/user/$(id -u)/gdm/Xauthority xdotool key F11 
