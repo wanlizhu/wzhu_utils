@@ -93,6 +93,9 @@ run_benchmark()
         echo "Fallback to read mangohud loggings"
         latest_mangohud_log=$(find "$HOME" -maxdepth 1 -type f -name 'StrangeBrigade_*.csv' | sort | tail -n 1)
         if [ -s "$latest_mangohud_log" ]; then
+            avg_fps=$(awk -F, 'NR >= 4 { sum += $1; n++ } END { if (n) print sum / n }' "$latest_mangohud_log")
+            echo "Average FPS: $avg_fps"
+
             rm -rf /tmp/desc.txt /tmp/data.csv 
             python3 - "$latest_mangohud_log" <<'PY'
 import csv
