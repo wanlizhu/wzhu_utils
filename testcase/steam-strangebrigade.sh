@@ -208,11 +208,11 @@ fi
 
 if [[ $1 == ngfx ]]; then 
     if [[ -z $(pidof steam) ]]; then 
-        ngfx --activity="GPU Trace Profiler" \
-            --output-dir=$HOME \
+        ngfx \
             --exe="/usr/games/steam" \
             --dir="$HOME" \
             --env="DISPLAY=:0" \
+            --activity="GPU Trace Profiler" \
             --real-time-shader-profiler \
             --no-timeout \
             --auto-export \
