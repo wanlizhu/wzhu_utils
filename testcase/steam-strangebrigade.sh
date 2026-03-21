@@ -207,7 +207,7 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 if [[ $1 == ngfx ]]; then 
-    if [[ -z $(which steam) ]]; then 
+    if [[ -z $(pidof steam) ]]; then 
         ngfx --launch-detached \
             --output-dir=$HOME \
             --exe="/usr/games/steam" \
