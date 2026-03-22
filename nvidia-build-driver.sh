@@ -61,7 +61,7 @@ function unix_build_nvmake() {
         )
     fi 
 
-    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" >/tmp/nvmake.txt 
+    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@"  
 }
 
 function post_build_install_dso() {
