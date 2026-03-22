@@ -208,6 +208,8 @@ fi
 
 if [[ $1 == ngfx ]]; then 
     if [[ -z $(pidof steam) && ! -z $(which ngfx) ]]; then 
+        GPU_ARCH="Blackwell GB20x"
+        METRIC_SET="Top-Level Triage"
         rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
         mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
         ngfx \
@@ -223,10 +225,13 @@ if [[ $1 == ngfx ]]; then
             --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP \
             --start-after-hotkey \
             --limit-to-frames=3 \
-            --architecture="Blackwell GB20x" \
-            --metric-set-name="Top-Level Triage" \
+            --architecture="$GPU_ARCH" \
+            --metric-set-name="$METRIC_SET" \
             --launch-detached 
-        echo "Press [F11] to trigger a captire"
+        echo "GPU Trace output folder: $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP"
+        echo "GPU Architecture: $GPU_ARCH"
+        echo "      Metric Set: $METRIC_SET"
+        echo "Press hot-key [F11] to trigger a captire"
     fi 
 else 
     write_graphics_options
