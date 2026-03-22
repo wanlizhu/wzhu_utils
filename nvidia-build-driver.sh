@@ -109,26 +109,24 @@ function post_build_install_dso() {
 }
 
 function detect_source_root() {
-    if [[ ! -z $NV_BRANCH && -d $HOME/wzhu_p4sw/branch/$NV_BRANCH ]]; then 
-        cd $HOME/wzhu_p4sw/branch/$NV_BRANCH || exit 1
-    fi 
-
     if [[ -f makefile.nvmk ]]; then
         if [[ -d drivers ]]; then 
-            NV_SOURCE=$(realpath $(pwd)/../..)
+            P4SW_ROOT=$(realpath $(pwd)/../..)
         elif [[ -f opengl.nvmk ]]; then 
-            NV_SOURCE=$(realpath $(pwd)/../../../..)
-        else
-            echo "cd to branch root first"
-            echo "Aborting"
-            exit 1
+            P4SW_ROOT=$(realpath $(pwd)/../../../..)
         fi 
-    elif [[ -d $HOME/wzhu_p4sw ]]; then 
-        NV_SOURCE=$HOME/wzhu_p4sw
+    fi 
+
+    if [[ -z $P4SW_ROOT && -d $HOME/wzhu_p4sw ]]; then 
+        P4SW_ROOT=$HOME/wzhu_p4sw
     else
         echo "~/wzhu_p4sw/ doesn't exist"
         echo "Aborting"
         exit 1
+    fi 
+
+    if [[ ! -f makefile.nvmk ]]; then
+        cd $P4SW_ROOT
     fi 
 
     pwd 
@@ -148,16 +146,16 @@ while (( $# )); do
         ppp)
             shift  
             detect_source_root || exit 1
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH x86   $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH amd64 $NV_BUILD_TYPE post-process-packages "$@" && {
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH amd64 $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH x86   $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH amd64 $NV_BUILD_TYPE post-process-packages "$@" && {
                 run_installer=no
                 if [[ $POST_BUILD_INSTALL == 1 ]]; then 
                     read -p "Run Nvidia drivers installer now? [Y/n]: " run_installer
                 fi 
                 if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
-                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
-                    nvidia-install-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version.run 
+                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $P4SW_ROOT/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
+                    nvidia-install-driver.sh $P4SW_ROOT/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version.run 
                 fi 
             }
             exit
@@ -165,14 +163,14 @@ while (( $# )); do
         dist)
             shift  
             detect_source_root || exit 1
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" && {
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE drivers dist -j$(nproc) "$@" && {
                 run_installer=no
                 if [[ $POST_BUILD_INSTALL == 1 ]]; then 
                     read -p "Run Nvidia drivers installer now? [Y/n]: " run_installer
                 fi 
                 if [[ -z $run_installer || $run_installer == [Yy] ]]; then 
-                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $NV_SOURCE/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
-                    nvidia-install-driver.sh $NV_SOURCE/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version-internal.run 
+                    nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $P4SW_ROOT/branch/$NV_BRANCH/drivers/common/inc/nvUnixVersion.h  | awk '{print $3}' | sed 's/"//g')
+                    nvidia-install-driver.sh $P4SW_ROOT/branch/$NV_BRANCH/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/NVIDIA-Linux-$(uname -m)-$nvidia_source_version-internal.run 
                 fi 
             }
             exit
@@ -180,18 +178,18 @@ while (( $# )); do
         opengl)
             shift 
             detect_source_root || exit 1
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL && 
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers/unix/libglvnd/NVIDIA &&
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
-            cd $NV_SOURCE/branch/$NV_BRANCH/drivers && 
-            unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" NV_BUILD_MODULES=egl && {
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL && 
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/glx &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers/unix/libglvnd/NVIDIA &&
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" &&
+            cd $P4SW_ROOT/branch/$NV_BRANCH/drivers && 
+            unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" NV_BUILD_MODULES=egl && {
                 install_umds=no
                 if [[ $POST_BUILD_INSTALL == 1 ]]; then 
                     read -p "Install Nvidia OpenGL UMD(s) now? [Y/n]: " install_umds
@@ -201,16 +199,16 @@ while (( $# )); do
                     target_host=${target_host:-localhost}
                     echo $target_host >/tmp/remote 
                     echo -e "\nNvidia OpenGL UMD(s) installed to $target_host:" >/tmp/nvidia-umds.log 
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL libnvidia-glcore.so && echo "    - libnvidia-glcore.so" >>/tmp/nvidia-umds.log
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/unix/tls/Linux-elf libnvidia-tls.so && echo "    - libnvidia-tls.so" >>/tmp/nvidia-umds.log
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build libnvidia-eglcore.so && echo "    - libnvidia-eglcore.so" >>/tmp/nvidia-umds.log
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi libnvidia-glsi.so && echo "    - libnvidia-glsi.so" >>/tmp/nvidia-umds.log 
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX_nvidia.so && echo "    - libGLX_nvidia.so" >>/tmp/nvidia-umds.log 
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX.so && echo "    - libGLX.so" >>/tmp/nvidia-umds.log # optional
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL_nvidia.so && echo "    - libEGL_nvidia.so" >>/tmp/nvidia-umds.log
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL.so && echo "    - libEGL.so" >>/tmp/nvidia-umds.log # optional 
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2_nvidia.so && echo "    - libGLESv2_nvidia.so" >>/tmp/nvidia-umds.log
-                    post_build_install_dso $target_host $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $NV_SOURCE/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2.so && echo "    - libGLESv2.so" >>/tmp/nvidia-umds.log # optional 
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL libnvidia-glcore.so && echo "    - libnvidia-glcore.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/unix/tls/Linux-elf libnvidia-tls.so && echo "    - libnvidia-tls.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/egl/build libnvidia-eglcore.so && echo "    - libnvidia-eglcore.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/egl/glsi libnvidia-glsi.so && echo "    - libnvidia-glsi.so" >>/tmp/nvidia-umds.log 
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX_nvidia.so && echo "    - libGLX_nvidia.so" >>/tmp/nvidia-umds.log 
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib libGLX.so && echo "    - libGLX.so" >>/tmp/nvidia-umds.log # optional
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL_nvidia.so && echo "    - libEGL_nvidia.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/khronos/egl/egl libEGL.so && echo "    - libEGL.so" >>/tmp/nvidia-umds.log # optional 
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2_nvidia.so && echo "    - libGLESv2_nvidia.so" >>/tmp/nvidia-umds.log
+                    post_build_install_dso $target_host $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE $P4SW_ROOT/branch/$NV_BRANCH/drivers/khronos/opengles/gles2 libGLESv2.so && echo "    - libGLESv2.so" >>/tmp/nvidia-umds.log # optional 
                     cat /tmp/nvidia-umds.log 
                 else
                     echo -e "\nNvidia OpenGL UMD(s) compiled:"
@@ -218,7 +216,7 @@ while (( $# )); do
                     echo "    - libnvidia-tls.so"
                     echo "    - libnvidia-eglcore.so"
                     echo "    - libnvidia-glsi.so"
-                    if [[ -f $NV_SOURCE/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/libGLX_nvidia.so ]]; then 
+                    if [[ -f $P4SW_ROOT/branch/$NV_BRANCH/drivers/OpenGL/win/glx/lib/_out/Linux_${NV_TARGET_ARCH}_${NV_BUILD_TYPE}/libGLX_nvidia.so ]]; then 
                         echo "    - libGLX_nvidia.so"
                         echo "    - libEGL_nvidia.so"
                         echo "    - libGLESv2_nvidia.so"
@@ -248,7 +246,7 @@ while (( $# )); do
             nvidia_module_version=$(modinfo nvidia | grep ^version | awk '{print $2}')
             echo "Nvidia module version: $nvidia_module_version"
             shopt -s nullglob
-            for branch_path in $NV_SOURCE/branch/*; do 
+            for branch_path in $P4SW_ROOT/branch/*; do 
                 nvidia_source_version=$(grep '^#define NV_VERSION_STRING' $branch_path/drivers/common/inc/nvUnixVersion.h 2>/dev/null | awk '{print $3}' | sed 's/"//g')
                 pending_changes=$(p4 opened $branch_path/... 2>/dev/null | grep 'change [0-9]')
                 pending_changes=$([[ -z $pending_changes ]] && echo || echo "(pending changes)")
@@ -279,7 +277,7 @@ while (( $# )); do
             while IFS= read -r subdir; do
                 [[ $(basename $subdir) == branch ]] && continue 
                 p4 sync $subdir/... 
-            done < <(find $NV_SOURCE -mindepth 1 -maxdepth 1 -type d -print)
+            done < <(find $P4SW_ROOT -mindepth 1 -maxdepth 1 -type d -print)
             exit 
         ;;
         *) break ;;
@@ -288,4 +286,4 @@ while (( $# )); do
 done 
 
 detect_source_root || exit 1
-unix_build_nvmake $NV_SOURCE $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" 
+unix_build_nvmake $P4SW_ROOT $NV_BRANCH $NV_TARGET_ARCH $NV_BUILD_TYPE "$@" 
