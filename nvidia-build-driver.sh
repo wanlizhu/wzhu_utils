@@ -117,12 +117,14 @@ function detect_source_root() {
         fi 
     fi 
 
-    if [[ -z $P4SW_ROOT && -d $HOME/wzhu_p4sw ]]; then 
-        P4SW_ROOT=$HOME/wzhu_p4sw
-    else
-        echo "~/wzhu_p4sw/ doesn't exist"
-        echo "Aborting"
-        exit 1
+    if [[ -z $P4SW_ROOT ]]; then 
+        if [[ -d $HOME/wzhu_p4sw ]]; then 
+            P4SW_ROOT=$HOME/wzhu_p4sw
+        else 
+            echo "~/wzhu_p4sw/ doesn't exist"
+            echo "Aborting"
+            exit 1
+        fi 
     fi 
 
     if [[ ! -f makefile.nvmk ]]; then
