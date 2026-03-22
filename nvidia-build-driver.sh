@@ -61,10 +61,7 @@ function unix_build_nvmake() {
         )
     fi 
 
-    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" || {
-        # retry with -j1 (to stop at the first error) and verbose options
-        ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" verbose -j1 || return 1
-    }
+    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@" >/tmp/nvmake.txt 
 }
 
 function post_build_install_dso() {
