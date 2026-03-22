@@ -207,6 +207,12 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 if [[ $1 == ngfx ]]; then 
+    if [[ $2 == ? ]]; then 
+        ngfx --help-all >/tmp/ngfx
+        cat /tmp/ngfx | sed -n '/--architecture arg/,/--metric-set-name arg/p' | sed '$d'
+        cat /tmp/ngfx | sed -n '/--metric-set-name arg/,/--metric-set-id arg/p' | sed '$d'
+        exit 
+    fi 
     if [[ -z $(pidof steam) && ! -z $(which ngfx) ]]; then 
         GPU_ARCH="Blackwell GB20x"
         METRIC_SET="Top-Level Triage"
