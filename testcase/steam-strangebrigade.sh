@@ -207,9 +207,9 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 if [[ $1 == ngfx ]]; then 
-    rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
-    mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
-    if [[ -z $(pidof steam) ]]; then 
+    if [[ -z $(pidof steam) && ! -z $(which ngfx) ]]; then 
+        rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
+        mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
         ngfx \
             --exe="/usr/games/steam" \
             --dir="$HOME" \
@@ -226,14 +226,8 @@ if [[ $1 == ngfx ]]; then
             --architecture="Blackwell GB20x" \
             --metric-set-name="Top-Level Triage" \
             --launch-detached 
-        sleep 3
-    else
-        echo "Assume steam process $(pidof steam) was launched by Ngfx"
+        echo "Press [F11] to trigger a captire"
     fi 
-    read -p "Press [Enter] when steam game launched: "
-    pstree -aspT $(pidof steam)
-    read -p "Select steam game PID: " PID
-    ngfx --attach-pid=$PID 
 else 
     write_graphics_options
     run_benchmark
