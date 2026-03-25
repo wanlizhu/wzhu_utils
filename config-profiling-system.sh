@@ -34,7 +34,7 @@ fi
 # vscode file watcher
 if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then 
     echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-vscode.conf >/dev/null 
-    sudo sysctl -w fs.inotify.max_user_watches=524288
+    sudo sysctl -w fs.inotify.max_user_watches=524288 >/dev/null 
 fi
 
 # patch ~/.bashrc

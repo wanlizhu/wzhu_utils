@@ -259,10 +259,15 @@ print_brief() {
     printf '\t\t%s\n' "$(print_cpu_power_profile)" >>/tmp/brief
     # Intel: report P-cores and E-cores separately from sysfs cpu_core/cpu_atom; else total cores and cpu0.
     if grep -qi '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo; then
-        printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>/tmp/brief
-        print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
-        printf '\t\tNumber of E-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_atom/cpus) >>/tmp/brief
-        print_cpu_core_info $(cat /sys/devices/cpu_atom/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+        if [[ -e /sys/devices/cpu_core/cpus && -e /sys/devices/cpu_atom/cpus ]]; then 
+            printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>/tmp/brief
+            print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+            printf '\t\tNumber of E-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_atom/cpus) >>/tmp/brief
+            print_cpu_core_info $(cat /sys/devices/cpu_atom/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+        else
+            printf '\t\tNumber of P-cores: N/A\n' >>/tmp/brief
+            printf '\t\tNumber of E-cores: N/A\n' >>/tmp/brief
+        fi 
     else
         printf '\t\tNumber of cores: %s\n' "$(grep -c '^processor' /proc/cpuinfo)" >>/tmp/brief
         print_cpu_core_info 0 | sed 's/^/\t\t\t/' >>/tmp/brief
