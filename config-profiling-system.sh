@@ -31,6 +31,12 @@ if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 fi
 
+# vscode file watcher
+if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then 
+    echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-vscode.conf >/dev/null 
+    sudo sysctl -w fs.inotify.max_user_watches=524288
+fi
+
 # patch ~/.bashrc
 [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]] && echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
 echo '#!/bin/bash' >~/nvidia-profiling.sh
