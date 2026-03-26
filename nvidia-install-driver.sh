@@ -36,11 +36,6 @@ shutdown_graphical_env() {
         sudo apt purge -y $nvidia_packages
         sudo apt autoremove -y
     fi
-
-    # Remove apt-based opengl drivers 
-    apt list --installed 2>/dev/null | grep -E '^(mesa|libgl1|libglx|libegl|libopengl|libglvnd|libglapi|libnvidia-gl|nvidia-driver|nvidia-open)' | cut -d/ -f1 | xargs -r sudo apt purge -y 
-    sudo apt autoremove --purge -y
-    sudo ldconfig
 }
 
 # Launch a text-based ui for interactive installation 
