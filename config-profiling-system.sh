@@ -5,7 +5,7 @@ INIT_APT_PKG=
 
 while (( $# )); do
     case $1 in
-        -init) INIT_APT_PKG=true ;;
+        apt) INIT_APT_PKG=true ;;
         *) break ;;
     esac
     shift
