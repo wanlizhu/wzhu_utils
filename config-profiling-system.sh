@@ -309,10 +309,6 @@ else
     fi 
 fi 
 
-if [[ ! -d /timeshift && -d $HOME/.timeshift ]]; then 
-    sudo ln -sf $HOME/.timeshift /timeshift && echo "SLinked /timeshift to $HOME/.timeshift"
-fi 
-
 if [[ ! -z $(which collect-system-info.sh) ]]; then 
     collect-system-info.sh brief 
 fi 
