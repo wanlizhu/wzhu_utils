@@ -70,9 +70,7 @@ pp() {
     } || git pull
     popd
 }
-EOF
-cat >> ~/nvidia-profiling.sh <<'EOF'
-nvparams() {
+print-nvparams() {
     find /etc/modprobe.d -type f -name '*.conf' -print0 |
     xargs -0 awk '
         /^[[:space:]]*#/ { next }
@@ -81,9 +79,7 @@ nvparams() {
         }
     '
 }
-EOF
-cat >>~/nvidia-profiling.sh <<'EOF'
-vvtop() {
+top-cpu-gpu() {
     tmp_htoprc=/tmp/htop.rc &&
     tmp_screenrc=/tmp/screen.rc &&
     printf '%s\n' \
@@ -134,13 +130,11 @@ vvtop() {
     screen -S monitor -X quit >/dev/null 2>&1
     screen -S monitor -c "$tmp_screenrc"
 }
-EOF
-cat >>~/nvidia-profiling.sh <<'EOF'
-mnt-nfs() {
+mount-nfs-folder() {
     sudo mkdir -p /mnt/$(basename $1)
     sudo mount -t nfs $1 /mnt/$(basename $1) && echo "Mounted /mnt/$(basename $1)"
 }
-mnt-cifs() {
+mount-cifs-folder() {
     if [[ "$1" == \\\\* ]]; then 
         uncpath="$1"
     else
@@ -155,6 +149,15 @@ mnt-cifs() {
         echo "Mounted $mnt_dir" 
         [[ -e $mnt_dir/$subpath ]] && echo "$mnt_dir/$subpath"
     }
+}
+create-system-snapshot() {
+    UUID='0bb172fa-5d90-44ac-b135-52f6520115b1'
+    if [[ -z $(sudo blkid -U $UUID) ]]; then 
+        echo "UUID $UUID doesn't exist"
+        return 1
+    fi 
+    sudo blkid -U $UUID
+    sudo timeshift --create --snapshot-device $UUID --comments "Created by $USER at $(date)" 
 }
 EOF
 source ~/nvidia-profiling.sh
