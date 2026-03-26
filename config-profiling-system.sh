@@ -176,6 +176,9 @@ fi
 
 # install required packages
 if [[ $INIT_APT_PKG == true && ! -z $(which install-pkg.sh) ]]; then 
+    sudo tee /etc/apt/apt.conf.d/99-phased-updates >/dev/null <<'EOF'
+APT::Get::Always-Include-Phased-Updates "true";
+EOF
     if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
         echo "Types: deb
 URIs: http://ddebs.ubuntu.com/
