@@ -306,16 +306,8 @@ else
     fi 
 fi 
 
-if [[ -d /data ]]; then 
-    pushd $HOME >/dev/null 
-    [[ ! -e wzhu_utils ]] && ln -vsf /data/wzhu_utils wzhu_utils 
-    [[ ! -e wzhu_p4sw  ]] && ln -vsf /data/wzhu_p4sw  wzhu_p4sw 
-    [[ ! -e .ssh       ]] && ln -vsf /data/_ssh .ssh 
-    [[ ! -e .bashrc    ]] && ln -vsf /data/_bashrc .bashrc 
-    [[ ! -e Documents  ]] && ln -vsf /data/Documents Documents 
-    [[ ! -e Downloads  ]] && ln -vsf /data/Downloads Downloads
-    [[ ! -e Pictures   ]] && ln -vsf /data/Pictures Pictures 
-    popd >/dev/null 
+if [[ ! -d /timeshift && -d $HOME/.timeshift ]]; then 
+    sudo ln -sf $HOME/.timeshift /timeshift && echo "SLinked /timeshift to $HOME/.timeshift"
 fi 
 
 if [[ ! -z $(which collect-system-info.sh) ]]; then 
