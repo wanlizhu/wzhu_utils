@@ -50,7 +50,6 @@ echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profilin
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh
-echo 'export PATH="$HOME/vulkansdk/current/$(uname -m)/bin:$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m):/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
@@ -59,6 +58,7 @@ echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
+echo '[[ -f $HOME/vulkansdk/current/setup-env.sh ]] && source $HOME/vulkansdk/current/setup-env.sh' >>~/nvidia-profiling.sh
 echo "reload() { source ~/.bashrc; }" >>~/nvidia-profiling.sh
 cat >> ~/nvidia-profiling.sh <<'EOF'
 pp() { 
