@@ -50,6 +50,7 @@ echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profilin
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh
+echo 'export PATH="$HOME/vulkansdk/current/$(uname -m)/bin:$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m):/mnt/linuxqa/wanliz/$(uname -m)/p4v/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
