@@ -27,15 +27,6 @@ shutdown_graphical_env() {
     else
         echo "Found 0 active nvidia kernel module"
     fi 
-
-    # Remove apt-based nvidia packaged 
-    nvidia_packages=$(dpkg -l | awk '/^(ii|rc)[[:space:]]+(nvidia|libnvidia|linux-modules-nvidia|xserver-xorg-video-nvidia)/ { print $2 }')
-    if [[ ! -z $nvidia_packages ]]; then
-        echo "$nvidia_packages"
-        read -p "Press [Enter] to uninstall nvidia packages:"
-        sudo apt purge -y $nvidia_packages
-        sudo apt autoremove -y
-    fi
 }
 
 # Launch a text-based ui for interactive installation 
