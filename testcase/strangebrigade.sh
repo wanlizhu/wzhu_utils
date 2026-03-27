@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 set -o pipefail
 
+create_screenshot() {
+    local output=screenshot$([[ -z $1 ]] || echo "_$1").png
+    if [[ ! -z $2 ]]; then   
+        mkdir -p $2
+        find $2 -mindepth 1 -delete 
+        output=$2/screenshot$([[ -z $1 ]] || echo "_$1").png
+    fi 
+    if [[ $(list-login-session.sh seat0.type) == wayland ]]; then 
+        [[ -z $(which grim) ]] && sudo apt install -y grim &>/dev/null 
+        grim $output 
+    else
+        [[ -z $(which magick) && -z $(which import) ]] && sudo apt install -y imagemagick
+        if command -v magick > /dev/null; then
+            magick import -window root $output
+        elif command -v import > /dev/null; then
+            import -window root $output 
+        fi
+    fi 
+}
+
 run_strangebrigade_benchmark() {
     local BENCHMARK_RESULT_DIR="$HOME/.steam/steam/steamapps/compatdata/312670/pfx/drive_c/users/steamuser/Documents/StrangeBrigade_Benchmark"
     local GRAPHICS_CONFIG_FILE="$HOME/.steam/steam/steamapps/compatdata/312670/pfx/drive_c/users/steamuser/Local Settings/Application Data/Strange Brigade/GraphicsOptions.ini"
@@ -42,9 +62,15 @@ run_strangebrigade_benchmark() {
     done
     echo 
     start="$(date +%H:%M:%S)"
+    start_gpu_pct="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)"
     while pgrep -f StrangeBrigade_ > /dev/null; do
-        printf "\r[%s -> %s] Wait for game process to finish ..." "$start" "$(date +%H:%M:%S)"
-        sleep 1
+        gpu_pct="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)"
+        printf "\r[%s -> %s] [GPU: %s] Wait for game process to exit ..." "$start" "$(date +%H:%M:%S)" "$gpu_pct %"
+        if (( $gpu_pct > $start_gpu_pct )); then 
+            create_screenshot when_gpu_${gpu_pct}pct $HOME/screenshots
+            start_gpu_pct=$gpu_pct
+        fi 
+        sleep 5
     done
     echo 
 
@@ -55,6 +81,7 @@ run_strangebrigade_benchmark() {
     fi 
 
     cat "$benchmark_result_file" | sed '/Frame times (ms):/,$d'
+    ls -1 $HOME/screenshots 
 }
 
 if [ "$EUID" -eq 0 ]; then

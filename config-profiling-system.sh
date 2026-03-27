@@ -243,7 +243,7 @@ fi
 
 # enable remote login 
 if [[ ! -z $(which list-login-session.sh) ]]; then 
-    login_session_type=$(list-login-session.sh -t0)
+    login_session_type=$(list-login-session.sh seat0.type)
 else
     login_session_type=
 fi 

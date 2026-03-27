@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail 
 
-if [[ $1 == -t0 ]]; then 
+if [[ $1 == 'seat0.type' ]]; then 
     if [[ ! -z $(which loginctl) ]]; then 
         active_sid=$(
             while read -r session; do
