@@ -9,8 +9,13 @@ create_screenshot() {
         output=$2/screenshot$([[ -z $1 ]] || echo "_$1").png
     fi 
     if [[ $(list-login-session.sh seat0.type) == wayland ]]; then 
-        [[ -z $(which grim) ]] && sudo apt install -y grim &>/dev/null 
-        grim $output 
+        if [[ $XDG_CURRENT_DESKTOP == *GNOME* ]]; then
+            [[ -z $(which gnome-screenshot) ]] && sudo apt install -y gnome-screenshot &>/dev/null 
+            gnome-screenshot -f $outfile
+        else 
+            [[ -z $(which grim) ]] && sudo apt install -y grim &>/dev/null 
+            grim $output
+        fi  
     else
         [[ -z $(which magick) && -z $(which import) ]] && sudo apt install -y imagemagick
         if command -v magick > /dev/null; then
