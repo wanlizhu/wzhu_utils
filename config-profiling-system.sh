@@ -55,7 +55,7 @@ echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
 echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
 echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
-echo "export P4IGNORE=$HOME/.p4ignore" >>~/nvidia-profiling.sh
+echo "export P4IGNORE=$P4ROOT/.p4ignore" >>~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
 echo '[[ -f $HOME/vulkansdk/current/setup-env.sh ]] && source $HOME/vulkansdk/current/setup-env.sh' >>~/nvidia-profiling.sh
@@ -175,6 +175,18 @@ create-system-snapshot() {
 }
 EOF
 source ~/nvidia-profiling.sh
+
+if [[ -d $P4ROOT && ! -f $P4ROOT/.p4ignore ]]; then 
+    echo "_out/" >  $P4ROOT/.p4ignore
+    echo ".git/" >> $P4ROOT/.p4ignore
+    echo ".vscode/" >> $P4ROOT/.p4ignore
+    echo ".cursor/" >> $P4ROOT/.p4ignore
+    echo ".cache/" >> $P4ROOT/.p4ignore
+    echo "__pycache__/" >> $P4ROOT/.p4ignore
+    echo "/.p4ignore" >> $P4ROOT/.p4ignore
+    echo "/compile_commands.json" >> $P4ROOT/.p4ignore
+    echo "/.clangd" >> $P4ROOT/.p4ignore
+fi 
 
 # set kernel params
 if [[ ! -f /etc/modprobe.d/nvidia-profiling.conf ]]; then
