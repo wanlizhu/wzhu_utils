@@ -33,8 +33,9 @@ unix_build_nvmake() {
         raytracing optix # for raytracing 
         compiler         # for openCL
         gpgpu gpgpucomp gpgpudbg # for cuda
+        tileiraslib # cuda tile IR codegen
     )
-    exclude_build_modules=() # uncomment to disable it
+    #exclude_build_modules=() # uncomment to disable it
     local nvmake_args=(
         NV_COLOR_OUTPUT=1
         NV_COMPRESS_THREADS=$(nproc)
@@ -49,7 +50,7 @@ unix_build_nvmake() {
         NV_UNIX_CHECK_DEBUG_INFO=0
     )
     if (( ${#exclude_build_modules[@]} != 0 )); then
-        nvmake_args+=("NV_EXCLUDE_BUILD_MODULES=\"${exclude_build_modules[*]}\"")
+        nvmake_args+=("NV_EXCLUDE_BUILD_MODULES=${exclude_build_modules[*]}")
     fi 
     if [[ $buildtype == release ]]; then 
         nvmake_args+=( 
@@ -64,7 +65,10 @@ unix_build_nvmake() {
 
     echo "$root/tools/linux/unix-build/unix-build ${unix_build_args[@]} nvmake ${nvmake_args[@]} linux $arch $buildtype $@"
     echo "Will run this command in 3 seconds ..." && sleep 3
-    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@"  
+    time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@"  2>/tmp/nvmake.error || {
+        cat /tmp/nvmake.error | grep -iv 'warning:'
+        exit 1
+    }
 }
 
 post_build_install_dso() {
