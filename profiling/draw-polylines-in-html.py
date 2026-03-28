@@ -39,7 +39,7 @@ import sys
 import pandas as pd
 
 
-INPUT_CSV = Path("dynamic_monitoring.csv")
+INPUT_CSV = Path("data.csv")
 OUTPUT_HTML = Path("graph.html")
 
 

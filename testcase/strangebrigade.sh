@@ -32,6 +32,17 @@ run_strangebrigade_benchmark() {
     [[ -f "$GRAPHICS_CONFIG_FILE" ]] && cp "$GRAPHICS_CONFIG_FILE" "$GRAPHICS_CONFIG_FILE.backup"
     printf '%s\n' "${GRAPHICS_CONFIG_LIST[@]}" > "$GRAPHICS_CONFIG_FILE"
 
+    _sb_cleanup_sig() {
+        echo >&2 "Interrupted; shutting down Steam..."
+        command -v steam >/dev/null && steam -shutdown &>/dev/null || true
+        if [[ -f "${GRAPHICS_CONFIG_FILE}.backup" ]]; then
+            mv -f "${GRAPHICS_CONFIG_FILE}.backup" "$GRAPHICS_CONFIG_FILE"
+        fi
+        trap - INT TERM
+        exit 130
+    }
+    trap '_sb_cleanup_sig' INT TERM
+
     [[ -d "$BENCHMARK_RESULT_DIR" ]] && find "$BENCHMARK_RESULT_DIR" -mindepth 1 -delete 
     steam -applaunch 312670 -benchmark &>/dev/null &
 
@@ -55,13 +66,18 @@ run_strangebrigade_benchmark() {
     echo 
 
     benchmark_result_file=$(find "$BENCHMARK_RESULT_DIR" -maxdepth 1 -type f -name "SB__*.txt" | sort | tail -n 1)
-    if [[ ! -e "$benchmark_result_file" ]]; then 
-        echo "Error: can't find benchmark result file: $benchmark_result_file"
-        return 1
+    if [[ -e "$benchmark_result_file" ]]; then 
+        cat "$benchmark_result_file" | sed '/Frame times (ms):/,$d'
+        [[ -d $HOME/screenshots ]] && ls -1 $HOME/screenshots 
+    else
+        echo "Error: can't find result file: $benchmark_result_file"
     fi 
 
-    cat "$benchmark_result_file" | sed '/Frame times (ms):/,$d'
-    [[ -d $HOME/screenshots ]] && ls -1 $HOME/screenshots 
+    if [[ -f "${GRAPHICS_CONFIG_FILE}.backup" ]]; then
+        mv -f "${GRAPHICS_CONFIG_FILE}.backup" "$GRAPHICS_CONFIG_FILE"
+    fi
+
+    trap - INT TERM
 }
 
 if [ "$EUID" -eq 0 ]; then
@@ -103,7 +119,7 @@ if [[ $1 == ngfx ]]; then
         echo "Press hot-key [F11] to trigger a captire"
     fi 
 elif [[ $1 == kwin ]]; then 
-
+    echo TODO: switch to kwin_wayland 
 else 
     run_strangebrigade_benchmark 
 fi 
