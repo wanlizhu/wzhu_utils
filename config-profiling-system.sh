@@ -40,6 +40,7 @@ fi
 # patch ~/.bashrc
 [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]] && echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
 echo '#!/bin/bash' >~/nvidia-profiling.sh
+echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m)/bin:/mnt/linuxqa/wanliz/$(uname -m):$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/offscreen:$PATH"' >>~/nvidia-profiling.sh 
@@ -49,8 +50,7 @@ echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling
 echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh
-echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m)/bin:/mnt/linuxqa/wanliz/$(uname -m):$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh 
 echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
 echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
 echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
