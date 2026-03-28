@@ -3,7 +3,6 @@ out/
 .cache/
 .vs/
 .vscode/
-callgraph/
 **/build*/
 **/__pycache__/
 .ipynb_checkpoints/

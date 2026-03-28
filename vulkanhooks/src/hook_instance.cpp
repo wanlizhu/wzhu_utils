@@ -329,6 +329,12 @@ VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateInstance(
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
+    VkLayerInstanceCreateInfo* const layer_instance_link =
+        const_cast<VkLayerInstanceCreateInfo*>(layerInstanceCreateInfo);
+    if (layer_instance_link->u.pLayerInfo != nullptr) {
+        layer_instance_link->u.pLayerInfo = layer_instance_link->u.pLayerInfo->pNext;
+    }
+
     WZHU_startReportThreadOnce();
 
     const VkResult createResult = pfn_nextCreateInstance(create_info, allocator, out_instance);
@@ -449,6 +455,12 @@ VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateDevice(
     );
     if (pfn_nextCreateDevice == nullptr) {
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VkLayerDeviceCreateInfo* const layer_device_link =
+        const_cast<VkLayerDeviceCreateInfo*>(layerDeviceCreateInfo);
+    if (layer_device_link->u.pLayerInfo != nullptr) {
+        layer_device_link->u.pLayerInfo = layer_device_link->u.pLayerInfo->pNext;
     }
 
     VkDeviceCreateInfo patchedCreateInfo = *create_info;
