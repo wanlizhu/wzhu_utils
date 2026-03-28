@@ -66,10 +66,12 @@ reload() {
 sync-linuxqa-wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
+        echo "/mnt/linuxqa/wanliz/$(uname -m)/bin -> $HOME/"
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/bin/ $HOME/bin/ 
     fi 
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/lib ]]; then 
         mkdir -p $HOME/lib 
+        echo "/mnt/linuxqa/wanliz/$(uname -m)/lib -> $HOME/"
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
     fi 
 }
