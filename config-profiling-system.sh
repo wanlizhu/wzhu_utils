@@ -253,60 +253,6 @@ if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/nu
     sudo systemctl start ssh
 fi 
 
-# enable remote login 
-if [[ ! -z $(which list-login-session.sh) ]]; then 
-    login_session_type=$(list-login-session.sh seat0.type)
-else
-    login_session_type=
-fi 
-if [[ $login_session_type == x11 ]]; then
-    # x11: enable x11vnc 
-    if ! ss -ltnp | grep -E "LISTEN.+:5900\b" >/dev/null; then
-        [[ -z $(which screen) ]] && sudo apt install -y screen 
-        [[ -z $(which x11vnc) ]] && sudo apt install -y x11vnc 
-        screen -dmS 'x11vnc-server' bash -c 'x11vnc -display :0 -auth guess -forever -loop -shared -noxdamage -repeat >/tmp/x11vnc.log 2>&1' 
-        sleep 3
-        screen -ls | grep -F x11vnc-server 
-        ss -ltnp | grep -E "LISTEN.+:5900\b"
-    fi 
-elif [[ $login_session_type == wayland ]]; then
-    # wayland: enable gnome remote desktop
-    if ! sudo ss -ltnp | grep -qE ':3389\b'; then
-        if [[ ! -z $(which install-pkg.sh) ]]; then 
-            install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
-        else
-            sudo apt install -y gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
-        fi 
-        cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
-        cert_key=$cert_dir/rdp-tls.key
-        cert_crt=$cert_dir/rdp-tls.crt
-        sudo install -d -m 0700 $cert_dir
-        sudo chown -R gnome-remote-desktop:gnome-remote-desktop /var/lib/gnome-remote-desktop/.local
-        if [[ ! -s $cert_key || ! -s $cert_crt ]]; then 
-            sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout $cert_key -out $cert_crt -days 3650 -subj "/CN=$(hostname -f)"
-            sudo chmod 0600 $cert_key
-            sudo chmod 0644 $cert_crt
-            sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
-        fi 
-        sudo openssl x509 -in $cert_crt -noout >/dev/null || echo "Bad certificate"
-        sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
-        sudo grdctl --system rdp set-tls-key $cert_key
-        sudo grdctl --system rdp set-tls-cert $cert_crt
-        sudo grdctl --system rdp set-credentials wzhu zhujie
-        sudo grdctl --system rdp enable
-        sudo ufw disable || sudo ufw allow 3389/tcp 
-        sudo systemctl daemon-reload
-        sudo systemctl restart gnome-remote-desktop.service
-        echo "Wait for 3 seconds" && sleep 3
-        sudo grdctl --system status
-        sudo ss -ltnp | grep -E ':3389\b' || {
-            echo "RDP server is not listening on TCP/3389"
-            sudo systemctl status gnome-remote-desktop.service --no-pager
-            sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
-        }
-    fi 
-fi
-
 # mount data dirs
 if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
     echo "WSL doesn't support NFS mounting"
