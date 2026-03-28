@@ -3,16 +3,19 @@ set -o pipefail
 
 if [[ $1 == 'seat0.type' ]]; then 
     if [[ ! -z $(which loginctl) ]]; then 
-        active_sid=$(
+        seat0_sid=$(
             while read -r session; do
                 seat=$(loginctl show-session $session -p Seat --value)
-                state=$(loginctl show-session $session -p State --value)
-                if [[ $seat == seat0 && $state == active ]]; then
+                if [[ $seat == seat0 ]]; then
                     echo $session
                 fi
             done < <(loginctl list-sessions --no-legend | awk '{print $1}')
         )
-        [[ ! -z $active_sid ]] && loginctl show-session $active_sid -p Type --value
+        if [[ ! -z $seat0_sid ]]; then 
+            loginctl show-session $seat0_sid -p Type --value
+        else
+            echo "Error: can't find the session id of seat0"
+        fi 
     fi 
 else 
     printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
