@@ -46,7 +46,7 @@ run_strangebrigade_benchmark() {
     while pgrep -f StrangeBrigade_ > /dev/null; do
         gpu_pct="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)"
         printf "\r[%s -> %s] [GPU: %s] Wait for game process to exit ..." "$start" "$(date +%H:%M:%S)" "$gpu_pct %"
-        if (( $gpu_pct > $start_gpu_pct )); then 
+        if [[ $1 == ss ]] && (( $gpu_pct > $start_gpu_pct )); then 
             create-screenshot.sh when_gpu_${gpu_pct}pct $HOME/screenshots
             start_gpu_pct=$gpu_pct
         fi 
