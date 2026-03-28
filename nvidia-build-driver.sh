@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail 
 
-function unix_build_nvmake() {
+unix_build_nvmake() {
     if [[ ! -f makefile.nvmk ]]; then 
         echo "The current dir has no makefile.nvmk"
         echo "Aborting"
@@ -34,6 +34,7 @@ function unix_build_nvmake() {
         compiler         # for openCL
         gpgpu gpgpucomp gpgpudbg # for cuda
     )
+    exclude_build_modules=() # uncomment to disable it
     local nvmake_args=(
         NV_COLOR_OUTPUT=1
         NV_COMPRESS_THREADS=$(nproc)
@@ -66,7 +67,7 @@ function unix_build_nvmake() {
     time ionice -c2 nice $root/tools/linux/unix-build/unix-build "${unix_build_args[@]}" nvmake "${nvmake_args[@]}" linux $arch $buildtype "$@"  
 }
 
-function post_build_install_dso() {
+post_build_install_dso() {
     local targethost=$1
     local root=$2
     local branch=$3
@@ -107,7 +108,7 @@ function post_build_install_dso() {
     return 1
 }
 
-function detect_source_root() {
+detect_source_root() {
     if [[ -f makefile.nvmk ]]; then
         if [[ -d drivers ]]; then 
             P4SW_ROOT=$(realpath $(pwd)/../..)
@@ -127,7 +128,11 @@ function detect_source_root() {
     fi 
 
     if [[ ! -f makefile.nvmk ]]; then
-        cd $P4SW_ROOT
+        if [[ -z $NV_BRANCH ]]; then 
+            cd $P4SW_ROOT
+        else 
+            cd $P4SW_ROOT/branch/$NV_BRANCH
+        fi 
     fi 
 
     pwd 
@@ -140,10 +145,10 @@ POST_BUILD_INSTALL=
 
 while (( $# )); do 
     case $1 in 
+        install=*) POST_BUILD_INSTALL=${1#*=} ;;
         branch=*) NV_BRANCH=${1#*=} ;;
         x86|amd64|aarch64) NV_TARGET_ARCH=$1 ;;
         debug|release|develop) NV_BUILD_TYPE=$1 ;;
-        install) POST_BUILD_INSTALL=1 ;;
         ppp)
             shift  
             detect_source_root || exit 1

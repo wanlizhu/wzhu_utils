@@ -38,7 +38,11 @@ if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then
 fi
 
 # patch ~/.bashrc
-[[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]] && echo -e "\n[[ -f ~/nvidia-profiling.sh ]] && source ~/nvidia-profiling.sh" >>~/.bashrc 
+if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then
+    echo "if [[ -f ~/nvidia-profiling.sh ]]; then" >>~/.bashrc 
+    echo "    source ~/nvidia-profiling.sh" >>~/.bashrc 
+    echo "fi" >>~/.bashrc 
+fi 
 echo '#!/bin/bash' >~/nvidia-profiling.sh
 echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m)/bin:/mnt/linuxqa/wanliz/$(uname -m):$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
@@ -58,8 +62,10 @@ echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
 echo "export P4IGNORE=$P4ROOT/.p4ignore" >>~/nvidia-profiling.sh
 echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-echo '[[ -f $HOME/vulkansdk/current/setup-env.sh ]] && source $HOME/vulkansdk/current/setup-env.sh' >>~/nvidia-profiling.sh
 cat >> ~/nvidia-profiling.sh <<'EOF'
+if [[ -f $HOME/vulkansdk/current/setup-env.sh ]]; then 
+    source $HOME/vulkansdk/current/setup-env.sh
+fi 
 reload() {
     source ~/.bashrc
 }
