@@ -61,7 +61,7 @@ run_strangebrigade_benchmark() {
     fi 
 
     cat "$benchmark_result_file" | sed '/Frame times (ms):/,$d'
-    ls -1 $HOME/screenshots 
+    [[ -d $HOME/screenshots ]] && ls -1 $HOME/screenshots 
 }
 
 if [ "$EUID" -eq 0 ]; then

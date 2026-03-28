@@ -18,6 +18,23 @@ else
     if sudo ss -ltnp | grep -qE ':3389\b'; then
         echo "Wayland desktop has already shared via GNOME RDP"
     else 
+        exit_on_error=
+        if [[ $(cat /sys/module/nvidia_drm/parameters/modeset) != Y ]]; then 
+            echo "Error: can't find required kernel param: nvidia-drm.modeset=1 "
+            exit_on_error=1
+        fi 
+        if grep -qE '^[[:space:]]*WaylandEnable[[:space:]]*=[[:space:]]*false[[:space:]]*$' /etc/gdm3/custom.conf; then
+            echo "Edit /etc/gdm3/custom.conf to enable wayland first, then restart gdm3"
+            exit_on_error=1
+        fi 
+        if grep -qE '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*true[[:space:]]*$' /etc/gdm3/custom.conf; then
+            echo "Edit /etc/gdm3/custom.conf to disable automatic login first, then restart gdm3"
+            exit_on_error=1
+        fi 
+        if [[ $exit_on_error == 1 ]]; then 
+            exit 1
+        fi 
+
         if [[ ! -z $(which install-pkg.sh) ]]; then 
             install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
         else
