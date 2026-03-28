@@ -211,7 +211,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
         libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
         python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
-        php-cli php-xml timeshift
+        php-cli php-xml timeshift libx11-dev libgl-dev
 
     find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
     while IFS= read -r -d '' file; do
