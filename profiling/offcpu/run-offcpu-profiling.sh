@@ -63,7 +63,7 @@ if [[ ! -z $1 ]]; then
     if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
         echo "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
-            install-pkg.sh $pkg
+            find_or_install $pkg
         done
     fi
 fi

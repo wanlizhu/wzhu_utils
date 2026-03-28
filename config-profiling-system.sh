@@ -69,9 +69,9 @@ fi
 reload() {
     source ~/.bashrc
 }
-reload-graphics-env() {
+reload_graphics_env() {
     export DISPLAY=:0
-    export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=')
+    export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
     export XDG_RUNTIME_DIR=/run/user/$(id -u)
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
     echo "DISPLAY=$DISPLAY"
@@ -87,7 +87,7 @@ reload-graphics-env() {
     
     exec /usr/bin/bash 
 }
-sync-linuxqa-wanliz() {
+sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
         echo "/mnt/linuxqa/wanliz/$(uname -m)/bin -> $HOME/"
@@ -108,7 +108,7 @@ pp() {
     } || git pull
     popd
 }
-print-nvparams() {
+print_nvparams() {
     find /etc/modprobe.d -type f -name '*.conf' -print0 |
     xargs -0 awk '
         /^[[:space:]]*#/ { next }
@@ -117,11 +117,11 @@ print-nvparams() {
         }
     '
 }
-mount-nfs-folder() {
+mount_nfs() {
     sudo mkdir -p /mnt/$(basename $1)
     sudo mount -t nfs $1 /mnt/$(basename $1) && echo "Mounted /mnt/$(basename $1)"
 }
-mount-cifs-folder() {
+mount_cifs() {
     if [[ "$1" == \\\\* ]]; then 
         uncpath="$1"
     else
@@ -137,7 +137,7 @@ mount-cifs-folder() {
         [[ -e $mnt_dir/$subpath ]] && echo "$mnt_dir/$subpath"
     }
 }
-create-system-snapshot() {
+system_backup() {
     UUID='0bb172fa-5d90-44ac-b135-52f6520115b1'
     if [[ -z $(sudo blkid -U $UUID) ]]; then 
         echo "UUID $UUID doesn't exist"
@@ -145,6 +145,87 @@ create-system-snapshot() {
     fi 
     sudo blkid -U $UUID
     sudo timeshift --create --snapshot-device $UUID --comments "Created by $USER at $(date)" 
+}
+connect_nvidia_vpn() {
+    if [[ -z $(which globalprotect) ]]; then 
+        pushd /tmp 
+        wget https://d2hvyxt0t758wb.cloudfront.net/gp_install_files/gp_install.sh
+        chmod +x ./gp_install.sh 
+        ./gp_install.sh 
+        popd 
+    fi 
+    echo "Add Nvidia portal in GUI: nvidia.gpcloudservice.com"
+    globalprotect connect --portal nvidia.gpcloudservice.com || {
+        sudo systemctl restart gpd 
+        globalprotect connect --portal nvidia.gpcloudservice.com 
+    }
+}
+find_or_install() {
+    local required_pkgs=()
+    if (( $# )); then
+        required_pkgs=("$@")
+    else # read from stdin
+        while IFS= read -r pkg; do
+            [[ -z $pkg ]] && continue
+            required_pkgs+=("$pkg")
+        done
+    fi 
+
+    for pkg in "${required_pkgs[@]}"; do 
+        dpkg -s $pkg &>/dev/null && continue 
+        sudo apt install -y $pkg 2>/dev/null 
+    done 
+}
+list_login_session() {
+    printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "SESSION" "UID" "USER" "SEAT" "TTY" "STATE" "IDLE" "TYPE"
+    loginctl list-sessions --no-legend | 
+    while read -r sid uid user seat tty state idle _; do
+        type=$(loginctl show-session $sid -p Type --value)
+        printf "%-6s %-5s %-8s %-6s %-6s %-7s %-4s %s\n" "$sid" "$uid" "$user" "$seat" "$tty" "$state" "$idle" "$type"
+    done
+}
+login_session_type_seat0() {
+    list_login_session | grep seat0 | awk '{print $8}'
+}
+install_certificate() {
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    install -m 600 /dev/null ~/.ssh/id_ed25519
+    install -m 644 /dev/null ~/.ssh/id_ed25519.pub
+    printf '%s\n' '-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACB8e4c/PmyYwYqGt0Zb5mom/KTEndF05kcF8Gsa094RSwAAAJhfAHP9XwBz
+/QAAAAtzc2gtZWQyNTUxOQAAACB8e4c/PmyYwYqGt0Zb5mom/KTEndF05kcF8Gsa094RSw
+AAAECa55qWiuh60rKkJLljELR5X1FhzceY/beegVBrDPv6yXx7hz8+bJjBioa3Rlvmaib8
+pMSd0XTmRwXwaxrT3hFLAAAAE3dhbmxpekBFbnpvLU1hY0Jvb2sBAg==
+-----END OPENSSH PRIVATE KEY-----' > ~/.ssh/id_ed25519
+    printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHx7hz8+bJjBioa3Rlvmaib8pMSd0XTmRwXwaxrT3hFL' > ~/.ssh/id_ed25519.pub
+}
+screenshot() {
+    output=screenshot$([[ -z $1 ]] || echo "_$1").png
+    if [[ ! -z $2 ]]; then   
+        mkdir -p $2
+        find $2 -mindepth 1 -delete 
+        output=$2/screenshot$([[ -z $1 ]] || echo "_$1").png
+    fi 
+    if [[ $(login_session_type_seat0) == wayland ]]; then 
+        if [[ $XDG_CURRENT_DESKTOP == *GNOME* ]]; then
+            [[ -z $(which gnome-screenshot) ]] && sudo apt install -y gnome-screenshot &>/dev/null 
+            timeout 5 gnome-screenshot -f $output || {
+                echo "Press Alt+F2, enter lg, set unsafe-mode flag to use gnome-screenshot"
+            }
+        else 
+            [[ -z $(which grim) ]] && sudo apt install -y grim &>/dev/null 
+            timeout 5 grim $output 
+        fi  
+    else
+        [[ -z $(which magick) && -z $(which import) ]] && sudo apt install -y imagemagick
+        if command -v magick > /dev/null; then
+            timeout 5 magick import -window root $output 
+        elif command -v import > /dev/null; then
+            timeout 5 import -window root $output 
+        fi
+    fi 
 }
 EOF
 source ~/nvidia-profiling.sh
@@ -174,7 +255,7 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
 fi 
 
 # install required packages
-if [[ $INIT_APT_PKG == true && ! -z $(which install-pkg.sh) ]]; then 
+if [[ $INIT_APT_PKG == true && ! -z $(which find_or_install) ]]; then 
     sudo tee /etc/apt/apt.conf.d/99-phased-updates >/dev/null <<'EOF'
 APT::Get::Always-Include-Phased-Updates "true";
 EOF
@@ -184,14 +265,14 @@ URIs: http://ddebs.ubuntu.com/
 Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
 Components: main restricted universe multiverse
 Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
-        install-pkg.sh ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+        find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
     fi 
     if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
         sudo apt update  
         sudo apt upgrade -y 
         sudo apt autoremove -y  
     fi  
-    install-pkg.sh debian-goodies libc6-dbg libstdc++6-dbgsym \
+    find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
         build-essential cmake git ninja-build pkg-config meson clang \
         vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
         btop htop nvtop sysprof pciutils nfs-common openssh-server \
@@ -203,11 +284,7 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
     find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
     while IFS= read -r -d '' file; do
         while IFS= read -r pkg; do
-            if [[ ! -z $(which install-pkg.sh) ]]; then 
-                install-pkg.sh $pkg 
-            else 
-                sudo apt install -y $pkg 
-            fi 
+            find_or_install $pkg 
         done < "$file"
     done
 
@@ -218,9 +295,9 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
     fi 
 
     # install amd gpu drivers 
-    if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which install-pkg.sh) ]]; then 
-        install-pkg.sh libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-        dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  install-pkg.sh
+    if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which find_or_install) ]]; then 
+        find_or_install libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
+        dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  find_or_install
     fi 
 fi 
 
@@ -231,11 +308,7 @@ git config --global pull.rebase >/dev/null 2>&1 || git config --global pull.reba
 
 # enable ssh server
 if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
-    if [[ ! -z $(which install-pkg.sh) ]]; then 
-        install-pkg.sh openssh-server 
-    else
-        sudo apt install -y openssh-server 
-    fi 
+    find_or_install openssh-server
     sudo systemctl enable ssh 
     sudo systemctl start ssh
 fi 

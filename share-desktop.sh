@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail 
 
-if [[ $(list-login-session.sh seat0.type) == x11 ]]; then 
+if [[ $(login_session_type_seat0) == x11 ]]; then 
     # x11: enable x11vnc 
     if ss -ltnp | grep -E "LISTEN.+:5900\b" >/dev/null; then
         echo "X11 desktop has already shared via x11vnc"
@@ -35,11 +35,7 @@ else
             exit 1
         fi 
 
-        if [[ ! -z $(which install-pkg.sh) ]]; then 
-            install-pkg.sh gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
-        else
-            sudo apt install -y gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
-        fi 
+        find_or_install gnome-remote-desktop openssl remmina remmina-plugin-rdp freerdp2-x11
         cert_dir=/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop
         cert_key=$cert_dir/rdp-tls.key
         cert_crt=$cert_dir/rdp-tls.crt

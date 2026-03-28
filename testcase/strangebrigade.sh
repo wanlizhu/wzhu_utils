@@ -47,7 +47,7 @@ run_strangebrigade_benchmark() {
         gpu_pct="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)"
         printf "\r[%s -> %s] [GPU: %s] Wait for game process to exit ..." "$start" "$(date +%H:%M:%S)" "$gpu_pct %"
         if [[ $1 == ss ]] && (( $gpu_pct > $start_gpu_pct )); then 
-            create-screenshot.sh when_gpu_${gpu_pct}pct $HOME/screenshots
+            screenshot when_gpu_${gpu_pct}pct $HOME/screenshots
             start_gpu_pct=$gpu_pct
         fi 
         sleep 5
@@ -103,7 +103,7 @@ if [[ $1 == ngfx ]]; then
         echo "Press hot-key [F11] to trigger a captire"
     fi 
 elif [[ $1 == kwin ]]; then 
-    
+
 else 
     run_strangebrigade_benchmark 
 fi 
