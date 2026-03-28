@@ -63,14 +63,14 @@ cat >> ~/nvidia-profiling.sh <<'EOF'
 reload() {
     source ~/.bashrc
 }
-sync-linuxqa-wanliz {
+sync-linuxqa-wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
-        rsync -Pah /mnt/linuxqa/wanliz/$(uname -m)/bin/ $HOME/bin/ 
+        rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/bin/ $HOME/bin/ 
     fi 
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/lib ]]; then 
         mkdir -p $HOME/lib 
-        rsync -Pah /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
+        rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
     fi 
 }
 pp() { 

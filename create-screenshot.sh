@@ -37,5 +37,5 @@ if [[ $fallback_nvidia_fbc == true ]]; then
     if [[ $(list-login-session.sh seat0.type) == wayland ]]; then
         backend=NvFBCPipeWire
     fi
-    echo "NVIDIA CaptureSDK doesn't support GeForce GPU"
+    echo "[/tmp/ssfallback] NVIDIA CaptureSDK doesn't support GeForce GPU"
 fi 
