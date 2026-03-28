@@ -69,6 +69,24 @@ fi
 reload() {
     source ~/.bashrc
 }
+reload-graphics-env() {
+    export DISPLAY=:0
+    export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=')
+    export XDG_RUNTIME_DIR=/run/user/$(id -u)
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+    echo "DISPLAY=$DISPLAY"
+    echo "XAUTHORITY=$XAUTHORITY"
+    echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+    echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
+
+    wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
+    if [[ ! -z $wayland_display ]]; then 
+        export WAYLAND_DISPLAY=$(basename $wayland_display)
+        echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+    fi 
+    
+    exec /usr/bin/bash 
+}
 sync-linuxqa-wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
@@ -98,57 +116,6 @@ print-nvparams() {
             print
         }
     '
-}
-top-cpu-gpu() {
-    tmp_htoprc=/tmp/htop.rc &&
-    tmp_screenrc=/tmp/screen.rc &&
-    printf '%s\n' \
-        'htop_version=3.4.1' \
-        'config_reader_min_version=3' \
-        'hide_kernel_threads=1' \
-        'hide_userland_threads=0' \
-        'shadow_other_users=0' \
-        'show_thread_names=1' \
-        'show_program_path=0' \
-        'highlight_base_name=1' \
-        'highlight_deleted_exe=1' \
-        'highlight_megabytes=1' \
-        'highlight_threads=1' \
-        'find_comm_in_cmdline=1' \
-        'strip_exe_from_cmdline=1' \
-        'show_merged_command=0' \
-        'header_margin=0' \
-        'screen_tabs=0' \
-        'detailed_cpu_time=0' \
-        'show_cpu_usage=1' \
-        'show_cpu_frequency=0' \
-        'show_cached_memory=1' \
-        'update_process_names=0' \
-        'account_guest_in_cpu_meter=0' \
-        'delay=15' \
-        'hide_function_bar=0' \
-        'tree_view=0' \
-        'sort_key=PERCENT_CPU' \
-        'sort_direction=-1' \
-        'screen:Main=PID NLWP PERCENT_CPU PERCENT_MEM COMM' \
-        '.sort_key=PERCENT_CPU' \
-        '.tree_sort_key=PERCENT_CPU' \
-        '.tree_view=0' \
-        '.tree_view_always_by_pid=0' \
-        '.sort_direction=-1' \
-        '.tree_sort_direction=-1' \
-    > "$tmp_htoprc" &&
-    printf '%s\n' \
-        'escape ^[^[' \
-        'bind ^[ quit' \
-        "screen -t htop env HTOPRC=$tmp_htoprc htop -u $(id -un)" \
-        'split -v' \
-        'focus right' \
-        'screen -t nvtop nvtop' \
-        'focus left' \
-    > "$tmp_screenrc" &&
-    screen -S monitor -X quit >/dev/null 2>&1
-    screen -S monitor -c "$tmp_screenrc"
 }
 mount-nfs-folder() {
     sudo mkdir -p /mnt/$(basename $1)

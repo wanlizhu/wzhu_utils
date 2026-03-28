@@ -102,6 +102,8 @@ if [[ $1 == ngfx ]]; then
         echo "      Metric Set: $METRIC_SET"
         echo "Press hot-key [F11] to trigger a captire"
     fi 
+elif [[ $1 == kwin ]]; then 
+    
 else 
     run_strangebrigade_benchmark 
 fi 
