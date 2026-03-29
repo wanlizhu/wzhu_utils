@@ -258,12 +258,12 @@ print_display_info() {
         reload_graphics_env 
     fi 
 
-    if [[ $(login_session_type_seat0) == x11 ]]; then
+    if [[ ! -z $(login_session_type_seat0 | grep x11) ]]; then
         xrandr --current >/dev/null 2>&1 || {
             echo "[Failed to connect to X11]"
             return 
         }
-    elif [[ $(login_session_type_seat0) == wayland ]]; then
+    elif [[ ! -z $(login_session_type_seat0 | grep wayland) ]]; then
         gdbus call \
             --session \
             --dest org.gnome.Mutter.DisplayConfig \
