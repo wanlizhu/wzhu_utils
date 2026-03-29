@@ -275,7 +275,7 @@ print_display_info() {
                 return 
             }
     else 
-        echo "[Invalid window manager: $(login_session_type_seat0)]"
+        echo "[Invalid window manager: $(cat /tmp/seat0)]"
         return 
     fi
 
