@@ -42,6 +42,16 @@ install_local_file() {
         # On success, restore the windowing system 
         sudo nvidia-smi -pm 1 
         sudo systemctl isolate graphical
+    } || {
+        echo "Failed to install nvidia drivers"
+        cat <<'EOF'
+# Fix 1: remove old nvidia kernels from initramfs 
+sudo systemctl stop nvidia-persistenced 
+sudo modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia  
+find /lib/modules/$(uname -r) -type f | grep -E '/nvidia([^/]*|/.+)\.ko(\.zst)?$' | sudo xargs -r rm -f
+sudo depmod -a
+sudo update-initramfs -u
+EOF 
     }
 }
 
