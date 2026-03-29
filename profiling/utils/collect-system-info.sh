@@ -254,7 +254,9 @@ nvidia_driver_build_type() {
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
     local wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
-    
+    local xrandr_out connector line
+    local found=0
+
     if [[ $XDG_SESSION_TYPE == tty ]]; then 
         export DISPLAY=:0
         export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
@@ -270,252 +272,88 @@ print_display_info() {
         fi 
     fi 
 
-    
-    if [[ -z $wayland_display ]]; then 
-        session_type=x11 
-        xrandr --current >/dev/null 2>&1 || {
-            echo "[Failed to connect to X11]"
-            return 
-        }
-    else 
-        session_type=wayland
-        gdbus call \
-            --session \
-            --dest org.gnome.Mutter.DisplayConfig \
-            --object-path /org/gnome/Mutter/DisplayConfig \
-            --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
-        >/dev/null 2>&1 || {
-            echo "[Failed to connect to Wayland]"
-            return 
-        }
-    fi  
-
-    python3 - "$session_type" <<'PY'
-import glob
-import os
-import re
-import subprocess
-import sys
-
-
-session_type = sys.argv[1].lower()
-
-
-def run(cmd):
-    try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
-    except Exception:
-        return ""
-
-
-def read_text(path):
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except Exception:
-        return None
-
-
-def parse_edid(edid_path):
-    info = {
-        "display_name": "Unknown Display",
-        "physical_size": "N/A",
-        "color_depth_bpc": "N/A",
+    xrandr --current >/dev/null 2>&1 || {
+        echo "[Failed to connect to X11]"
+        return 
     }
 
-    if not os.path.exists(edid_path):
-        return info
+    for path in /sys/class/drm/card*-*; do
+        [[ -f $path/status ]] || continue
+        [[ $(<"$path/status") == connected ]] || continue
 
-    out = run(["edid-decode", edid_path])
-    if not out:
-        return info
+        found=1
+        connector=${path##*/}
+        connector=${connector#card*-}
+        local display_name="Unknown Display"
+        local current_resolution="N/A"
+        local refresh_rate="N/A"
+        local color_depth_bpc="N/A"
+        local colorspace="N/A"
+        local connection_type=${connector%-*}
+        local vrr_capable="N/A"
+        local link_status="N/A"
+        local physical_size="N/A"
 
-    m = re.search(r"Display Product Name:\s*(.+)", out)
-    if m:
-        name = m.group(1).strip()
-        if name and name.lower() != "invalid":
-            info["display_name"] = name
+        if [[ -f $path/edid ]]; then
+            local edid_out
+            edid_out=$(edid-decode "$path/edid" 2>/dev/null)
 
-    m = re.search(r"Maximum image size:\s*(.+)", out)
-    if m:
-        info["physical_size"] = m.group(1).strip()
-    else:
-        m = re.search(r"Display size:\s*([0-9]+)\s*x\s*([0-9]+)\s*mm", out)
-        if m:
-            info["physical_size"] = f"{m.group(1)} x {m.group(2)} mm"
+            if [[ -n $edid_out ]]; then
+                while IFS= read -r line; do
+                    if [[ $line =~ Display[[:space:]]+Product[[:space:]]+Name:[[:space:]]*(.+) ]]; then
+                        [[ ${BASH_REMATCH[1]} != invalid && -n ${BASH_REMATCH[1]} ]] && display_name=${BASH_REMATCH[1]}
+                    elif [[ $line =~ Maximum[[:space:]]+image[[:space:]]+size:[[:space:]]*(.+) ]]; then
+                        physical_size=${BASH_REMATCH[1]}
+                    elif [[ $line =~ Display[[:space:]]+size:[[:space:]]*([0-9]+)[[:space:]]*x[[:space:]]*([0-9]+)[[:space:]]*mm ]]; then
+                        [[ $physical_size == N/A ]] && physical_size="${BASH_REMATCH[1]} x ${BASH_REMATCH[2]} mm"
+                    elif [[ $line =~ Bits[[:space:]]+per[[:space:]]+primary[[:space:]]+color[[:space:]]+channel:[[:space:]]*(.+) ]]; then
+                        color_depth_bpc=${BASH_REMATCH[1]}
+                    fi
+                done <<< "$edid_out"
+            fi
+        fi
 
-    m = re.search(r"Bits per primary color channel:\s*(.+)", out)
-    if m:
-        info["color_depth_bpc"] = m.group(1).strip()
+        local in_block=0
+        while IFS= read -r line; do
+            if [[ $line != [[:space:]]* && $line == "$connector connected"* ]]; then
+                in_block=1
+                continue
+            fi
 
-    return info
+            if (( in_block )) && [[ $line != [[:space:]]* && $line == *" connected"* ]]; then
+                break
+            fi
 
+            (( in_block )) || continue
 
-def parse_x11():
-    data = {}
-    out = run(["xrandr", "--verbose"])
-    connector = None
+            if [[ $line =~ ^[[:space:]]+([0-9]+x[0-9]+)[[:space:]]+([0-9.]+)([*+[:space:]]*) ]] && [[ ${BASH_REMATCH[3]} == *"*"* ]]; then
+                current_resolution=${BASH_REMATCH[1]}
+                refresh_rate=${BASH_REMATCH[2]}
+            elif [[ $line =~ ^[[:space:]]*max[[:space:]]+bpc:[[:space:]]*(.+) ]]; then
+                color_depth_bpc=${BASH_REMATCH[1]}
+            elif [[ $line =~ ^[[:space:]]*Colorspace:[[:space:]]*(.+) ]]; then
+                colorspace=${BASH_REMATCH[1]}
+            elif [[ $line =~ ^[[:space:]]*vrr_capable:[[:space:]]*(.+) ]]; then
+                vrr_capable=${BASH_REMATCH[1]}
+                [[ $vrr_capable == 1 ]] && vrr_capable=yes
+                [[ $vrr_capable == 0 ]] && vrr_capable=no
+            elif [[ $line =~ ^[[:space:]]*link-status:[[:space:]]*(.+) ]]; then
+                link_status=${BASH_REMATCH[1]}
+            fi
+        done <<< "$xrandr_out"
 
-    for line in out.splitlines():
-        if not line.startswith((" ", "\t")) and " connected" in line:
-            connector = line.split()[0]
-            data.setdefault(connector, {})
-            continue
+        echo "$connector $display_name (X11)"
+        echo -e "\tcurrent_resolution: $current_resolution"
+        echo -e "\trefresh_rate: $refresh_rate"
+        echo -e "\tcolor_depth_bpc: $color_depth_bpc"
+        echo -e "\tcolorspace: $colorspace"
+        echo -e "\tconnection_type: $connection_type"
+        echo -e "\tvrr_capable: $vrr_capable"
+        echo -e "\tlink_status: $link_status"
+        echo -e "\tphysical_size: $physical_size"
+    done
 
-        if connector is None:
-            continue
-
-        s = line.strip()
-
-        m = re.match(r"([0-9]+x[0-9]+)\s+([0-9.]+)([*+ ]*)", s)
-        if m and "*" in m.group(3):
-            data[connector]["current_resolution"] = m.group(1)
-            data[connector]["refresh_rate"] = m.group(2)
-            continue
-
-        m = re.match(r"max bpc:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            data[connector]["color_depth_bpc"] = m.group(1).strip()
-            continue
-
-        m = re.match(r"Colorspace:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            data[connector]["colorspace"] = m.group(1).strip()
-            continue
-
-        m = re.match(r"vrr_capable:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            v = m.group(1).strip()
-            data[connector]["vrr_capable"] = "yes" if v == "1" else "no" if v == "0" else v
-            continue
-
-        m = re.match(r"link-status:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            data[connector]["link_status"] = m.group(1).strip()
-            continue
-
-    return data
-
-
-def parse_wayland():
-    data = {}
-
-    code = r'''
-import gi
-gi.require_version("Gio", "2.0")
-from gi.repository import Gio
-
-xml = """
-<node>
-  <interface name="org.gnome.Mutter.DisplayConfig">
-    <method name="GetCurrentState">
-      <arg type="u" direction="out"/>
-      <arg type="a((ssss)a(siiddada{sv})a{sv})" direction="out"/>
-      <arg type="a(iiduba(ssss)a{sv})" direction="out"/>
-      <arg type="a{sv}" direction="out"/>
-    </method>
-  </interface>
-</node>
-"""
-
-bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-iface = Gio.DBusNodeInfo.new_for_xml(xml).interfaces[0]
-proxy = Gio.DBusProxy.new_sync(
-    bus,
-    Gio.DBusProxyFlags.NONE,
-    iface,
-    "org.gnome.Mutter.DisplayConfig",
-    "/org/gnome/Mutter/DisplayConfig",
-    "org.gnome.Mutter.DisplayConfig",
-    None,
-)
-
-ret = proxy.call_sync("GetCurrentState", None, Gio.DBusCallFlags.NONE, -1, None)
-serial, monitors, logical_monitors, props = ret.unpack()
-
-for mon in monitors:
-    spec, modes, mon_props = mon
-    connector, vendor, product, serial = spec
-
-    current_resolution = "N/A"
-    refresh_rate = "N/A"
-
-    for mode in modes:
-        mode_id, width, height, refresh, preferred_scale, supported_scales, mode_props = mode
-        if mode_props.get("is-current", False):
-            current_resolution = f"{width}x{height}"
-            refresh_rate = f"{float(refresh) / 1000.0:.3f}"
-            break
-
-    print(f"{connector}\t{current_resolution}\t{refresh_rate}")
-'''
-    out = run(["python3", "-c", code])
-
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) != 3:
-            continue
-
-        connector, current_resolution, refresh_rate = parts
-        data[connector] = {
-            "current_resolution": current_resolution,
-            "refresh_rate": refresh_rate,
-        }
-
-    return data
-
-
-session_suffix = "Wayland" if session_type == "wayland" else "X11"
-runtime_data = parse_wayland() if session_type == "wayland" else parse_x11()
-
-found = False
-
-for path in sorted(glob.glob("/sys/class/drm/card*-*")):
-    status_path = os.path.join(path, "status")
-    if not os.path.isfile(status_path):
-        continue
-
-    if read_text(status_path) != "connected":
-        continue
-
-    found = True
-
-    full_connector = os.path.basename(path)
-    m = re.match(r"card[0-9]+-(.+)", full_connector)
-    connector = m.group(1) if m else full_connector
-    connection_type = re.sub(r"-?[0-9]+$", "", connector)
-
-    info = {
-        "display_name": "Unknown Display",
-        "current_resolution": "N/A",
-        "refresh_rate": "N/A",
-        "color_depth_bpc": "N/A",
-        "colorspace": "N/A",
-        "connection_type": connection_type,
-        "vrr_capable": "N/A",
-        "link_status": "N/A",
-        "physical_size": "N/A",
-    }
-
-    info.update(parse_edid(os.path.join(path, "edid")))
-
-    if connector in runtime_data:
-        info.update({k: v for k, v in runtime_data[connector].items() if v not in ("", None)})
-
-    print(f"{connector} {info['display_name']} ({session_suffix})")
-    print(f"\tcurrent_resolution: {info['current_resolution']}")
-    print(f"\trefresh_rate: {info['refresh_rate']}")
-    print(f"\tcolor_depth_bpc: {info['color_depth_bpc']}")
-    print(f"\tcolorspace: {info['colorspace']}")
-    print(f"\tconnection_type: {info['connection_type']}")
-    print(f"\tvrr_capable: {info['vrr_capable']}")
-    print(f"\tlink_status: {info['link_status']}")
-    print(f"\tphysical_size: {info['physical_size']}")
-
-if not found:
-    print("[No display connected]")
-    sys.exit(1)
-PY
+    (( found )) || echo "[No display connected]"
 }
 
 hostname >$OUTPUT_FILE
