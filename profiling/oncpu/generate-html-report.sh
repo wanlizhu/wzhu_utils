@@ -92,33 +92,23 @@ for i in "${!tab_files[@]}"; do
 done
 echo '];' >> "$f_svg"
 
-# System info: read ${SYSTEM_INFO_FILE:-$HOME/system_info.txt}; each line "key<TAB>value" becomes a row.
-# If the file has no tab-separated lines, the whole file is one row (key "System information").
+# System info: raw text from ${SYSTEM_INFO_FILE:-$HOME/system_info.txt} (injected as JSON string for the HTML pre block).
 SYS_INFO_FILE="${SYSTEM_INFO_FILE:-$HOME/system_info.txt}"
 if [[ -f "$SYS_INFO_FILE" ]] && [[ -s "$SYS_INFO_FILE" ]]; then
-    python3 - "$SYS_INFO_FILE" <<'PY' > "$f_sysinfo" || printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
+    python3 - "$SYS_INFO_FILE" <<'PY' > "$f_sysinfo" || printf '      window.SYSTEM_INFO_TEXT = "";\n' > "$f_sysinfo"
 import json, sys
 
 path = sys.argv[1]
-rows = []
 try:
     with open(path, encoding="utf-8") as f:
         text = f.read()
 except OSError:
     text = ""
-if text.strip():
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        tab = line.find("\t")
-        if tab != -1:
-            rows.append({"k": line[:tab], "v": line[tab + 1:]})
-    if not rows:
-        rows.append({"k": "System information", "v": text.rstrip("\n")})
-print("      window.SYSTEM_INFO_ROWS = " + json.dumps(rows, ensure_ascii=False) + ";")
+# Always emit a JSON string (empty ok) so the HTML section can show blank text without errors.
+print("      window.SYSTEM_INFO_TEXT = " + json.dumps(text if text.strip() else "", ensure_ascii=False) + ";")
 PY
 else
-    printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
+    printf '      window.SYSTEM_INFO_TEXT = "";\n' > "$f_sysinfo"
 fi
 
 # Substitute placeholders: replace each line that contains a marker with the corresponding fragment file.
@@ -135,7 +125,7 @@ markers = [
     "__TAB_LABELS_JSON__",
     "__FOLDED_B64_JSON__",
     "__TAB_SVG_B64_JSON__",
-    "__SYSTEM_INFO_ROWS_JS__",
+    "__SYSTEM_INFO_TEXT_JS__",
 ]
 mapping = list(zip(markers, paths))
 with open(template_path, encoding="utf-8") as f:

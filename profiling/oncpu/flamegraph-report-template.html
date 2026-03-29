@@ -45,32 +45,42 @@
       border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
-    .system-info-heading {
-      margin: 0 0 10px;
+    .system-info-details {
+      margin: 0;
+    }
+    .system-info-summary {
+      cursor: pointer;
       font-size: 0.95rem;
       font-weight: 600;
       color: var(--text-muted);
+      user-select: none;
+      list-style: none;
     }
-    .system-info {
-      display: grid;
-      grid-template-columns: max-content min-content 1fr;
-      gap: 6px 0.35em;
-      align-items: baseline;
-      font-size: 13px;
-      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    .system-info-summary::-webkit-details-marker {
+      display: none;
     }
-    .system-info .sys-key {
-      text-align: right;
-      color: var(--text);
-      white-space: nowrap;
-    }
-    .system-info .sys-colon {
+    .system-info-summary::before {
+      content: '▾ ';
+      display: inline-block;
+      width: 1em;
       color: var(--text-muted);
     }
-    .system-info .sys-val {
-      color: var(--text);
-      word-break: break-word;
+    .system-info-details:not([open]) .system-info-summary::before {
+      content: '▸ ';
+    }
+    .system-info-body {
+      margin: 10px 0 0;
+      padding: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
       white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+      max-height: 45vh;
+      overflow-y: auto;
     }
     .tabbar {
       display: flex;
@@ -433,8 +443,10 @@
     <h1 id="page-title">Flame graphs</h1>
   </div>
   <div class="system-info-section" id="system-info-section">
-    <h2 class="system-info-heading">System information</h2>
-    <div class="system-info" id="system-info"></div>
+    <details class="system-info-details" id="system-info-details" open>
+      <summary class="system-info-summary">System information</summary>
+      <pre class="system-info-body" id="system-info-body"></pre>
+    </details>
   </div>
   <div class="tabbar" id="tabbar"></div>
   <div id="panels"></div>
@@ -448,31 +460,16 @@
       window.TAB_SVG_FILENAMES = __TAB_SVG_FILENAMES_JSON__;
       window.FOLDED_B64 = __FOLDED_B64_JSON__;
       window.TAB_SVG_B64 = __TAB_SVG_B64_JSON__;
-      __SYSTEM_INFO_ROWS_JS__
+      __SYSTEM_INFO_TEXT_JS__
 
       function renderSystemInfo() {
-        var rows = window.SYSTEM_INFO_ROWS || [];
-        var grid = document.getElementById('system-info');
+        var text = window.SYSTEM_INFO_TEXT;
         var section = document.getElementById('system-info-section');
-        if (!grid || !section) return;
-        if (!rows.length) {
-          section.style.display = 'none';
-          return;
-        }
-        rows.forEach(function(r) {
-          var k = document.createElement('span');
-          k.className = 'sys-key';
-          k.textContent = r.k;
-          var c = document.createElement('span');
-          c.className = 'sys-colon';
-          c.textContent = ':';
-          var v = document.createElement('span');
-          v.className = 'sys-val';
-          v.textContent = r.v;
-          grid.appendChild(k);
-          grid.appendChild(c);
-          grid.appendChild(v);
-        });
+        var pre = document.getElementById('system-info-body');
+        if (!section || !pre) return;
+        if (text == null || text === undefined) text = '';
+        section.style.display = '';
+        pre.textContent = text;
       }
 
       /** Set every tab button to the same width (widest natural width among tabs). */

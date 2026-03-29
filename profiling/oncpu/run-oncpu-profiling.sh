@@ -86,5 +86,10 @@ fi
 [[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
 [[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
+# Refresh $HOME/system_info.txt for the merged HTML report (generate-html-report.sh).
+if [[ ! -z $(which collect-system-info.sh 2>/dev/null) ]]; then
+    collect-system-info.sh 
+fi
+
 # Perf record and postprocess (flamegraphs); HTML report is generated inside when applicable.
 . "$SCRIPT_DIR/perf-record-and-postprocess.sh"
