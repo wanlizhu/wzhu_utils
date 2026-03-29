@@ -127,6 +127,8 @@ if [[ $1 == ngfx ]]; then
         echo "GPU Architecture: $GPU_ARCH"
         echo "      Metric Set: $METRIC_SET"
         echo "Press hot-key [F11] to trigger a captire"
+        echo 
+        echo "[Nsight doesn't work with nvidia driver released newer than it]"
     fi 
 elif [[ $1 == kwin ]]; then 
     echo TODO: switch to kwin_wayland 
