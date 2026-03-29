@@ -100,4 +100,4 @@ sed -e "/__PAGE_TITLE_JS__/{ r $f_page" -e $'\nd}' \
    -e "/__TAB_SVG_B64_JSON__/{ r $f_svg" -e $'\nd}' \
    "$TEMPLATE" > "$html_file"
 
-echo "    - $html_file (tab view)"
+echo "    - $html_file (Merged HTML Tab View)"
