@@ -95,6 +95,11 @@ if [[ $1 == ngfx ]]; then
         cat /tmp/ngfx | sed -n '/--metric-set-name arg/,/--metric-set-id arg/p' | sed '$d'
         exit 
     fi 
+    if [[ ! -z $(pidof steam) ]]; then 
+        read -p "Press [Enter] to shutdown the running steam client: "
+        steam -shutdown
+        sleep 1
+    fi 
     if [[ -z $(pidof steam) && ! -z $(which ngfx) ]]; then 
         write_graphics_options
         GPU_ARCH="Blackwell GB20x"
