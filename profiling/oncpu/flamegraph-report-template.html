@@ -68,6 +68,7 @@
     .system-info-details:not([open]) .system-info-summary::before {
       content: '▸ ';
     }
+    /* Fixed-pitch only: ASCII graphs need uniform columns (no wrap/word-break). */
     .system-info-body {
       margin: 10px 0 0;
       padding: 12px;
@@ -75,12 +76,17 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 13px;
-      font-family: 'JetBrains Mono', ui-monospace, monospace;
-      white-space: pre-wrap;
-      word-break: break-word;
+      line-height: 1.25;
+      font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+      white-space: pre;
+      overflow-wrap: normal;
+      word-break: normal;
       overflow-x: auto;
       max-height: 45vh;
       overflow-y: auto;
+      tab-size: 4;
     }
     .tabbar {
       display: flex;
