@@ -237,12 +237,18 @@ print_gpu_info() {
         attr=${attr##+([[:space:]])}
         attr=${attr%%+([[:space:]])}
         [[ -n $attr ]] || continue
-        nvidia-smi --id=$gpu_id \
-            --query-gpu="$attr" \
-            --format=csv,noheader 2>/dev/null |
-        awk -v key=$attr '{ print key ": " $0 }'
+        raw_info=$(nvidia-smi --id=$gpu_id --query-gpu="$attr" --format=csv,noheader 2>/dev/null | awk -v key=$attr '{ print key ": " $0 }')
+        if [[ $raw_info == *driver_version* ]]; then 
+            raw_info+=" ($(nvidia_driver_build_type))"
+        fi 
+        echo "$raw_info"
     done < <(tr ',' '\n' <<< "$attributes" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
     shopt -u extglob
+}
+nvidia_driver_build_type() {
+    [[ ! -z $(cat /proc/driver/nvidia/version | head -1 | grep 'Release Build') ]] && echo "release build"
+    [[ ! -z $(cat /proc/driver/nvidia/version | head -1 | grep 'Debug Build') ]] && echo "debug build"
+    [[ ! -z $(cat /proc/driver/nvidia/version | head -1 | grep 'Develop Build') ]] && echo "develop build"
 }
 
 hostname >$OUTPUT_FILE
