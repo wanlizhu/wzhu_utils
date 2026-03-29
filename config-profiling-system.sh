@@ -283,6 +283,10 @@ Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/so
         python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
         php-cli php-xml timeshift libx11-dev libgl-dev
 
+    [[ -z $(which eu-stack) ]] && sudo apt install -y elfutils >/dev/null 2>&1
+    [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
+    [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
+
     find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
     while IFS= read -r -d '' file; do
         while IFS= read -r pkg; do
