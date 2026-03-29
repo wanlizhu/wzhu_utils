@@ -108,7 +108,6 @@ if [[ $1 == ngfx ]]; then
         mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace
         ngfx \
             --exe="/usr/games/steam" \
-            --args="-applaunch 312670 -benchmark" \
             --dir="$HOME" \
             --env="DISPLAY=:0" \
             --activity="GPU Trace Profiler" \
@@ -128,7 +127,6 @@ if [[ $1 == ngfx ]]; then
         echo "      Metric Set: $METRIC_SET"
         echo "Press hot-key [F11] to trigger a captire"
         echo 
-        echo "[Nsight doesn't work with nvidia driver released newer than it]"
     fi 
 elif [[ $1 == kwin ]]; then 
     echo TODO: switch to kwin_wayland 
