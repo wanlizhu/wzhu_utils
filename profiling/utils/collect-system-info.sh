@@ -257,7 +257,7 @@ print_display_info() {
     if [[ -z $DISPLAY || -z $XAUTHORITY ]]; then 
         reload_graphics_env 
     fi 
-
+    list_login_session
     login_session_type_seat0 >/tmp/seat0
     if [[ ! -z $(cat /tmp/seat0 | grep x11) ]]; then
         xrandr --current >/dev/null 2>&1 || {
