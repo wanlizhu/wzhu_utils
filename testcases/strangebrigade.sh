@@ -104,8 +104,8 @@ if [[ $1 == ngfx ]]; then
         write_graphics_options
         GPU_ARCH="Blackwell GB20x"
         METRIC_SET="Top-Level Triage"
-        rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
-        mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
+        rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace
+        mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace
         ngfx \
             --exe="/usr/games/steam" \
             --dir="$HOME" \
@@ -116,13 +116,13 @@ if [[ $1 == ngfx ]]; then
             --auto-export \
             --multi-pass-metrics \
             --set-gpu-clocks=boost \
-            --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP \
+            --output-dir=$HOME/StrangeBrigade_Nsight_GPU_Trace \
             --start-after-hotkey \
             --limit-to-frames=3 \
             --architecture="$GPU_ARCH" \
             --metric-set-name="$METRIC_SET" \
             --launch-detached 
-        echo "GPU Trace output folder: $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP"
+        echo "GPU Trace output folder: $HOME/StrangeBrigade_Nsight_GPU_Trace"
         echo "GPU Architecture: $GPU_ARCH"
         echo "      Metric Set: $METRIC_SET"
         echo "Press hot-key [F11] to trigger a captire"
