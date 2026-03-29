@@ -527,7 +527,7 @@ for path in sorted(glob.glob(f"/sys/class/drm/card{gpu_id}-*")):
     print(f"\tphysical_size: {info['physical_size']}")
 
 if not found:
-    print("[No display connected]")
+    print(f"[No display connected on {gpu_id}]")
     sys.exit(1)
 PY
 }
