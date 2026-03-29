@@ -40,6 +40,37 @@
       font-size: 1.25rem;
       font-weight: 600;
     }
+    .system-info-section {
+      padding: 12px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .system-info-heading {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .system-info {
+      display: grid;
+      grid-template-columns: max-content min-content 1fr;
+      gap: 6px 0.35em;
+      align-items: baseline;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .system-info .sys-key {
+      text-align: right;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .system-info .sys-colon {
+      color: var(--text-muted);
+    }
+    .system-info .sys-val {
+      color: var(--text);
+      word-break: break-word;
+    }
     .tabbar {
       display: flex;
       flex-wrap: wrap;
@@ -52,6 +83,7 @@
       display: inline-flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       padding: 8px 16px;
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -399,6 +431,10 @@
   <div class="header">
     <h1 id="page-title">Flame graphs</h1>
   </div>
+  <div class="system-info-section" id="system-info-section">
+    <h2 class="system-info-heading">System information</h2>
+    <div class="system-info" id="system-info"></div>
+  </div>
   <div class="tabbar" id="tabbar"></div>
   <div id="panels"></div>
 
@@ -411,6 +447,48 @@
       window.TAB_SVG_FILENAMES = __TAB_SVG_FILENAMES_JSON__;
       window.FOLDED_B64 = __FOLDED_B64_JSON__;
       window.TAB_SVG_B64 = __TAB_SVG_B64_JSON__;
+      __SYSTEM_INFO_ROWS_JS__
+
+      function renderSystemInfo() {
+        var rows = window.SYSTEM_INFO_ROWS || [];
+        var grid = document.getElementById('system-info');
+        var section = document.getElementById('system-info-section');
+        if (!grid || !section) return;
+        if (!rows.length) {
+          section.style.display = 'none';
+          return;
+        }
+        rows.forEach(function(r) {
+          var k = document.createElement('span');
+          k.className = 'sys-key';
+          k.textContent = r.k;
+          var c = document.createElement('span');
+          c.className = 'sys-colon';
+          c.textContent = ':';
+          var v = document.createElement('span');
+          v.className = 'sys-val';
+          v.textContent = r.v;
+          grid.appendChild(k);
+          grid.appendChild(c);
+          grid.appendChild(v);
+        });
+      }
+
+      /** Set every tab button to the same width (widest natural width among tabs). */
+      function uniformTabButtonWidths() {
+        var buttons = document.querySelectorAll('#tabbar .tabbtn');
+        if (!buttons.length) return;
+        var maxW = 0;
+        for (var a = 0; a < buttons.length; a++) {
+          buttons[a].style.width = '';
+          buttons[a].style.minWidth = '';
+          maxW = Math.max(maxW, buttons[a].offsetWidth);
+        }
+        for (var b = 0; b < buttons.length; b++) {
+          buttons[b].style.width = maxW + 'px';
+          buttons[b].style.boxSizing = 'border-box';
+        }
+      }
 
       function decompressFoldedB64(b64) {
         if (!b64) return Promise.resolve('');
@@ -596,7 +674,8 @@
 
       function copyCallchainToClipboard(path) {
         if (!path) return;
-        var text = path.indexOf(';') !== -1 ? path.split(';').join('\n') : path;
+        var parts = path.indexOf(';') !== -1 ? path.split(';').map(function(s) { return s.trim(); }).filter(Boolean) : [path.trim()].filter(Boolean);
+        var text = parts.join('->');
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text).catch(function() {});
         }
@@ -683,6 +762,7 @@
 
       async function init() {
         document.getElementById('page-title').textContent = (window.PAGE_TITLE || 'Flame graphs');
+        renderSystemInfo();
         if (!window.TAB_LABELS || !window.TAB_LABELS.length) return;
         window._FOLDED_DECOMPRESSED = await decompressAllFolded();
         computeTabPercentages();
@@ -767,7 +847,7 @@
           var copyBtn = document.createElement('button');
           copyBtn.type = 'button';
           copyBtn.className = 'btn-copy-callchain';
-          copyBtn.title = 'Copy the selected callchain from root to leaf (enable after selecting a function in the SVG or tree).';
+          copyBtn.title = 'Copy the selected callchain as root->…->leaf (enable after selecting a function in the SVG or tree).';
           copyBtn.textContent = 'Copy selected callchain';
           copyBtn.disabled = true;
           copyBtn.onclick = function() { copyCallchainToClipboard(window._selectedPath); };
@@ -933,6 +1013,9 @@
           }
 
         }
+        requestAnimationFrame(function() {
+          requestAnimationFrame(uniformTabButtonWidths);
+        });
       }
 
       function showTab(i) {

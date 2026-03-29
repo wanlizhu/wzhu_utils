@@ -13,6 +13,9 @@ set -o pipefail
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 TEMPLATE="$SCRIPT_DIR/flamegraph-report-template.html"
 [[ -f "$TEMPLATE" ]] || { echo "generate-html-report.sh: template not found: $TEMPLATE" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "generate-html-report.sh: python3 is required" >&2; exit 1; }
+# shellcheck source=profiling/oncpu/collect-system-info.sh
+[[ -f "$SCRIPT_DIR/collect-system-info.sh" ]] && source "$SCRIPT_DIR/collect-system-info.sh"
 
 # Optional: folded data for tree view (gzip then base64 per tab to reduce size)
 declare -a folded_b64
@@ -34,7 +37,8 @@ f_folded="$tmpdir/grep_folded_$pid"
 f_svg="$tmpdir/grep_svg_$pid"
 f_filenames="$tmpdir/grep_filenames_$pid"
 f_comm="$tmpdir/grep_comm_$pid"
-cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg" "$f_filenames" "$f_comm"; }
+f_sysinfo="$tmpdir/grep_sysinfo_$pid"
+cleanup() { rm -f "$f_page" "$f_labels" "$f_folded" "$f_svg" "$f_filenames" "$f_comm" "$f_sysinfo"; }
 trap cleanup EXIT
 
 # Build replacement for __PAGE_TITLE_JS__ (full assignment line; 6 spaces to match template)
@@ -90,14 +94,55 @@ for i in "${!tab_files[@]}"; do
 done
 echo '];' >> "$f_svg"
 
-# Substitute placeholders: replace the line containing each placeholder with the contents of the temp file.
-# POSIX sed requires newline after 'r filename'; each -e is one fragment, so we use $'\n' for newline.
-sed -e "/__PAGE_TITLE_JS__/{ r $f_page" -e $'\nd}' \
-   -e "/__COMM_JS__/{ r $f_comm" -e $'\nd}' \
-   -e "/__TAB_LABELS_JSON__/{ r $f_labels" -e $'\nd}' \
-   -e "/__TAB_SVG_FILENAMES_JSON__/{ r $f_filenames" -e $'\nd}' \
-   -e "/__FOLDED_B64_JSON__/{ r $f_folded" -e $'\nd}' \
-   -e "/__TAB_SVG_B64_JSON__/{ r $f_svg" -e $'\nd}' \
-   "$TEMPLATE" > "$html_file"
+# System info rows as JSON (keys/values from collect_system_info in collect-system-info.sh)
+if declare -f collect_system_info >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+        collect_system_info | python3 -c "
+import json, sys
+rows = []
+for line in sys.stdin:
+    line = line.rstrip('\n')
+    if not line.strip():
+        continue
+    tab = line.find('\t')
+    if tab == -1:
+        continue
+    rows.append({'k': line[:tab], 'v': line[tab + 1:]})
+print('      window.SYSTEM_INFO_ROWS = ' + json.dumps(rows, ensure_ascii=False) + ';')
+" > "$f_sysinfo" 2>/dev/null || printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
+    else
+        printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
+    fi
+else
+    printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
+fi
+
+# Substitute placeholders: replace each line that contains a marker with the corresponding fragment file.
+# (Python avoids GNU vs BSD sed differences for multiline r/d.)
+python3 - "$f_page" "$f_comm" "$f_filenames" "$f_labels" "$f_folded" "$f_svg" "$f_sysinfo" "$TEMPLATE" <<'PY' > "$html_file"
+import sys
+
+paths = sys.argv[1:8]
+template_path = sys.argv[8]
+markers = [
+    "__PAGE_TITLE_JS__",
+    "__COMM_JS__",
+    "__TAB_SVG_FILENAMES_JSON__",
+    "__TAB_LABELS_JSON__",
+    "__FOLDED_B64_JSON__",
+    "__TAB_SVG_B64_JSON__",
+    "__SYSTEM_INFO_ROWS_JS__",
+]
+mapping = list(zip(markers, paths))
+with open(template_path, encoding="utf-8") as f:
+    for line in f:
+        repl = None
+        for marker, path in mapping:
+            if marker in line:
+                with open(path, encoding="utf-8") as pf:
+                    repl = pf.read()
+                break
+        sys.stdout.write(repl if repl is not None else line)
+PY
 
 echo "    - $html_file (Merged HTML Tab View)"
