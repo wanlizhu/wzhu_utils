@@ -245,41 +245,42 @@ print_gpu_info() {
     shopt -u extglob
 }
 
-hostname >/tmp/brief
-printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>/tmp/brief
-printf '\t\tKernel: %s\n' "$(uname -r)" >>/tmp/brief
-printf '\t\tMemory:\n' >>/tmp/brief
-print_mem_brief | sed 's/^/\t\t\t/' >>/tmp/brief
+hostname >$OUTPUT_FILE
+printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>$OUTPUT_FILE
+printf '\t\tKernel: %s\n' "$(uname -r)" >>$OUTPUT_FILE
+printf '\t\tMemory:\n' >>$OUTPUT_FILE
+print_mem_brief | sed 's/^/\t\t\t/' >>$OUTPUT_FILE
 
-printf '\tCPU: %s\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" >>/tmp/brief
-printf '\t\tMax clock: %s\n' "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)" >>/tmp/brief
-printf '\t\t%s\n' "$(print_cpu_max_power_limit_uw)" >>/tmp/brief
-printf '\t\t%s\n' "$(print_cpu_intel_pstate)" >>/tmp/brief
-printf '\t\t%s\n' "$(print_cpu_power_profile)" >>/tmp/brief
+printf '\tCPU: %s\n' "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')" >>$OUTPUT_FILE
+printf '\t\tMax clock: %s\n' "$(awk '{print $1 / 1000000}' /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)" >>$OUTPUT_FILE
+printf '\t\t%s\n' "$(print_cpu_max_power_limit_uw)" >>$OUTPUT_FILE
+printf '\t\t%s\n' "$(print_cpu_intel_pstate)" >>$OUTPUT_FILE
+printf '\t\t%s\n' "$(print_cpu_power_profile)" >>$OUTPUT_FILE
 # Intel: report P-cores and E-cores separately from sysfs cpu_core/cpu_atom; else total cores and cpu0.
 if grep -qi '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo; then
     if [[ -e /sys/devices/cpu_core/cpus && -e /sys/devices/cpu_atom/cpus ]]; then 
-        printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>/tmp/brief
-        print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
-        printf '\t\tNumber of E-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_atom/cpus) >>/tmp/brief
-        print_cpu_core_info $(cat /sys/devices/cpu_atom/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>/tmp/brief
+        printf '\t\tNumber of P-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_core/cpus) >>$OUTPUT_FILE
+        print_cpu_core_info $(cat /sys/devices/cpu_core/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>$OUTPUT_FILE
+        printf '\t\tNumber of E-cores: %s\n' $(count_cpu_core_list </sys/devices/cpu_atom/cpus) >>$OUTPUT_FILE
+        print_cpu_core_info $(cat /sys/devices/cpu_atom/cpus | cut -d- -f1) | sed 's/^/\t\t\t/' >>$OUTPUT_FILE
     else
-        printf '\t\tNumber of P-cores: N/A\n' >>/tmp/brief
-        printf '\t\tNumber of E-cores: N/A\n' >>/tmp/brief
+        printf '\t\tNumber of P-cores: N/A\n' >>$OUTPUT_FILE
+        printf '\t\tNumber of E-cores: N/A\n' >>$OUTPUT_FILE
     fi 
 else
-    printf '\t\tNumber of cores: %s\n' "$(grep -c '^processor' /proc/cpuinfo)" >>/tmp/brief
-    print_cpu_core_info 0 | sed 's/^/\t\t\t/' >>/tmp/brief
+    printf '\t\tNumber of cores: %s\n' "$(grep -c '^processor' /proc/cpuinfo)" >>$OUTPUT_FILE
+    print_cpu_core_info 0 | sed 's/^/\t\t\t/' >>$OUTPUT_FILE
 fi
 
 # One subsection per GPU: name and key attributes via print_gpu_info.
 for gpu_id in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
-    printf '\tGPU %s: %s\n' "$gpu_id" "$(nvidia-smi --id=$gpu_id --query-gpu=name --format=noheader)" >>/tmp/brief
-    print_gpu_info $gpu_id "driver_version,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.max,display_attached,display_active,persistence_mode,vbios_version,memory.total,compute_cap,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total" | sed 's/^/\t\t/' >>/tmp/brief
+    printf '\tGPU %s: %s\n' "$gpu_id" "$(nvidia-smi --id=$gpu_id --query-gpu=name --format=noheader)" >>$OUTPUT_FILE
+    print_gpu_info $gpu_id "driver_version,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.max,display_attached,display_active,persistence_mode,vbios_version,memory.total,compute_cap,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total" | sed 's/^/\t\t/' >>$OUTPUT_FILE
 done
 
 if [[ ! -z $(which print-ascii-tree.sh) ]]; then 
-    print-ascii-tree.sh /tmp/brief 
-else
-    cat /tmp/brief 
+    print-ascii-tree.sh $OUTPUT_FILE >/tmp/tree
+    mv -f /tmp/tree $OUTPUT_FILE
 fi 
+
+cat $OUTPUT_FILE 

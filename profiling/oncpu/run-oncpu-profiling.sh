@@ -67,12 +67,12 @@ if [[ ! -z $1 ]]; then
     [[ -z $COMM ]] && COMM=untitled
 
     # Install debug symbol packages for the target process.
-    if [[ ! -z $(which find-dbgsym-packages) ]]; then 
-        echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
-        find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
-        [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
-    fi 
     if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
+        if [[ ! -z $(which find-dbgsym-packages) ]]; then 
+            echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
+            find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
+            [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
+        fi 
         echo "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
             find_or_install $pkg
@@ -88,7 +88,7 @@ fi
 
 # Refresh $HOME/system_info.txt for the merged HTML report (generate-html-report.sh).
 if [[ ! -z $(which collect-system-info.sh 2>/dev/null) ]]; then
-    collect-system-info.sh 
+    collect-system-info.sh >/dev/null 
 fi
 
 # Perf record and postprocess (flamegraphs); HTML report is generated inside when applicable.
