@@ -108,6 +108,7 @@ if [[ $1 == ngfx ]]; then
         mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace
         ngfx \
             --exe="/usr/games/steam" \
+            --args="-applaunch 312670 -benchmark" \
             --dir="$HOME" \
             --env="DISPLAY=:0" \
             --activity="GPU Trace Profiler" \
