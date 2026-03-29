@@ -253,7 +253,7 @@ nvidia_driver_build_type() {
 
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
-    local gpu_id=$1 
+    local wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
     if [[ $XDG_SESSION_TYPE == tty ]]; then 
         export DISPLAY=:0
         export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
@@ -263,28 +263,33 @@ print_display_info() {
         echo "XAUTHORITY=$XAUTHORITY"
         echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
         echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
-        wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
-        if [[ -z $wayland_display ]]; then 
-            xrandr --current >/dev/null 2>&1 || {
-                echo "[Failed to connect to X11]"
-                return 
-            }
-        else 
+        if [[ ! -z $wayland_display ]]; then 
             export WAYLAND_DISPLAY=$(basename $wayland_display)
             echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
-            gdbus call \
-                --session \
-                --dest org.gnome.Mutter.DisplayConfig \
-                --object-path /org/gnome/Mutter/DisplayConfig \
-                --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
-            >/dev/null 2>&1 || {
-                echo "[Failed to connect to Wayland]"
-                return 
-            }
-        fi  
+        fi 
     fi 
 
-    python3 - "$gpu_id" <<'PY'
+    
+    if [[ -z $wayland_display ]]; then 
+        session_type=x11 
+        xrandr --current >/dev/null 2>&1 || {
+            echo "[Failed to connect to X11]"
+            return 
+        }
+    else 
+        session_type=wayland
+        gdbus call \
+            --session \
+            --dest org.gnome.Mutter.DisplayConfig \
+            --object-path /org/gnome/Mutter/DisplayConfig \
+            --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
+        >/dev/null 2>&1 || {
+            echo "[Failed to connect to Wayland]"
+            return 
+        }
+    fi  
+
+    python3 - "$session_type" <<'PY'
 import glob
 import os
 import re
@@ -292,7 +297,7 @@ import subprocess
 import sys
 
 
-gpu_id = sys.argv[1]
+session_type = sys.argv[1].lower()
 
 
 def run(cmd):
@@ -320,19 +325,14 @@ def parse_edid(edid_path):
     if not os.path.exists(edid_path):
         return info
 
-    try:
-        out = subprocess.check_output(
-            ["edid-decode", edid_path],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
+    out = run(["edid-decode", edid_path])
+    if not out:
         return info
 
     m = re.search(r"Display Product Name:\s*(.+)", out)
     if m:
         name = m.group(1).strip()
-        if name and name != "invalid":
+        if name and name.lower() != "invalid":
             info["display_name"] = name
 
     m = re.search(r"Maximum image size:\s*(.+)", out)
@@ -353,54 +353,50 @@ def parse_edid(edid_path):
 def parse_x11():
     data = {}
     out = run(["xrandr", "--verbose"])
-    current = None
+    connector = None
 
     for line in out.splitlines():
         if not line.startswith((" ", "\t")) and " connected" in line:
-            current = line.split()[0]
-            data.setdefault(current, {})
+            connector = line.split()[0]
+            data.setdefault(connector, {})
             continue
 
-        if current is None:
+        if connector is None:
             continue
 
         s = line.strip()
 
         m = re.match(r"([0-9]+x[0-9]+)\s+([0-9.]+)([*+ ]*)", s)
         if m and "*" in m.group(3):
-            data[current]["current_resolution"] = m.group(1)
-            data[current]["refresh_rate"] = m.group(2)
+            data[connector]["current_resolution"] = m.group(1)
+            data[connector]["refresh_rate"] = m.group(2)
             continue
 
         m = re.match(r"max bpc:\s*(.+)", s, re.IGNORECASE)
         if m:
-            data[current]["color_depth_bpc"] = m.group(1).strip()
+            data[connector]["color_depth_bpc"] = m.group(1).strip()
             continue
 
         m = re.match(r"Colorspace:\s*(.+)", s, re.IGNORECASE)
         if m:
-            data[current]["colorspace"] = m.group(1).strip()
+            data[connector]["colorspace"] = m.group(1).strip()
             continue
 
         m = re.match(r"vrr_capable:\s*(.+)", s, re.IGNORECASE)
         if m:
             v = m.group(1).strip()
-            if v == "1":
-                v = "yes"
-            elif v == "0":
-                v = "no"
-            data[current]["vrr_capable"] = v
+            data[connector]["vrr_capable"] = "yes" if v == "1" else "no" if v == "0" else v
             continue
 
         m = re.match(r"link-status:\s*(.+)", s, re.IGNORECASE)
         if m:
-            data[current]["link_status"] = m.group(1).strip()
+            data[connector]["link_status"] = m.group(1).strip()
             continue
 
     return data
 
 
-def parse_gnome_wayland():
+def parse_wayland():
     data = {}
 
     code = r'''
@@ -452,19 +448,13 @@ for mon in monitors:
 
     print(f"{connector}\t{current_resolution}\t{refresh_rate}")
 '''
-    try:
-        out = subprocess.check_output(
-            ["python3", "-c", code],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        return data
+    out = run(["python3", "-c", code])
 
     for line in out.splitlines():
         parts = line.split("\t")
         if len(parts) != 3:
             continue
+
         connector, current_resolution, refresh_rate = parts
         data[connector] = {
             "current_resolution": current_resolution,
@@ -474,23 +464,24 @@ for mon in monitors:
     return data
 
 
-session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-session_suffix = "Wayland" if session_type == "wayland" else "X11" if session_type == "x11" else "Unknown"
-
-x11_data = parse_x11() if session_type == "x11" and os.environ.get("DISPLAY") else {}
-wayland_data = parse_gnome_wayland() if session_type == "wayland" else {}
+session_suffix = "Wayland" if session_type == "wayland" else "X11"
+runtime_data = parse_wayland() if session_type == "wayland" else parse_x11()
 
 found = False
 
-for path in sorted(glob.glob(f"/sys/class/drm/card{gpu_id}-*")):
-    status = read_text(os.path.join(path, "status"))
-    if status != "connected":
+for path in sorted(glob.glob("/sys/class/drm/card*-*")):
+    status_path = os.path.join(path, "status")
+    if not os.path.isfile(status_path):
+        continue
+
+    if read_text(status_path) != "connected":
         continue
 
     found = True
 
     full_connector = os.path.basename(path)
-    connector = full_connector.split(f"card{gpu_id}-", 1)[-1]
+    m = re.match(r"card[0-9]+-(.+)", full_connector)
+    connector = m.group(1) if m else full_connector
     connection_type = re.sub(r"-?[0-9]+$", "", connector)
 
     info = {
@@ -505,16 +496,10 @@ for path in sorted(glob.glob(f"/sys/class/drm/card{gpu_id}-*")):
         "physical_size": "N/A",
     }
 
-    edid_info = parse_edid(os.path.join(path, "edid"))
-    info["display_name"] = edid_info["display_name"]
-    info["physical_size"] = edid_info["physical_size"]
-    info["color_depth_bpc"] = edid_info["color_depth_bpc"]
+    info.update(parse_edid(os.path.join(path, "edid")))
 
-    if connector in x11_data:
-        info.update({k: v for k, v in x11_data[connector].items() if v not in ("", None)})
-
-    if connector in wayland_data:
-        info.update({k: v for k, v in wayland_data[connector].items() if v not in ("", None)})
+    if connector in runtime_data:
+        info.update({k: v for k, v in runtime_data[connector].items() if v not in ("", None)})
 
     print(f"{connector} {info['display_name']} ({session_suffix})")
     print(f"\tcurrent_resolution: {info['current_resolution']}")
@@ -527,7 +512,7 @@ for path in sorted(glob.glob(f"/sys/class/drm/card{gpu_id}-*")):
     print(f"\tphysical_size: {info['physical_size']}")
 
 if not found:
-    print(f"[No display connected on {gpu_id}]")
+    print("[No display connected]")
     sys.exit(1)
 PY
 }
