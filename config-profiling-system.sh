@@ -50,6 +50,7 @@ echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="$HOME/wzhu_utils/offscreen:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/testcases:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/profiling:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/profiling/common:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
