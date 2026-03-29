@@ -14,8 +14,6 @@ SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${B
 TEMPLATE="$SCRIPT_DIR/flamegraph-report-template.html"
 [[ -f "$TEMPLATE" ]] || { echo "generate-html-report.sh: template not found: $TEMPLATE" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "generate-html-report.sh: python3 is required" >&2; exit 1; }
-# shellcheck source=profiling/oncpu/collect-system-info.sh
-[[ -f "$SCRIPT_DIR/collect-system-info.sh" ]] && source "$SCRIPT_DIR/collect-system-info.sh"
 
 # Optional: folded data for tree view (gzip then base64 per tab to reduce size)
 declare -a folded_b64
@@ -94,25 +92,31 @@ for i in "${!tab_files[@]}"; do
 done
 echo '];' >> "$f_svg"
 
-# System info rows as JSON (keys/values from collect_system_info in collect-system-info.sh)
-if declare -f collect_system_info >/dev/null 2>&1; then
-    if command -v python3 >/dev/null 2>&1; then
-        collect_system_info | python3 -c "
+# System info: read ${SYSTEM_INFO_FILE:-$HOME/system_info.txt}; each line "key<TAB>value" becomes a row.
+# If the file has no tab-separated lines, the whole file is one row (key "System information").
+SYS_INFO_FILE="${SYSTEM_INFO_FILE:-$HOME/system_info.txt}"
+if [[ -f "$SYS_INFO_FILE" ]] && [[ -s "$SYS_INFO_FILE" ]]; then
+    python3 - "$SYS_INFO_FILE" <<'PY' > "$f_sysinfo" || printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
 import json, sys
+
+path = sys.argv[1]
 rows = []
-for line in sys.stdin:
-    line = line.rstrip('\n')
-    if not line.strip():
-        continue
-    tab = line.find('\t')
-    if tab == -1:
-        continue
-    rows.append({'k': line[:tab], 'v': line[tab + 1:]})
-print('      window.SYSTEM_INFO_ROWS = ' + json.dumps(rows, ensure_ascii=False) + ';')
-" > "$f_sysinfo" 2>/dev/null || printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
-    else
-        printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
-    fi
+try:
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+except OSError:
+    text = ""
+if text.strip():
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        tab = line.find("\t")
+        if tab != -1:
+            rows.append({"k": line[:tab], "v": line[tab + 1:]})
+    if not rows:
+        rows.append({"k": "System information", "v": text.rstrip("\n")})
+print("      window.SYSTEM_INFO_ROWS = " + json.dumps(rows, ensure_ascii=False) + ";")
+PY
 else
     printf '      window.SYSTEM_INFO_ROWS = [];\n' > "$f_sysinfo"
 fi

@@ -337,7 +337,7 @@ else
 fi 
 
 if [[ ! -z $(which collect-system-info.sh) ]]; then 
-    collect-system-info.sh brief 
+    collect-system-info.sh 
 fi 
 
 exec /usr/bin/bash 
