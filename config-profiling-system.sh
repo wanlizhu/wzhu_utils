@@ -53,6 +53,7 @@ echo 'export PATH="$HOME/wzhu_utils/profiling:$PATH"' >>~/nvidia-profiling.sh
 echo 'export PATH="$HOME/wzhu_utils/profiling/utils:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
+echo 'export PATH="$HOME/wzhu_utils/profiling/gpu:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
 echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh 
