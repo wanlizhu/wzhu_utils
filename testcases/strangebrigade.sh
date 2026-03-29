@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -o pipefail
 
-run_strangebrigade_benchmark() {
-    local BENCHMARK_RESULT_DIR="$HOME/.steam/steam/steamapps/compatdata/312670/pfx/drive_c/users/steamuser/Documents/StrangeBrigade_Benchmark"
+_sb_cleanup_sig() {
+    echo >&2 "Interrupted; shutting down Steam..."
+    command -v steam >/dev/null && steam -shutdown &>/dev/null  
+    trap - INT TERM
+    exit 130
+}
+trap '_sb_cleanup_sig' INT TERM
+
+write_graphics_options() {
     local GRAPHICS_CONFIG_FILE="$HOME/.steam/steam/steamapps/compatdata/312670/pfx/drive_c/users/steamuser/Local Settings/Application Data/Strange Brigade/GraphicsOptions.ini"
     local GRAPHICS_CONFIG_LIST=(
         '[Display Settings]'
@@ -29,19 +36,17 @@ run_strangebrigade_benchmark() {
         'HDR = 0'
     )
 
-    [[ -f "$GRAPHICS_CONFIG_FILE" ]] && cp "$GRAPHICS_CONFIG_FILE" "$GRAPHICS_CONFIG_FILE.backup"
-    printf '%s\n' "${GRAPHICS_CONFIG_LIST[@]}" > "$GRAPHICS_CONFIG_FILE"
+    if [[ -f "$GRAPHICS_CONFIG_FILE" ]]; then 
+        cp "$GRAPHICS_CONFIG_FILE" "$GRAPHICS_CONFIG_FILE.backup"
+    fi 
 
-    _sb_cleanup_sig() {
-        echo >&2 "Interrupted; shutting down Steam..."
-        command -v steam >/dev/null && steam -shutdown &>/dev/null || true
-        if [[ -f "${GRAPHICS_CONFIG_FILE}.backup" ]]; then
-            mv -f "${GRAPHICS_CONFIG_FILE}.backup" "$GRAPHICS_CONFIG_FILE"
-        fi
-        trap - INT TERM
-        exit 130
-    }
-    trap '_sb_cleanup_sig' INT TERM
+    printf '%s\n' "${GRAPHICS_CONFIG_LIST[@]}" > "$GRAPHICS_CONFIG_FILE"
+}
+
+run_strangebrigade_benchmark() {
+    local BENCHMARK_RESULT_DIR="$HOME/.steam/steam/steamapps/compatdata/312670/pfx/drive_c/users/steamuser/Documents/StrangeBrigade_Benchmark"
+    
+    write_graphics_options
 
     [[ -d "$BENCHMARK_RESULT_DIR" ]] && find "$BENCHMARK_RESULT_DIR" -mindepth 1 -delete 
     steam -applaunch 312670 -benchmark &>/dev/null &
@@ -76,8 +81,6 @@ run_strangebrigade_benchmark() {
     if [[ -f "${GRAPHICS_CONFIG_FILE}.backup" ]]; then
         mv -f "${GRAPHICS_CONFIG_FILE}.backup" "$GRAPHICS_CONFIG_FILE"
     fi
-
-    trap - INT TERM
 }
 
 if [ "$EUID" -eq 0 ]; then
@@ -93,12 +96,14 @@ if [[ $1 == ngfx ]]; then
         exit 
     fi 
     if [[ -z $(pidof steam) && ! -z $(which ngfx) ]]; then 
+        write_graphics_options
         GPU_ARCH="Blackwell GB20x"
         METRIC_SET="Top-Level Triage"
         rm -rf   $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
         mkdir -p $HOME/StrangeBrigade_Nsight_GPU_Trace_TEMP
         ngfx \
             --exe="/usr/games/steam" \
+            --args="-applaunch 312670 -benchmark" \
             --dir="$HOME" \
             --env="DISPLAY=:0" \
             --activity="GPU Trace Profiler" \
