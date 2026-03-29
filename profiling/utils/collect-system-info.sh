@@ -253,31 +253,36 @@ nvidia_driver_build_type() {
 
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
-    local gpu_id=$1
-    if [[ -z $DISPLAY || -z $XAUTHORITY ]]; then 
-        reload_graphics_env 
-    fi 
-    list_login_session
-    login_session_type_seat0 >/tmp/seat0
-    if [[ ! -z $(cat /tmp/seat0 | grep x11) ]]; then
-        xrandr --current >/dev/null 2>&1 || {
-            echo "[Failed to connect to X11]"
-            return 
-        }
-    elif [[ ! -z $(cat /tmp/seat0 | grep wayland) ]]; then
-        gdbus call \
-            --session \
-            --dest org.gnome.Mutter.DisplayConfig \
-            --object-path /org/gnome/Mutter/DisplayConfig \
-            --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
+    local gpu_id=$1 
+    if [[ $XDG_SESSION_TYPE == tty ]]; then 
+        export DISPLAY=:0
+        export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
+        export XDG_RUNTIME_DIR=/run/user/$(id -u)
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+        echo "DISPLAY=$DISPLAY"
+        echo "XAUTHORITY=$XAUTHORITY"
+        echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
+        wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
+        if [[ -z $wayland_display ]]; then 
+            xrandr --current >/dev/null 2>&1 || {
+                echo "[Failed to connect to X11]"
+                return 
+            }
+        else 
+            export WAYLAND_DISPLAY=$(basename $wayland_display)
+            echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+            gdbus call \
+                --session \
+                --dest org.gnome.Mutter.DisplayConfig \
+                --object-path /org/gnome/Mutter/DisplayConfig \
+                --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
             >/dev/null 2>&1 || {
                 echo "[Failed to connect to Wayland]"
                 return 
             }
-    else 
-        echo "[Invalid window manager: $(cat /tmp/seat0)]"
-        return 
-    fi
+        fi  
+    fi 
 
     python3 - "$gpu_id" <<'PY'
 import glob
