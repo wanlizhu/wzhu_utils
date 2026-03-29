@@ -21,6 +21,10 @@ while (( $# )); do
     shift
  done
 
+[[ "$RECORD_SECONDS" =~ ^[0-9]+$ ]] && [[ $RECORD_SECONDS -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_SECONDS must be a positive integer" >&2; exit 1; }
+[[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
+[[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
+
 if ! sudo -n true 2>/dev/null; then
     echo "Error: NOPASSWD is NOT enabled for $(id -un)"
     echo "Aborting"
@@ -49,6 +53,7 @@ if (( WAIT_SECONDS > 0 )); then
 fi
 
 # Resolve the target process or launch a new command.
+PID_TO_KILL=
 if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then
         PID=$1
@@ -59,6 +64,7 @@ if [[ ! -z $1 ]]; then
     else
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
+        PID_TO_KILL=$PID 
         echo "Launched and detached process $PID"
     fi
 
@@ -82,9 +88,6 @@ fi
 
 # Guardian: ensure required inputs for perf-record-and-postprocess.sh are set and valid.
 [[ -z "$COMM" ]] && COMM=untitled
-[[ "$RECORD_SECONDS" =~ ^[0-9]+$ ]] && [[ $RECORD_SECONDS -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_SECONDS must be a positive integer" >&2; exit 1; }
-[[ "$RECORD_FREQ" =~ ^[0-9]+$ ]] && [[ $RECORD_FREQ -gt 0 ]] || { echo "run-oncpu-profiling.sh: RECORD_FREQ must be a positive integer" >&2; exit 1; }
-[[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
 # Refresh $HOME/system_info.txt for the merged HTML report (generate-html-report.sh).
 if [[ ! -z $(which collect-system-info.sh 2>/dev/null) ]]; then
@@ -93,3 +96,8 @@ fi
 
 # Perf record and postprocess (flamegraphs); HTML report is generated inside when applicable.
 . "$SCRIPT_DIR/perf-record-and-postprocess.sh"
+
+if [[ ! -z $PID_TO_KILL && -d /proc/$PID_TO_KILL ]]; then 
+    sudo kill $PID_TO_KILL || sudo kill -9 $PID_TO_KILL
+    echo "Killed $PID_TO_KILL"
+fi 
