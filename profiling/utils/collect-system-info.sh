@@ -251,6 +251,281 @@ nvidia_driver_build_type() {
     [[ ! -z $(cat /proc/driver/nvidia/version | head -1 | grep 'Develop Build') ]] && echo "develop build"
 }
 
+# For display related info which requires valid env var DISPLAY 
+print_display_info() {
+    local gpu_id=$1
+    if [[ -z $DISPLAY || -z $XAUTHORITY ]]; then 
+        reload_graphics_env 
+    fi 
+
+    if [[ $(login_session_type_seat0) == x11 ]]; then
+        xrandr --current >/dev/null 2>&1 || {
+            echo "[Failed to connect to X11]"
+            return 
+        }
+    elif [[ $(login_session_type_seat0) == wayland ]]; then
+        gdbus call \
+            --session \
+            --dest org.gnome.Mutter.DisplayConfig \
+            --object-path /org/gnome/Mutter/DisplayConfig \
+            --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
+            >/dev/null 2>&1 || {
+                echo "[Failed to connect to Wayland]"
+                return 
+            }
+    else 
+        echo "[N/A]"
+        return 
+    fi
+
+    python3 - "$gpu_id" <<'PY'
+import glob
+import os
+import re
+import subprocess
+import sys
+
+
+gpu_id = sys.argv[1]
+
+
+def run(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+    except Exception:
+        return ""
+
+
+def read_text(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
+
+def parse_edid(edid_path):
+    info = {
+        "display_name": "Unknown Display",
+        "physical_size": "N/A",
+        "color_depth_bpc": "N/A",
+    }
+
+    if not os.path.exists(edid_path):
+        return info
+
+    try:
+        out = subprocess.check_output(
+            ["edid-decode", edid_path],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return info
+
+    m = re.search(r"Display Product Name:\s*(.+)", out)
+    if m:
+        name = m.group(1).strip()
+        if name and name != "invalid":
+            info["display_name"] = name
+
+    m = re.search(r"Maximum image size:\s*(.+)", out)
+    if m:
+        info["physical_size"] = m.group(1).strip()
+    else:
+        m = re.search(r"Display size:\s*([0-9]+)\s*x\s*([0-9]+)\s*mm", out)
+        if m:
+            info["physical_size"] = f"{m.group(1)} x {m.group(2)} mm"
+
+    m = re.search(r"Bits per primary color channel:\s*(.+)", out)
+    if m:
+        info["color_depth_bpc"] = m.group(1).strip()
+
+    return info
+
+
+def parse_x11():
+    data = {}
+    out = run(["xrandr", "--verbose"])
+    current = None
+
+    for line in out.splitlines():
+        if not line.startswith((" ", "\t")) and " connected" in line:
+            current = line.split()[0]
+            data.setdefault(current, {})
+            continue
+
+        if current is None:
+            continue
+
+        s = line.strip()
+
+        m = re.match(r"([0-9]+x[0-9]+)\s+([0-9.]+)([*+ ]*)", s)
+        if m and "*" in m.group(3):
+            data[current]["current_resolution"] = m.group(1)
+            data[current]["refresh_rate"] = m.group(2)
+            continue
+
+        m = re.match(r"max bpc:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            data[current]["color_depth_bpc"] = m.group(1).strip()
+            continue
+
+        m = re.match(r"Colorspace:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            data[current]["colorspace"] = m.group(1).strip()
+            continue
+
+        m = re.match(r"vrr_capable:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            v = m.group(1).strip()
+            if v == "1":
+                v = "yes"
+            elif v == "0":
+                v = "no"
+            data[current]["vrr_capable"] = v
+            continue
+
+        m = re.match(r"link-status:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            data[current]["link_status"] = m.group(1).strip()
+            continue
+
+    return data
+
+
+def parse_gnome_wayland():
+    data = {}
+
+    code = r'''
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio
+
+xml = """
+<node>
+  <interface name="org.gnome.Mutter.DisplayConfig">
+    <method name="GetCurrentState">
+      <arg type="u" direction="out"/>
+      <arg type="a((ssss)a(siiddada{sv})a{sv})" direction="out"/>
+      <arg type="a(iiduba(ssss)a{sv})" direction="out"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
+  </interface>
+</node>
+"""
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+iface = Gio.DBusNodeInfo.new_for_xml(xml).interfaces[0]
+proxy = Gio.DBusProxy.new_sync(
+    bus,
+    Gio.DBusProxyFlags.NONE,
+    iface,
+    "org.gnome.Mutter.DisplayConfig",
+    "/org/gnome/Mutter/DisplayConfig",
+    "org.gnome.Mutter.DisplayConfig",
+    None,
+)
+
+ret = proxy.call_sync("GetCurrentState", None, Gio.DBusCallFlags.NONE, -1, None)
+serial, monitors, logical_monitors, props = ret.unpack()
+
+for mon in monitors:
+    spec, modes, mon_props = mon
+    connector, vendor, product, serial = spec
+
+    current_resolution = "N/A"
+    refresh_rate = "N/A"
+
+    for mode in modes:
+        mode_id, width, height, refresh, preferred_scale, supported_scales, mode_props = mode
+        if mode_props.get("is-current", False):
+            current_resolution = f"{width}x{height}"
+            refresh_rate = f"{float(refresh) / 1000.0:.3f}"
+            break
+
+    print(f"{connector}\t{current_resolution}\t{refresh_rate}")
+'''
+    try:
+        out = subprocess.check_output(
+            ["python3", "-c", code],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return data
+
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        connector, current_resolution, refresh_rate = parts
+        data[connector] = {
+            "current_resolution": current_resolution,
+            "refresh_rate": refresh_rate,
+        }
+
+    return data
+
+
+session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+session_suffix = "Wayland" if session_type == "wayland" else "X11" if session_type == "x11" else "Unknown"
+
+x11_data = parse_x11() if session_type == "x11" and os.environ.get("DISPLAY") else {}
+wayland_data = parse_gnome_wayland() if session_type == "wayland" else {}
+
+found = False
+
+for path in sorted(glob.glob(f"/sys/class/drm/card{gpu_id}-*")):
+    status = read_text(os.path.join(path, "status"))
+    if status != "connected":
+        continue
+
+    found = True
+
+    full_connector = os.path.basename(path)
+    connector = full_connector.split(f"card{gpu_id}-", 1)[-1]
+    connection_type = re.sub(r"-?[0-9]+$", "", connector)
+
+    info = {
+        "display_name": "Unknown Display",
+        "current_resolution": "N/A",
+        "refresh_rate": "N/A",
+        "color_depth_bpc": "N/A",
+        "colorspace": "N/A",
+        "connection_type": connection_type,
+        "vrr_capable": "N/A",
+        "link_status": "N/A",
+        "physical_size": "N/A",
+    }
+
+    edid_info = parse_edid(os.path.join(path, "edid"))
+    info["display_name"] = edid_info["display_name"]
+    info["physical_size"] = edid_info["physical_size"]
+    info["color_depth_bpc"] = edid_info["color_depth_bpc"]
+
+    if connector in x11_data:
+        info.update({k: v for k, v in x11_data[connector].items() if v not in ("", None)})
+
+    if connector in wayland_data:
+        info.update({k: v for k, v in wayland_data[connector].items() if v not in ("", None)})
+
+    print(f"{connector} {info['display_name']} ({session_suffix})")
+    print(f"\tcurrent_resolution: {info['current_resolution']}")
+    print(f"\trefresh_rate: {info['refresh_rate']}")
+    print(f"\tcolor_depth_bpc: {info['color_depth_bpc']}")
+    print(f"\tcolorspace: {info['colorspace']}")
+    print(f"\tconnection_type: {info['connection_type']}")
+    print(f"\tvrr_capable: {info['vrr_capable']}")
+    print(f"\tlink_status: {info['link_status']}")
+    print(f"\tphysical_size: {info['physical_size']}")
+
+if not found:
+    print("[No display connected]")
+    sys.exit(1)
+PY
+}
+
 hostname >$OUTPUT_FILE
 printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>$OUTPUT_FILE
 printf '\t\tKernel: %s\n' "$(uname -r)" >>$OUTPUT_FILE
@@ -282,6 +557,7 @@ fi
 for gpu_id in $(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); do
     printf '\tGPU %s: %s\n' "$gpu_id" "$(nvidia-smi --id=$gpu_id --query-gpu=name --format=noheader)" >>$OUTPUT_FILE
     print_gpu_info $gpu_id "driver_version,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.max,display_attached,display_active,persistence_mode,vbios_version,memory.total,compute_cap,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total" | sed 's/^/\t\t/' >>$OUTPUT_FILE
+    print_display_info $gpu_id | sed 's/^/\t\t/' >>$OUTPUT_FILE
 done
 
 if [[ ! -z $(which print-ascii-tree.sh) ]]; then 
