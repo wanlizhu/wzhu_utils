@@ -254,6 +254,7 @@ nvidia_driver_build_type() {
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
     local wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
+    
     if [[ $XDG_SESSION_TYPE == tty ]]; then 
         export DISPLAY=:0
         export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
