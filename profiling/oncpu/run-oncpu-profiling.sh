@@ -40,7 +40,7 @@ echo
 # Install required tools on demand.
 [[ -z $(which eu-stack) ]] && sudo apt install -y elfutils >/dev/null 2>&1
 [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
-[[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl $HOME/bin/
+[[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
 
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then

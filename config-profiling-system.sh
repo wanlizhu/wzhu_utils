@@ -65,8 +65,8 @@ echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh
 echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
 echo "alias ll='ls -alFh'" >>~/nvidia-profiling.sh 
 cat >> ~/nvidia-profiling.sh <<'EOF'
-if [[ -f $HOME/vulkansdk/current/setup-env.sh ]]; then 
-    source $HOME/vulkansdk/current/setup-env.sh
+if [[ -f $HOME/VulkanSDK/current/setup-env.sh ]]; then 
+    source $HOME/VulkanSDK/current/setup-env.sh
 fi 
 reload() {
     source ~/.bashrc
