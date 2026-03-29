@@ -342,7 +342,11 @@ print_display_info() {
             fi
         done <<< "$xrandr_out"
 
-        echo "$connector $display_name (X11/Xwayland)"
+        if [[ ! -z $wayland_display ]]; then 
+            echo "$connector $display_name (Xwayland)"
+        else 
+            echo "$connector $display_name (X11)"
+        fi 
         echo -e "\tcurrent_resolution: $current_resolution"
         echo -e "\trefresh_rate: $refresh_rate"
         echo -e "\tcolor_depth_bpc: $color_depth_bpc"
