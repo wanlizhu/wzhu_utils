@@ -95,7 +95,7 @@ run_kwin_wayland_test() {
     sudo systemd-run --collect -u kwin-test --uid=wzhu \
         -p PAMName=login \
         -p TTYPath=/dev/tty1 \
-        /bin/bash -lc '/usr/bin/dbus-run-session /usr/bin/startplasma-wayland 2>&1 | tee /home/wzhu/kwin-test.log' || return 1
+        /usr/bin/startplasma-wayland || return 1
     echo
     echo "=================================================="
     echo "How to switch back to GNOME desktop session:"
