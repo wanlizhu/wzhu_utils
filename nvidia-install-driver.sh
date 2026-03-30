@@ -36,6 +36,7 @@ install_local_file() {
     [[ -z $file || ! -e $file ]] && return 1
     [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && return 1
     [[ -z $(which expect) ]] && sudo apt install -y expect 
+    [[ ! -z $(which nvidia-uninstall) ]] && sudo nvidia-uninstall 
 
     sudo chmod +x $file 2>/dev/null 
     sudo $file --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
