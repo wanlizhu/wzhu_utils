@@ -85,3 +85,9 @@ if [[ -f /tmp/cmd ]]; then
     chmod +x /tmp/cmd
     source /tmp/cmd 
 fi 
+
+if [[ $(nvidia-smi) == *"No devices were found"* ]]; then 
+    echo "Reset nvidia gpu device ... [OK]"
+    sudo nvidia-smi -r 
+    sudo systemctl restart gdm3 
+fi 
