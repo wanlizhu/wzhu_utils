@@ -12,20 +12,12 @@ unset DISPLAY
 unset XAUTHORITY
 unset WAYLAND_DISPLAY
 
-while read -r sid; do
-    [[ -z $sid ]] && continue
-    active=$(loginctl show-session $sid -p Active --value 2>/dev/null)
-    remote=$(loginctl show-session $sid -p Remote --value 2>/dev/null)
-    class=$(loginctl show-session $sid -p Class --value 2>/dev/null)
-    type=$(loginctl show-session $sid -p Type --value 2>/dev/null)
-    [[ $active != yes ]] && continue
-    [[ $remote != no ]] && continue
-    [[ $class != user ]] && continue
-    [[ $type != wayland && $type != x11 ]] && continue
-    session_id=$sid
-    session_type=$type
-    break
-done < <(loginctl show-user $(id -u) -p Sessions --value 2>/dev/null | tr ' ' '\n')
+loginctl list-sessions --no-legend | while read -r sid uid user seat tty state idle _; do
+    if [[ $seat == seat0 ]]; then 
+        session_id=$sid
+        session_type=$(loginctl show-session $sid -p Type --value)
+    fi 
+done
 
 leader_pid=$(loginctl show-session $session_id -p Leader --value 2>/dev/null)
 if [[ -r /proc/$leader_pid/environ ]]; then
