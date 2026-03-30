@@ -83,9 +83,26 @@ run_strangebrigade_benchmark() {
     fi
 }
 
-if [ "$EUID" -eq 0 ]; then
-    printf 'Error: do not run this script with sudo/root\n' >&2
-    exit 1
-fi
+run_kwin_wayland_test() {
+    if [[ -z $SSH_CONNECTION ]]; then 
+        echo "Please run this over ssh"; return 1
+    fi 
+    if ! command -v startplasma-wayland >/dev/null; then 
+        sudo apt install -y plasma-workspace
+    fi 
+    sudo systemctl stop gdm3 
+    sudo chvt 1
+    sudo systemd-run --collect -u kwin-test --uid=wzhu \
+        -p PAMName=login \
+        -p TTYPath=/dev/tty1 \
+        /bin/bash -lc '/usr/bin/dbus-run-session /usr/bin/startplasma-wayland 2>&1 | tee /home/wzhu/kwin-test.log' || return 1
+    echo
+    echo "=================================================="
+    echo "How to switch back to GNOME desktop session:"
+    echo "    sudo systemctl stop kwin-test.service"
+    echo "    sudo systemctl start gdm3"
+    echo "    sudo chvt 1"
+    echo "=================================================="
+}
 
 run_strangebrigade_benchmark

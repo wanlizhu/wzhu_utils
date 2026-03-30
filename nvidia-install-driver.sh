@@ -44,8 +44,8 @@ install_local_file() {
         sudo nvidia-smi -pm 1 
         sudo systemctl isolate graphical
     } || {
-        echo "Failed to install nvidia drivers"
         cat <<'EOF'
+=================================================
 # Fix 1: remove old nvidia kernels from initramfs 
 sudo systemctl isolate multi-user 
 sudo systemctl stop nvidia-persistenced 
@@ -54,6 +54,7 @@ find /lib/modules/$(uname -r) -type f | grep -E '/nvidia([^/]*|/.+)\.ko(\.zst)?$
 sudo depmod -a
 sudo update-initramfs -u
 sudo systemctl isolate graphical
+=================================================
 EOF
     }
 }
