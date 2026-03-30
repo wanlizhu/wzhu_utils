@@ -38,58 +38,37 @@ if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then
 fi
 
 # patch ~/.bashrc
-if [[ -z $(cat ~/.bashrc | grep "nvidia-profiling.sh") ]]; then
-    echo "if [[ -f ~/nvidia-profiling.sh ]]; then" >>~/.bashrc 
-    echo "    source ~/nvidia-profiling.sh" >>~/.bashrc 
+if [[ -z $(cat ~/.bashrc | grep ".bashrc_extended") ]]; then
+    echo "if [[ -f ~/.bashrc_extended ]]; then" >>~/.bashrc 
+    echo "    source ~/.bashrc_extended" >>~/.bashrc 
     echo "fi" >>~/.bashrc 
 fi 
-echo '#!/bin/bash' >~/nvidia-profiling.sh
-echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m)/bin:/mnt/linuxqa/wanliz/$(uname -m):$PATH"' >>~/nvidia-profiling.sh
-echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/offscreen:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/testcases:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/profiling:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/profiling/utils:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/wzhu_utils/profiling/gpu:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/nvidia-profiling.sh 
-echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/nvidia-profiling.sh 
-echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/nvidia-profiling.sh
-echo "export P4USER=wanliz" >>~/nvidia-profiling.sh
-echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/nvidia-profiling.sh
-echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/nvidia-profiling.sh
-echo "export P4IGNORE=$P4ROOT/.p4ignore" >>~/nvidia-profiling.sh
-echo "export __GL_SYNC_TO_VBLANK=0" >>~/nvidia-profiling.sh 
-echo "export vblank_mode=0" >>~/nvidia-profiling.sh 
-echo "alias ll='ls -alFh'" >>~/nvidia-profiling.sh 
-cat >> ~/nvidia-profiling.sh <<'EOF'
+echo '#!/bin/bash' >~/.bashrc_extended
+echo 'export PATH="/mnt/linuxqa/wanliz/$(uname -m)/bin:/mnt/linuxqa/wanliz/$(uname -m):$PATH"' >>~/.bashrc_extended
+echo 'export PATH="$HOME:$HOME/bin:$HOME/.local/bin:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/offscreen:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/testcases:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/profiling:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/profiling/utils:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/profiling/oncpu:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/profiling/offcpu:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/wzhu_utils/profiling/gpu:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/nsight_systems/bin:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/nvidia-nomad-internal-Linux.linux/host/linux-desktop-nomad-x64:$PATH"' >>~/.bashrc_extended 
+echo 'export PATH="$HOME/phoronix-test-suite:$PATH"' >>~/.bashrc_extended 
+echo "export P4PORT=p4proxy-sc.nvidia.com:2006" >>~/.bashrc_extended
+echo "export P4USER=wanliz" >>~/.bashrc_extended
+echo "export P4CLIENT=wanliz_sw_windows_wsl2" >>~/.bashrc_extended
+echo "export P4ROOT=$HOME/wzhu_p4sw" >>~/.bashrc_extended
+echo "export P4IGNORE=$P4ROOT/.p4ignore" >>~/.bashrc_extended
+echo "export __GL_SYNC_TO_VBLANK=0" >>~/.bashrc_extended 
+echo "export vblank_mode=0" >>~/.bashrc_extended 
+echo "alias ll='ls -alFh'" >>~/.bashrc_extended 
+cat >> ~/.bashrc_extended <<'EOF'
 if [[ -f $HOME/VulkanSDK/current/setup-env.sh ]]; then 
     source $HOME/VulkanSDK/current/setup-env.sh
 fi 
-reload() {
-    source ~/.bashrc
-}
-reload_graphics_env() {
-    export DISPLAY=:0
-    export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
-    export XDG_RUNTIME_DIR=/run/user/$(id -u)
-    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
-    echo "DISPLAY=$DISPLAY"
-    echo "XAUTHORITY=$XAUTHORITY"
-    echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-    echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
-
-    wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
-    if [[ ! -z $wayland_display ]]; then 
-        export WAYLAND_DISPLAY=$(basename $wayland_display)
-        echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
-    fi 
-    
-    exec /usr/bin/bash 
-}
 sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
@@ -204,34 +183,8 @@ pMSd0XTmRwXwaxrT3hFLAAAAE3dhbmxpekBFbnpvLU1hY0Jvb2sBAg==
 -----END OPENSSH PRIVATE KEY-----' > ~/.ssh/id_ed25519
     printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHx7hz8+bJjBioa3Rlvmaib8pMSd0XTmRwXwaxrT3hFL' > ~/.ssh/id_ed25519.pub
 }
-screenshot() {
-    output=screenshot$([[ -z $1 ]] || echo "_$1").png
-    if [[ ! -z $2 ]]; then   
-        mkdir -p $2
-        find $2 -mindepth 1 -delete 
-        output=$2/screenshot$([[ -z $1 ]] || echo "_$1").png
-    fi 
-    if [[ $(login_session_type_seat0) == wayland ]]; then 
-        if [[ $XDG_CURRENT_DESKTOP == *GNOME* ]]; then
-            [[ -z $(which gnome-screenshot) ]] && sudo apt install -y gnome-screenshot &>/dev/null 
-            timeout 5 gnome-screenshot -f $output || {
-                echo "Press Alt+F2, enter lg, set unsafe-mode flag to use gnome-screenshot"
-            }
-        else 
-            [[ -z $(which grim) ]] && sudo apt install -y grim &>/dev/null 
-            timeout 5 grim $output 
-        fi  
-    else
-        [[ -z $(which magick) && -z $(which import) ]] && sudo apt install -y imagemagick
-        if command -v magick > /dev/null; then
-            timeout 5 magick import -window root $output 
-        elif command -v import > /dev/null; then
-            timeout 5 import -window root $output 
-        fi
-    fi 
-}
 EOF
-source ~/nvidia-profiling.sh
+source ~/.bashrc_extended
 
 if [[ -d $P4ROOT && ! -f $P4ROOT/.p4ignore ]]; then 
     echo "_out/" >  $P4ROOT/.p4ignore
