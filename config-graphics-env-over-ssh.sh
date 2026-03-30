@@ -7,23 +7,18 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime_dir/bus
 
 session_id=
 leader_pid=
-session_type=
 unset DISPLAY
 unset XAUTHORITY
 unset WAYLAND_DISPLAY
 
-loginctl list-sessions --no-legend | while read -r sid uid user seat tty state idle _; do
-    if [[ $seat == seat0 ]]; then 
-        session_id=$sid
-        session_type=$(loginctl show-session $sid -p Type --value)
-    fi 
-done
-
+session_id=$(loginctl list-sessions --no-legend | grep "seat0" | awk '{print $1}')
+session_type=$(loginctl show-session $session_id -p Type --value)
 leader_pid=$(loginctl show-session $session_id -p Leader --value 2>/dev/null)
 if [[ -r /proc/$leader_pid/environ ]]; then
-    DISPLAY=$(tr '\0' '\n' </proc/$leader_pid/environ 2>/dev/null | awk -F= '/^DISPLAY=/{print $2; exit}')
-    XAUTHORITY=$(tr '\0' '\n' </proc/$leader_pid/environ 2>/dev/null | awk -F= '/^XAUTHORITY=/{print $2; exit}')
-    WAYLAND_DISPLAY=$(tr '\0' '\n' </proc/$leader_pid/environ 2>/dev/null | awk -F= '/^WAYLAND_DISPLAY=/{print $2; exit}')
+    sudo cat /proc/$leader_pid/environ >/tmp/environ
+    DISPLAY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^DISPLAY=/{print $2; exit}')
+    XAUTHORITY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^XAUTHORITY=/{print $2; exit}')
+    WAYLAND_DISPLAY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^WAYLAND_DISPLAY=/{print $2; exit}')
 fi
 
 [[ ! -z $DISPLAY ]] && export DISPLAY  
