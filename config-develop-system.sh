@@ -18,11 +18,6 @@ if [[ ! -f /etc/sudoers.d/99-$(id -un)-nopasswd ]]; then
     sudo visudo -cf /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
 fi
 
-# disable firewall 
-if [[ -z $(sudo ufw status | grep inactive) ]]; then
-    sudo ufw disable 
-fi 
-
 # write out ssh config 
 if [[ ! -e ~/.ssh/config ]]; then
     mkdir -p ~/.ssh
@@ -52,6 +47,11 @@ sudo sed -i \
 if ! cmp -s /tmp/grub /etc/default/grub; then
     sudo update-grub
 fi
+
+# disable firewall 
+if [[ -z $(sudo ufw status | grep inactive) ]]; then
+    sudo ufw disable 
+fi 
 
 # in case appamror is not disabled
 if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
