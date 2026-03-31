@@ -82,6 +82,15 @@ cat >> ~/.bashrc_extended <<'EOF'
 if [[ -f $HOME/VulkanSDK/current/setup-env.sh ]]; then 
     source $HOME/VulkanSDK/current/setup-env.sh
 fi 
+pp() { 
+    pushd ~/wzhu_utils
+    git add .
+    git commit -m s && { 
+        git pull
+        git push
+    } || git pull
+    popd
+}
 sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
@@ -93,15 +102,6 @@ sync_linuxqa_wanliz() {
         echo "/mnt/linuxqa/wanliz/$(uname -m)/lib -> $HOME/"
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
     fi 
-}
-pp() { 
-    pushd ~/wzhu_utils
-    git add .
-    git commit -m s && { 
-        git pull
-        git push
-    } || git pull
-    popd
 }
 print_nvparams() {
     find /etc/modprobe.d -type f -name '*.conf' -print0 |
