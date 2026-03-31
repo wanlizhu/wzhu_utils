@@ -27,6 +27,25 @@ shutdown_graphical_env() {
     else
         echo "Found 0 active nvidia kernel module"
     fi 
+
+    # Remove existing nvidia modules from initramfs 
+    for initrd in /boot/initrd.img-*; do
+        kernel_version=${initrd##*/initrd.img-}
+        [[ ! -e $initrd ]] && continue
+        if ! lsinitramfs $initrd 2>/dev/null | grep -Eq '(^|/)nvidia[^/]*\.ko([.-].*)?$'; then
+            echo "No NVIDIA modules found in initramfs for kernel $kernel_version"
+            continue
+        fi
+
+        echo "Removing NVIDIA modules from /lib/modules/$kernel_version ..."
+        find /lib/modules/$kernel_version -type f | grep -E '/nvidia[^/]*\.ko([.-].*)?$' | while read -r nv_ko_file; do
+            echo rm -f $nv_ko_file 
+            rm -f $nv_ko_file 
+        done
+
+        depmod $kernel_version
+        update-initramfs -u -k $kernel_version
+    done
 }
 
 # Launch a text-based ui for interactive installation 
