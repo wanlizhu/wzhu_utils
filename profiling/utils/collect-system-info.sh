@@ -430,9 +430,6 @@ PY
     done
 }
 
-print_display_info
-exit 
-
 hostname >$OUTPUT_FILE
 printf '\tOS: %s\n' "$(lsb_release -a | grep Description | awk '{print $2 " " $3}')" >>$OUTPUT_FILE
 printf '\t\tKernel: %s\n' "$(uname -r)" >>$OUTPUT_FILE
