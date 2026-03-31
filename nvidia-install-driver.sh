@@ -50,7 +50,9 @@ install_local_file() {
 sudo systemctl isolate multi-user 
 sudo systemctl stop nvidia-persistenced 
 sudo modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia  
-find /lib/modules/$(uname -r) -type f | grep -E '/nvidia([^/]*|/.+)\.ko(\.zst)?$' | sudo xargs -r rm -f
+find /lib/modules/$(uname -r) -type f | 
+    grep -E '/nvidia([^/]*|/.+)\.ko(\.zst)?$' | 
+    sudo xargs -r rm -f
 sudo depmod -a
 sudo update-initramfs -u
 sudo systemctl isolate graphical
