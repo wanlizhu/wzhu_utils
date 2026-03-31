@@ -253,111 +253,176 @@ nvidia_driver_build_type() {
 
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
-    local wayland_display=$(ls /run/user/$(id -u)/wayland-[0-9] 2>/dev/null)
-    local xrandr_out connector line
-    local found=0
+    local xr_verbose xr_monitors
 
-    if [[ $XDG_SESSION_TYPE == tty ]]; then 
-        export DISPLAY=:0
-        export XAUTHORITY=$(tr '\0' '\n' </proc/$(pgrep -n gnome-shell)/environ | grep '^XAUTHORITY=' | awk -F'=' '{print $2}')
-        export XDG_RUNTIME_DIR=/run/user/$(id -u)
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
-        echo "DISPLAY=$DISPLAY"
-        echo "XAUTHORITY=$XAUTHORITY"
-        echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
-        if [[ ! -z $wayland_display ]]; then 
-            export WAYLAND_DISPLAY=$(basename $wayland_display)
-            echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
-        fi 
-    fi 
+    if [[ -n $SSH_CONNECTION ]]; then
+        source config-graphics-env-over-ssh.sh noshell
+    fi
 
     xrandr --current >/dev/null 2>&1 || {
         echo "[Failed to connect to X11]"
-        return 
+        return
     }
 
+    xr_verbose=$(xrandr --verbose 2>/dev/null)
+    xr_monitors=$(xrandr --listactivemonitors 2>/dev/null)
+
     for path in /sys/class/drm/card*-*; do
-        [[ -f $path/status ]] || continue
-        [[ $(<"$path/status") == connected ]] || continue
+        local status connector output block
+        local monitor_name connection_type link_status
+        local physical_size physical_resolution logical_resolution
+        local refresh_rate color_depth colorspace vrr_capable
 
-        found=1
+        [[ -e $path/status ]] || continue
+
+        status=$(<"$path/status")
+        [[ $status == connected ]] || continue
+
         connector=${path##*/}
-        connector=${connector#card*-}
-        local display_name="Unknown Display"
-        local current_resolution="N/A"
-        local refresh_rate="N/A"
-        local color_depth_bpc="N/A"
-        local colorspace="N/A"
-        local connection_type=${connector%-*}
-        local vrr_capable="N/A"
-        local link_status="N/A"
-        local physical_size="N/A"
+        output=${connector#*-}
 
-        if [[ -f $path/edid ]]; then
-            local edid_out
-            edid_out=$(edid-decode "$path/edid" 2>/dev/null)
+        block=$(
+            awk -v output="$output" '
+                $1 == output && $2 == "connected" {
+                    in_block = 1
+                    print
+                    next
+                }
+                in_block && /^[^[:space:]]/ {
+                    exit
+                }
+                in_block {
+                    print
+                }
+            ' <<< "$xr_verbose"
+        )
 
-            if [[ -n $edid_out ]]; then
-                while IFS= read -r line; do
-                    if [[ $line =~ Display[[:space:]]+Product[[:space:]]+Name:[[:space:]]*(.+) ]]; then
-                        [[ ${BASH_REMATCH[1]} != invalid && -n ${BASH_REMATCH[1]} ]] && display_name=${BASH_REMATCH[1]}
-                    elif [[ $line =~ Maximum[[:space:]]+image[[:space:]]+size:[[:space:]]*(.+) ]]; then
-                        physical_size=${BASH_REMATCH[1]}
-                    elif [[ $line =~ Display[[:space:]]+size:[[:space:]]*([0-9]+)[[:space:]]*x[[:space:]]*([0-9]+)[[:space:]]*mm ]]; then
-                        [[ $physical_size == N/A ]] && physical_size="${BASH_REMATCH[1]} x ${BASH_REMATCH[2]} mm"
-                    elif [[ $line =~ Bits[[:space:]]+per[[:space:]]+primary[[:space:]]+color[[:space:]]+channel:[[:space:]]*(.+) ]]; then
-                        color_depth_bpc=${BASH_REMATCH[1]}
-                    fi
-                done <<< "$edid_out"
-            fi
-        fi
+        [[ -n $block ]] || continue
 
-        local in_block=0
-        while IFS= read -r line; do
-            if [[ $line != [[:space:]]* && $line == "$connector connected"* ]]; then
-                in_block=1
-                continue
-            fi
+        monitor_name=$(
+            python3 - "$path/edid" <<'PY'
+import sys
 
-            if (( in_block )) && [[ $line != [[:space:]]* && $line == *" connected"* ]]; then
+path = sys.argv[1]
+try:
+    data = open(path, 'rb').read()
+except Exception:
+    sys.exit(0)
+
+for i in range(54, min(len(data), 126), 18):
+    if data[i:i+3] == b'\x00\x00\x00' and i + 18 <= len(data):
+        if data[i + 3] == 0xfc:
+            s = data[i + 5:i + 18].rstrip(b' \x00\n').decode('latin1', 'ignore').strip()
+            if s:
+                print(s)
                 break
-            fi
+PY
+        )
+        [[ -n $monitor_name ]] || monitor_name=$output
 
-            (( in_block )) || continue
+        connection_type=${output%%-*}
 
-            if [[ $line =~ ^[[:space:]]+([0-9]+x[0-9]+)[[:space:]]+([0-9.]+)([*+[:space:]]*) ]] && [[ ${BASH_REMATCH[3]} == *"*"* ]]; then
-                current_resolution=${BASH_REMATCH[1]}
-                refresh_rate=${BASH_REMATCH[2]}
-            elif [[ $line =~ ^[[:space:]]*max[[:space:]]+bpc:[[:space:]]*(.+) ]]; then
-                color_depth_bpc=${BASH_REMATCH[1]}
-            elif [[ $line =~ ^[[:space:]]*Colorspace:[[:space:]]*(.+) ]]; then
-                colorspace=${BASH_REMATCH[1]}
-            elif [[ $line =~ ^[[:space:]]*vrr_capable:[[:space:]]*(.+) ]]; then
-                vrr_capable=${BASH_REMATCH[1]}
-                [[ $vrr_capable == 1 ]] && vrr_capable=yes
-                [[ $vrr_capable == 0 ]] && vrr_capable=no
-            elif [[ $line =~ ^[[:space:]]*link-status:[[:space:]]*(.+) ]]; then
-                link_status=${BASH_REMATCH[1]}
-            fi
-        done <<< "$xrandr_out"
+        link_status=$(
+            awk -F': ' '
+                /^[[:space:]]+link-status:/ {
+                    gsub(/^[[:space:]]+/, "", $2)
+                    print $2
+                    exit
+                }
+            ' <<< "$block"
+        )
+        [[ -n $link_status ]] || link_status=N/A
 
-        if [[ ! -z $wayland_display ]]; then 
-            echo "$connector $display_name (Xwayland)"
-        else 
-            echo "$connector $display_name (X11)"
-        fi 
-        echo -e "\tcurrent_resolution: $current_resolution"
-        echo -e "\trefresh_rate: $refresh_rate"
-        echo -e "\tcolor_depth_bpc: $color_depth_bpc"
-        echo -e "\tcolorspace: $colorspace"
-        echo -e "\tconnection_type: $connection_type"
-        echo -e "\tvrr_capable: $vrr_capable"
-        echo -e "\tlink_status: $link_status"
-        echo -e "\tphysical_size: $physical_size"
+        physical_size=$(
+            sed -n '1s/.* \([0-9]\+\)mm x \([0-9]\+\)mm.*/\1mm x \2mm/p' <<< "$block"
+        )
+        [[ -n $physical_size ]] || physical_size=N/A
+
+        physical_resolution=$(
+            awk '
+                /^[[:space:]]+[0-9]+x[0-9]+/ && /\*/ {
+                    print $1
+                    exit
+                }
+            ' <<< "$block"
+        )
+        [[ -n $physical_resolution ]] || physical_resolution=N/A
+
+        logical_resolution=$(
+            awk -v output="$output" '
+                $NF == output {
+                    split($3, a, /[\/x+]/)
+                    if (a[1] != "" && a[3] != "")
+                        print a[1] "x" a[3]
+                    exit
+                }
+            ' <<< "$xr_monitors"
+        )
+        [[ -n $logical_resolution ]] || logical_resolution=$physical_resolution
+
+        refresh_rate=$(
+            awk '
+                /^[[:space:]]+[0-9]+x[0-9]+/ && /\*/ {
+                    for (i = 2; i <= NF; i++) {
+                        if ($i ~ /\*/) {
+                            gsub(/[*+]/, "", $i)
+                            print $i " Hz"
+                            exit
+                        }
+                    }
+                }
+            ' <<< "$block"
+        )
+        [[ -n $refresh_rate ]] || refresh_rate=N/A
+
+        color_depth=$(
+            awk -F': ' '
+                /^[[:space:]]+max bpc:/ {
+                    gsub(/^[[:space:]]+/, "", $2)
+                    print $2 " bits"
+                    exit
+                }
+            ' <<< "$block"
+        )
+        [[ -n $color_depth ]] || color_depth=N/A
+
+        colorspace=$(
+            awk -F': ' '
+                /^[[:space:]]+Colorspace:/ {
+                    gsub(/^[[:space:]]+/, "", $2)
+                    print $2
+                    exit
+                }
+            ' <<< "$block"
+        )
+        [[ -n $colorspace ]] || colorspace=N/A
+
+        vrr_capable=$(
+            awk -F': ' '
+                /^[[:space:]]+vrr_capable:/ {
+                    gsub(/^[[:space:]]+/, "", $2)
+                    if ($2 == 1)
+                        print "Yes"
+                    else
+                        print "No"
+                    exit
+                }
+            ' <<< "$block"
+        )
+        [[ -n $vrr_capable ]] || vrr_capable=N/A
+
+        echo "Monitor name: $monitor_name"
+        echo "Connection type: $connection_type"
+        echo "Link status: $link_status"
+        echo "Physical size: $physical_size"
+        echo "Physical resolution: $physical_resolution"
+        echo "Logical resolution: $logical_resolution"
+        echo "Refresh rate: $refresh_rate"
+        echo "Color depth: $color_depth"
+        echo "Colorspace: $colorspace"
+        echo "VRR capable: $vrr_capable"
+        echo
     done
-
-    (( found )) || echo "[No display connected]"
 }
 
 hostname >$OUTPUT_FILE
