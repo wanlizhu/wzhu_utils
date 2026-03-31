@@ -1,73 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail 
 
-INIT_APT_PKG=
-
-while (( $# )); do
-    case $1 in
-        apt) INIT_APT_PKG=true ;;
-        *) break ;;
-    esac
-    shift
- done
-
-# enable passwordless sudo 
-if [[ ! -f /etc/sudoers.d/99-$(id -un)-nopasswd ]]; then 
-    echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
-    sudo chmod 0440 /etc/sudoers.d/99-$(id -un)-nopasswd
-    sudo visudo -cf /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
-fi
-
-# write out ssh config 
-if [[ ! -e ~/.ssh/config ]]; then
-    mkdir -p ~/.ssh
-    chmod 700 ~/.ssh
-    printf '%s\n' \
-        'Host *' \
-        '    UserKnownHostsFile /dev/null' \
-        '    GlobalKnownHostsFile /dev/null' \
-        '    StrictHostKeyChecking no' \
-        > ~/.ssh/config
-    chmod 600 ~/.ssh/config
-fi
-
-# update grub cmdline 
-sudo cp /etc/default/grub /tmp/grub
-sudo sed -i \
-    -e "s/^\(GRUB_CMDLINE_LINUX_DEFAULT=\)'\(.*\)'$/\1\"\2\"/" \
-    -e "s/^\(GRUB_CMDLINE_LINUX=\)'\(.*\)'$/\1\"\2\"/" \
-    /etc/default/grub
-sudo sed -i \
-    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset / /g' \
-    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/"nomodeset /"/' \
-    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset"/"/' \
-    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ { /nvidia_drm\.modeset=1/! s/"$/ nvidia_drm.modeset=1"/; }' \
-    -e '/^GRUB_CMDLINE_LINUX=/ { /apparmor=0/! s/"$/ apparmor=0"/; }' \
-    /etc/default/grub
-if ! cmp -s /tmp/grub /etc/default/grub; then
-    sudo update-grub
-fi
-
-# disable firewall 
-if [[ -z $(sudo ufw status | grep inactive) ]]; then
-    sudo ufw disable 
-fi 
-
-# in case appamror is not disabled
-if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
-    echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
-    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee -a /etc/sysctl.d/99-nvmake.conf >/dev/null # it's expected to append to the file
-    sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
-    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-fi
-
-# vscode file watcher
-if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then 
-    echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-vscode.conf >/dev/null 
-    sudo sysctl -w fs.inotify.max_user_watches=524288 >/dev/null 
-fi
-
-# patch ~/.bashrc
+# Extend ~/.bashrc
 if [[ -z $(cat ~/.bashrc | grep ".bashrc_extended") ]]; then
     echo "if [[ -f ~/.bashrc_extended ]]; then" >>~/.bashrc 
     echo "    source ~/.bashrc_extended" >>~/.bashrc 
@@ -222,6 +156,63 @@ pMSd0XTmRwXwaxrT3hFLAAAAE3dhbmxpekBFbnpvLU1hY0Jvb2sBAg==
 EOF
 source ~/.bashrc_extended
 
+# Enable passwordless sudo 
+if [[ ! -f /etc/sudoers.d/99-$(id -un)-nopasswd ]]; then 
+    echo "$(id -un) ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
+    sudo chmod 0440 /etc/sudoers.d/99-$(id -un)-nopasswd
+    sudo visudo -cf /etc/sudoers.d/99-$(id -un)-nopasswd >/dev/null
+fi
+
+# Write out ssh config 
+if [[ ! -e ~/.ssh/config ]]; then
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    printf '%s\n' \
+        'Host *' \
+        '    UserKnownHostsFile /dev/null' \
+        '    GlobalKnownHostsFile /dev/null' \
+        '    StrictHostKeyChecking no' \
+        > ~/.ssh/config
+    chmod 600 ~/.ssh/config
+fi
+
+# Update grub cmdline 
+sudo cp /etc/default/grub /tmp/grub
+sudo sed -i \
+    -e "s/^\(GRUB_CMDLINE_LINUX_DEFAULT=\)'\(.*\)'$/\1\"\2\"/" \
+    -e "s/^\(GRUB_CMDLINE_LINUX=\)'\(.*\)'$/\1\"\2\"/" \
+    /etc/default/grub
+sudo sed -i \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset / /g' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/"nomodeset /"/' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset"/"/' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ { /nvidia_drm\.modeset=1/! s/"$/ nvidia_drm.modeset=1"/; }' \
+    -e '/^GRUB_CMDLINE_LINUX=/ { /apparmor=0/! s/"$/ apparmor=0"/; }' \
+    /etc/default/grub
+if ! cmp -s /tmp/grub /etc/default/grub; then
+    sudo update-grub
+fi
+
+# Disable firewall 
+if [[ -z $(sudo ufw status | grep inactive) ]]; then
+    sudo ufw disable 
+fi 
+
+# In case appamror is not disabled
+if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
+    echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
+    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee -a /etc/sysctl.d/99-nvmake.conf >/dev/null # it's expected to append to the file
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+fi
+
+# For vscode file watcher
+if [[ ! -f /etc/sysctl.d/99-vscode.conf ]]; then 
+    echo "fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-vscode.conf >/dev/null 
+    sudo sysctl -w fs.inotify.max_user_watches=524288 >/dev/null 
+fi
+
+# For p4ignore file
 if [[ -d $P4ROOT && ! -f $P4ROOT/.p4ignore ]]; then 
     echo "_out/" >  $P4ROOT/.p4ignore
     echo ".git/" >> $P4ROOT/.p4ignore
@@ -234,7 +225,7 @@ if [[ -d $P4ROOT && ! -f $P4ROOT/.p4ignore ]]; then
     echo "/.clangd" >> $P4ROOT/.p4ignore
 fi 
 
-# set kernel params
+# Set up kernel params for profiling 
 if [[ ! -f /etc/modprobe.d/nvidia-profiling.conf ]]; then
     echo 'options nvidia NVreg_RegistryDwords="RmProfilerFeature=0x1" NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf >/dev/null
     echo 'options nvidia-drm modeset=1' | sudo tee -a /etc/modprobe.d/nvidia-profiling.conf >/dev/null
@@ -246,71 +237,65 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
     sudo sysctl -p /etc/sysctl.d/99-profiling.conf
 fi 
 
-# install required packages
-if [[ $INIT_APT_PKG == true && ! -z $(command -v find_or_install) ]]; then 
+# Install required packages
+if ! dpkg --print-foreign-architectures | grep -qxF i386; then
     sudo dpkg --add-architecture i386
-    sudo tee /etc/apt/apt.conf.d/99-phased-updates >/dev/null <<'EOF'
-APT::Get::Always-Include-Phased-Updates "true";
-EOF
-    if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
-        echo "Types: deb
-URIs: http://ddebs.ubuntu.com/
-Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed 
-Components: main restricted universe multiverse
-Signed-by: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg" | sudo tee /etc/apt/sources.list.d/ddebs.sources 
-        find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
-    fi 
-    if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
-        sudo apt update  
-        sudo apt upgrade -y 
-        sudo apt autoremove -y  
-    fi  
-    find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
-        build-essential cmake git ninja-build pkg-config meson clang \
-        vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
-        btop htop nvtop sysprof pciutils nfs-common openssh-server \
-        libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
-        libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-        python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
-        php-cli php-xml timeshift libx11-dev libgl-dev
+fi 
+if [[ ! -e /etc/apt/apt.conf.d/99-phased-updates ]]; then 
+    echo 'APT::Get::Always-Include-Phased-Updates "true";' | sudo tee /etc/apt/apt.conf.d/99-phased-updates 
+fi 
+if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
+    (   echo "Types: deb" 
+        echo "URIs: http://ddebs.ubuntu.com/"
+        echo "Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-proposed"
+        echo "Components: main restricted universe multiverse"
+        echo "Signed-By: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg"
+    ) | sudo tee /etc/apt/sources.list.d/ddebs.sources
+    find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+fi 
+if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
+    sudo apt update  
+    sudo apt upgrade -y 
+    sudo apt autoremove -y  
+fi  
+find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
+    build-essential cmake git ninja-build pkg-config meson clang \
+    vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
+    btop htop nvtop sysprof pciutils nfs-common openssh-server \
+    libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
+    libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
+    python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
+    php-cli php-xml timeshift libx11-dev libgl-dev steam elfutils \
+    linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) \
+    linux-tools-generic linux-cloud-tools-generic 
 
-    [[ -z $(which eu-stack) ]] && sudo apt install -y elfutils >/dev/null 2>&1
-    [[ -z $(which perf) ]] && sudo apt install -y linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) linux-tools-generic linux-cloud-tools-generic
-    [[ -z $(which flamegraph.pl) ]] && git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg && sudo cp -f /tmp/fg/*.pl /usr/local/bin/
+# Install debug symbols requirements found in $HOME 
+find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
+while IFS= read -r -d '' file; do
+    while IFS= read -r pkg; do
+        find_or_install $pkg 
+    done < "$file"
+done
 
-    find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
-    while IFS= read -r -d '' file; do
-        while IFS= read -r pkg; do
-            find_or_install $pkg 
-        done < "$file"
-    done
-
-    if [[ ! -z $(apt list --installed 'libreoffice*' 2>/dev/null | grep libreoffice) ]]; then 
-        read -p "Press [Enter] to uninstall libre office: "
-        sudo apt purge -y libreoffice*
-        sudo apt autoremove -y 
-    fi 
-
-    # install amd gpu drivers 
-    if [[ $(lspci -nnk | grep -EA3 'VGA|3D|Display' | grep amdgpu) && ! -z $(which find_or_install) ]]; then 
-        find_or_install libdrm2-dbgsym libdrm-amdgpu1-dbgsym mesa-vulkan-drivers-dbgsym libgl1-mesa-dri-dbgsym libgbm1-dbgsym linux-image-$(uname -r)-dbgsym
-        dpkg -l | awk '$1=="ii"{print $2}' | sed -E 's/:(amd64|i386)$//' | grep -Ei '(amdgpu|amdvlk|radeon|radv|radeonsi|mesa|libdrm|vulkan|rocm|hip|hsa|opencl|xserver-xorg-video-amdgpu|xserver-xorg-video-radeon)' | sed -E 's/-dbgsym$//' |  find_or_install
-    fi 
+# Install flame graph tools
+if [[ -z $(which flamegraph.pl) ]]; then 
+    git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg 
+    sudo cp -f /tmp/fg/*.pl /usr/local/bin/
 fi 
 
-# config git env 
+# Config git env 
 git config --global user.email >/dev/null 2>&1 || git config --global user.email zhu.wanli@icloud.com
 git config --global user.name >/dev/null 2>&1 || git config --global user.name "Wanli Zhu"
 git config --global pull.rebase >/dev/null 2>&1 || git config --global pull.rebase false
 
-# enable ssh server
+# Enable ssh server
 if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/null; then 
     find_or_install openssh-server
     sudo systemctl enable ssh 
     sudo systemctl start ssh
 fi 
 
-# mount data dirs
+# Mount data dirs
 if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
     echo "WSL doesn't support NFS mounting"
 else 
