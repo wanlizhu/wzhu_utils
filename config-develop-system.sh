@@ -225,6 +225,7 @@ fi
 
 # install required packages
 if [[ $INIT_APT_PKG == true && ! -z $(command -v find_or_install) ]]; then 
+    sudo dpkg --add-architecture i386
     sudo tee /etc/apt/apt.conf.d/99-phased-updates >/dev/null <<'EOF'
 APT::Get::Always-Include-Phased-Updates "true";
 EOF
