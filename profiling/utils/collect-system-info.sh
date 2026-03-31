@@ -255,7 +255,7 @@ nvidia_driver_build_type() {
 print_display_info() {
     local xr_verbose xr_monitors
 
-    if [[ -n $SSH_CONNECTION ]]; then
+    if [[ ! -z $SSH_CONNECTION ]]; then
         source config-graphics-env-over-ssh.sh noshell
     fi
 
