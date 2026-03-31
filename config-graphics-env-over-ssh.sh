@@ -11,15 +11,22 @@ unset DISPLAY
 unset XAUTHORITY
 unset WAYLAND_DISPLAY
 
+read_env_from_pid() {
+    [[ -r /proc/$1/environ ]] || return 1
+    DISPLAY=$(sudo tr '\0' '\n' </proc/$1/environ | awk -F= '/^DISPLAY=/{print $2; exit}')
+    XAUTHORITY=$(sudo tr '\0' '\n' </proc/$1/environ | awk -F= '/^XAUTHORITY=/{print $2; exit}')
+    WAYLAND_DISPLAY=$(sudo tr '\0' '\n' </proc/$1/environ | awk -F= '/^WAYLAND_DISPLAY=/{print $2; exit}')
+    [[ -n $DISPLAY || -n $XAUTHORITY || -n $WAYLAND_DISPLAY ]]
+}
+
 session_id=$(loginctl list-sessions --no-legend | grep "seat0" | awk '{print $1}')
 session_type=$(loginctl show-session $session_id -p Type --value)
 leader_pid=$(loginctl show-session $session_id -p Leader --value 2>/dev/null)
-if [[ -r /proc/$leader_pid/environ ]]; then
-    sudo cat /proc/$leader_pid/environ >/tmp/environ
-    DISPLAY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^DISPLAY=/{print $2; exit}')
-    XAUTHORITY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^XAUTHORITY=/{print $2; exit}')
-    WAYLAND_DISPLAY=$(tr '\0' '\n' </tmp/environ 2>/dev/null | awk -F= '/^WAYLAND_DISPLAY=/{print $2; exit}')
-fi
+
+read_env_from_pid $leader_pid ||
+read_env_from_pid "$(pgrep -u $UID -n kwin_wayland)" ||
+read_env_from_pid "$(pgrep -u $UID -n startplasma-wayland)" ||
+read_env_from_pid "$(pgrep -u $UID -n plasmashell)"
 
 [[ ! -z $DISPLAY ]] && export DISPLAY  
 [[ ! -z $XAUTHORITY ]] && export XAUTHORITY  
