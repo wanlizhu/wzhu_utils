@@ -96,12 +96,10 @@ run_kwin_wayland_test() {
         -p PAMName=login \
         -p TTYPath=/dev/tty1 \
         dbus-run-session startplasma-wayland || return 1
-    echo
     echo "=================================================="
     echo "How to switch back to GNOME desktop session:"
-    echo "    sudo systemctl stop kwin-test.service"
+    echo "    pkill -TERM -f startplasma-wayland"
     echo "    sudo systemctl start gdm3"
-    echo "    sudo chvt 1"
     echo "=================================================="
 }
 
