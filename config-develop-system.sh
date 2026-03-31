@@ -224,7 +224,7 @@ if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
 fi 
 
 # install required packages
-if [[ $INIT_APT_PKG == true && ! -z $(which find_or_install) ]]; then 
+if [[ $INIT_APT_PKG == true && ! -z $(command -v find_or_install) ]]; then 
     sudo tee /etc/apt/apt.conf.d/99-phased-updates >/dev/null <<'EOF'
 APT::Get::Always-Include-Phased-Updates "true";
 EOF
