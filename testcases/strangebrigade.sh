@@ -98,7 +98,9 @@ run_kwin_wayland_test() {
         dbus-run-session startplasma-wayland 
     echo "=================================================="
     echo "How to switch back to GNOME desktop session:"
-    echo "    pkill -TERM -f startplasma-wayland && sudo systemctl start gdm3"
+    echo "    pkill -TERM -f startplasma-wayland; \\"
+    echo "    sudo systemctl start gdm3; \\"
+    echo "    reset_gnome_theme"
     echo "=================================================="
 }
 

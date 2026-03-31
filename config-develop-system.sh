@@ -91,6 +91,12 @@ pp() {
     } || git pull
     popd
 }
+reset_gnome_theme() {
+    gsettings reset-recursively org.gnome.desktop.interface
+    gsettings reset-recursively org.gnome.desktop.sound 
+    gsettings reset-recursively org.gnome.desktop.wm.preferences 
+    gsettings reset-recursively org.gnome.shell.extensions.user-theme
+}
 sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
