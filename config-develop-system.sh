@@ -23,10 +23,23 @@ if [[ -z $(sudo ufw status | grep inactive) ]]; then
     sudo ufw disable 
 fi 
 
-# disable apparmor
+# update grub cmdline 
+sudo cp /etc/default/grub /tmp/grub
+sudo sed -i \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset / /g' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/"nomodeset /"/' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset"/"/' \
+    -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ { /nvidia_drm\.modeset=1/! s/"$/ nvidia_drm.modeset=1"/; }' \
+    -e '/^GRUB_CMDLINE_LINUX=/ { /apparmor=0/! s/"$/ apparmor=0"/; }' \
+    /etc/default/grub
+if ! cmp -s /tmp/grub /etc/default/grub; then
+    sudo update-grub
+fi
+
+# in case appamror is not disabled
 if [[ ! -f /etc/sysctl.d/99-nvmake.conf ]]; then 
     echo "kernel.apparmor_restrict_unprivileged_unconfined = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >/dev/null 
-    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee /etc/sysctl.d/99-nvmake.conf >>/dev/null # it's expected to append to the file
+    echo "kernel.apparmor_restrict_unprivileged_userns = 0" | sudo tee -a /etc/sysctl.d/99-nvmake.conf >/dev/null # it's expected to append to the file
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 fi
