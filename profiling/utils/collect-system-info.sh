@@ -256,11 +256,10 @@ print_display_info() {
     local xr_verbose xr_monitors
 
     if [[ ! -z $SSH_CONNECTION ]]; then
-        
+        source config-graphics-env-over-ssh.sh noshell 
     fi
 
     xrandr --current >/dev/null 2>&1 || {
-        source config-graphics-env-over-ssh.sh 
         echo "[Failed to connect to X11]"
         return
     }
