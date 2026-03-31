@@ -253,13 +253,13 @@ nvidia_driver_build_type() {
 
 # For display related info which requires valid env var DISPLAY 
 print_display_info() {
-    local xr_verbose xr_monitors
+    local xr xr_verbose xr_monitors
 
-    if [[ ! -z $SSH_CONNECTION ]]; then
-        source config-graphics-env-over-ssh.sh noshell 
+    if [[ -n $SSH_CONNECTION ]]; then
+        source config-graphics-env-over-ssh.sh noshell
     fi
 
-    xrandr --current >/dev/null 2>&1 || {
+    xr=$(xrandr 2>/dev/null) || {
         echo "[Failed to connect to X11]"
         return
     }
@@ -268,10 +268,10 @@ print_display_info() {
     xr_monitors=$(xrandr --listactivemonitors 2>/dev/null)
 
     for path in /sys/class/drm/card*-*; do
-        local status connector output block
-        local monitor_name connection_type link_status
-        local physical_size physical_resolution logical_resolution
-        local refresh_rate color_depth colorspace vrr_capable
+        local status connector output connection_type
+        local block vblock
+        local monitor_name physical_size physical_resolution logical_resolution
+        local refresh_rate link_status color_depth colorspace vrr_capable
 
         [[ -e $path/status ]] || continue
 
@@ -280,8 +280,26 @@ print_display_info() {
 
         connector=${path##*/}
         output=${connector#*-}
+        connection_type=${output%%-*}
 
         block=$(
+            awk -v output="$output" '
+                $1 == output && $2 == "connected" {
+                    in_block = 1
+                    print
+                    next
+                }
+                in_block && /^[^[:space:]]/ {
+                    exit
+                }
+                in_block {
+                    print
+                }
+            ' <<< "$xr"
+        )
+        [[ -n $block ]] || continue
+
+        vblock=$(
             awk -v output="$output" '
                 $1 == output && $2 == "connected" {
                     in_block = 1
@@ -297,8 +315,6 @@ print_display_info() {
             ' <<< "$xr_verbose"
         )
 
-        [[ -n $block ]] || continue
-
         monitor_name=$(
             python3 - "$path/edid" <<'PY'
 import sys
@@ -310,28 +326,14 @@ except Exception:
     sys.exit(0)
 
 for i in range(54, min(len(data), 126), 18):
-    if data[i:i+3] == b'\x00\x00\x00' and i + 18 <= len(data):
-        if data[i + 3] == 0xfc:
-            s = data[i + 5:i + 18].rstrip(b' \x00\n').decode('latin1', 'ignore').strip()
-            if s:
-                print(s)
-                break
+    if data[i:i+3] == b'\x00\x00\x00' and i + 18 <= len(data) and data[i + 3] == 0xfc:
+        s = data[i + 5:i + 18].rstrip(b' \x00\n').decode('latin1', 'ignore').strip()
+        if s:
+            print(s)
+            break
 PY
         )
         [[ -n $monitor_name ]] || monitor_name=$output
-
-        connection_type=${output%%-*}
-
-        link_status=$(
-            awk -F': ' '
-                /^[[:space:]]+link-status:/ {
-                    gsub(/^[[:space:]]+/, "", $2)
-                    print $2
-                    exit
-                }
-            ' <<< "$block"
-        )
-        [[ -n $link_status ]] || link_status=N/A
 
         physical_size=$(
             sed -n '1s/.* \([0-9]\+\)mm x \([0-9]\+\)mm.*/\1mm x \2mm/p' <<< "$block"
@@ -363,17 +365,24 @@ PY
         refresh_rate=$(
             awk '
                 /^[[:space:]]+[0-9]+x[0-9]+/ && /\*/ {
-                    for (i = 2; i <= NF; i++) {
-                        if ($i ~ /\*/) {
-                            gsub(/[*+]/, "", $i)
-                            print $i " Hz"
-                            exit
-                        }
-                    }
+                    gsub(/[*+]/, "", $2)
+                    print $2 " Hz"
+                    exit
                 }
             ' <<< "$block"
         )
         [[ -n $refresh_rate ]] || refresh_rate=N/A
+
+        link_status=$(
+            awk -F': ' '
+                /^[[:space:]]+link-status:/ {
+                    gsub(/^[[:space:]]+/, "", $2)
+                    print $2
+                    exit
+                }
+            ' <<< "$vblock"
+        )
+        [[ -n $link_status ]] || link_status=N/A
 
         color_depth=$(
             awk -F': ' '
@@ -382,7 +391,7 @@ PY
                     print $2 " bits"
                     exit
                 }
-            ' <<< "$block"
+            ' <<< "$vblock"
         )
         [[ -n $color_depth ]] || color_depth=N/A
 
@@ -393,7 +402,7 @@ PY
                     print $2
                     exit
                 }
-            ' <<< "$block"
+            ' <<< "$vblock"
         )
         [[ -n $colorspace ]] || colorspace=N/A
 
@@ -401,27 +410,23 @@ PY
             awk -F': ' '
                 /^[[:space:]]+vrr_capable:/ {
                     gsub(/^[[:space:]]+/, "", $2)
-                    if ($2 == 1)
-                        print "Yes"
-                    else
-                        print "No"
+                    print ($2 == 1 ? "Yes" : "No")
                     exit
                 }
-            ' <<< "$block"
+            ' <<< "$vblock"
         )
         [[ -n $vrr_capable ]] || vrr_capable=N/A
 
-        echo "Monitor name: $monitor_name"
-        echo "Connection type: $connection_type"
-        echo "Link status: $link_status"
-        echo "Physical size: $physical_size"
-        echo "Physical resolution: $physical_resolution"
-        echo "Logical resolution: $logical_resolution"
-        echo "Refresh rate: $refresh_rate"
-        echo "Color depth: $color_depth"
-        echo "Colorspace: $colorspace"
-        echo "VRR capable: $vrr_capable"
-        echo
+        echo "Monitor: $monitor_name"
+        echo -e "\tConnection type: $connection_type"
+        echo -e "\tLink status: $link_status"
+        echo -e "\tPhysical size: $physical_size"
+        echo -e "\tPhysical resolution: $physical_resolution"
+        echo -e "\tLogical resolution: $logical_resolution"
+        echo -e "\tRefresh rate: $refresh_rate"
+        echo -e "\tColor depth: $color_depth"
+        echo -e "\tColorspace: $colorspace"
+        echo -e "\tVRR capable: $vrr_capable"
     done
 }
 
