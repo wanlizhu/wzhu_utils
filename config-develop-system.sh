@@ -23,6 +23,19 @@ if [[ -z $(sudo ufw status | grep inactive) ]]; then
     sudo ufw disable 
 fi 
 
+# write out ssh config 
+if [[ ! -e ~/.ssh/config ]]; then
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    printf '%s\n' \
+        'Host *' \
+        '    UserKnownHostsFile /dev/null' \
+        '    GlobalKnownHostsFile /dev/null' \
+        '    StrictHostKeyChecking no' \
+        > ~/.ssh/config
+    chmod 600 ~/.ssh/config
+fi
+
 # update grub cmdline 
 sudo cp /etc/default/grub /tmp/grub
 sudo sed -i \
