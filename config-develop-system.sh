@@ -26,6 +26,10 @@ fi
 # update grub cmdline 
 sudo cp /etc/default/grub /tmp/grub
 sudo sed -i \
+    -e "s/^\(GRUB_CMDLINE_LINUX_DEFAULT=\)'\(.*\)'$/\1\"\2\"/" \
+    -e "s/^\(GRUB_CMDLINE_LINUX=\)'\(.*\)'$/\1\"\2\"/" \
+    /etc/default/grub
+sudo sed -i \
     -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset / /g' \
     -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/"nomodeset /"/' \
     -e '/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/ nomodeset"/"/' \
