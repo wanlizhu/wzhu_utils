@@ -51,7 +51,7 @@ else
         sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
         sudo grdctl --system rdp set-tls-key $cert_key
         sudo grdctl --system rdp set-tls-cert $cert_crt
-        sudo grdctl --system rdp set-credentials wzhu zhujie
+        sudo grdctl --system rdp set-credentials $USER zhujie
         sudo grdctl --system rdp enable
         sudo ufw disable || sudo ufw allow 3389/tcp 
         sudo systemctl daemon-reload

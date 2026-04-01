@@ -92,7 +92,7 @@ run_kwin_wayland_test() {
     fi 
     sudo systemctl stop gdm3 
     sudo chvt 1
-    sudo systemd-run --collect -u kwin-test --uid=wzhu \
+    sudo systemd-run --collect -u kwin-test --uid=$USER \
         -p PAMName=login \
         -p TTYPath=/dev/tty1 \
         dbus-run-session startplasma-wayland 
