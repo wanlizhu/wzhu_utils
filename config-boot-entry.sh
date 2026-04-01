@@ -19,12 +19,16 @@ def count_braces_outside_quotes(line):
             is_escaped = False
             continue
 
-        if char == "\\":
-            is_escaped = True
+        if current_quote == '"':
+            if char == "\\":
+                is_escaped = True
+                continue
+            if char == '"':
+                current_quote = None
             continue
 
-        if current_quote is not None:
-            if char == current_quote:
+        if current_quote == "'":
+            if char == "'":
                 current_quote = None
             continue
 
@@ -39,34 +43,105 @@ def count_braces_outside_quotes(line):
 
     return open_brace_count, close_brace_count
 
-def parse_first_quoted_value(text, start_index):
-    stripped_length = len(text)
-
-    while start_index < stripped_length and text[start_index].isspace():
-        start_index += 1
-
-    if start_index >= stripped_length or text[start_index] not in ("'", '"'):
-        return None, start_index
-
-    quote_char = text[start_index]
-    start_index += 1
+def parse_single_quoted_value(text, start_index):
+    current_index = start_index + 1
     parsed_chars = []
 
-    while start_index < stripped_length:
-        current_char = text[start_index]
-
-        if current_char == "\\" and start_index + 1 < stripped_length:
-            parsed_chars.append(text[start_index + 1])
-            start_index += 2
-            continue
-
-        if current_char == quote_char:
-            return "".join(parsed_chars), start_index + 1
-
+    while current_index < len(text):
+        current_char = text[current_index]
+        if current_char == "'":
+            return "".join(parsed_chars), current_index + 1
         parsed_chars.append(current_char)
-        start_index += 1
+        current_index += 1
 
     return None, start_index
+
+def parse_double_quoted_value(text, start_index):
+    current_index = start_index + 1
+    parsed_chars = []
+
+    while current_index < len(text):
+        current_char = text[current_index]
+
+        if current_char == "\\" and current_index + 1 < len(text):
+            parsed_chars.append(text[current_index + 1])
+            current_index += 2
+            continue
+
+        if current_char == '"':
+            return "".join(parsed_chars), current_index + 1
+
+        parsed_chars.append(current_char)
+        current_index += 1
+
+    return None, start_index
+
+def parse_unquoted_value(text, start_index):
+    current_index = start_index
+    parsed_chars = []
+
+    while current_index < len(text):
+        current_char = text[current_index]
+
+        if current_char.isspace() or current_char in {"'", '"', "{", "}"}:
+            break
+
+        if current_char == "\\" and current_index + 1 < len(text):
+            parsed_chars.append(text[current_index + 1])
+            current_index += 2
+            continue
+
+        parsed_chars.append(current_char)
+        current_index += 1
+
+    if not parsed_chars:
+        return None, start_index
+
+    return "".join(parsed_chars), current_index
+
+def parse_shell_word(text, start_index):
+    current_index = start_index
+    parsed_parts = []
+    found_any_part = False
+
+    while current_index < len(text):
+        while current_index < len(text) and text[current_index].isspace():
+            if found_any_part:
+                return "".join(parsed_parts), current_index
+            current_index += 1
+
+        if current_index >= len(text):
+            break
+
+        current_char = text[current_index]
+
+        if current_char == "$" and current_index + 1 < len(text) and text[current_index + 1] in ("'", '"'):
+            current_index += 1
+            current_char = text[current_index]
+
+        if current_char == "'":
+            parsed_value, next_index = parse_single_quoted_value(text, current_index)
+        elif current_char == '"':
+            parsed_value, next_index = parse_double_quoted_value(text, current_index)
+        elif current_char in {"{", "}"}:
+            break
+        else:
+            parsed_value, next_index = parse_unquoted_value(text, current_index)
+
+        if parsed_value is None:
+            break
+
+        parsed_parts.append(parsed_value)
+        found_any_part = True
+        current_index = next_index
+
+        if current_index < len(text) and text[current_index] in {"{", "}"}:
+            break
+
+    if not found_any_part:
+        return None, start_index
+
+    return "".join(parsed_parts), current_index
 
 def parse_grub_header(line):
     stripped_line = line.lstrip()
@@ -80,7 +155,7 @@ def parse_grub_header(line):
     else:
         return None
 
-    title, parse_position = parse_first_quoted_value(stripped_line, parse_position)
+    title, parse_position = parse_shell_word(stripped_line, parse_position)
     if title is None:
         return None
 
@@ -92,7 +167,7 @@ def parse_grub_header(line):
         if id_option_index < 0:
             break
 
-        id_value, next_position = parse_first_quoted_value(
+        id_value, next_position = parse_shell_word(
             stripped_line,
             id_option_index + len("--id"),
         )
