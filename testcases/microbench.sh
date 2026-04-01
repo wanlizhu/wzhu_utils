@@ -26,6 +26,16 @@ else
     print_microbench_output_as_csv "$1" >/tmp/csv1
     print_microbench_output_as_csv "$2" >/tmp/csv2
     awk -F, '
+        NR == FNR {
+            a[FNR] = $1
+            next
+        }
+        a[FNR] != $1 {
+            printf "Error: row %d mismatch: %s != %s\n", FNR, a[FNR], $1
+            exit 1
+        }
+    ' /tmp/csv1 /tmp/csv2 || exit 1
+    awk -F, '
         BEGIN {
             OFS = ","
         }
