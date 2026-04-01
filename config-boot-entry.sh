@@ -6,6 +6,7 @@ GRUB_BOOT_ENTRIES=/tmp/grub_boot_entries.cfg
 
 sudo rm -f $GRUB_BOOT_ENTRIES
 sudo python3 - "$GRUB_CFG" > $GRUB_BOOT_ENTRIES <<'PY'
+import re
 import sys
 
 def count_braces_outside_quotes(line):
@@ -32,8 +33,12 @@ def count_braces_outside_quotes(line):
                 current_quote = None
             continue
 
-        if char in ("'", '"'):
-            current_quote = char
+        if char == '"':
+            current_quote = '"'
+            continue
+
+        if char == "'":
+            current_quote = "'"
             continue
 
         if char == "{":
@@ -43,139 +48,29 @@ def count_braces_outside_quotes(line):
 
     return open_brace_count, close_brace_count
 
-def parse_single_quoted_value(text, start_index):
-    current_index = start_index + 1
-    parsed_chars = []
-
-    while current_index < len(text):
-        current_char = text[current_index]
-        if current_char == "'":
-            return "".join(parsed_chars), current_index + 1
-        parsed_chars.append(current_char)
-        current_index += 1
-
-    return None, start_index
-
-def parse_double_quoted_value(text, start_index):
-    current_index = start_index + 1
-    parsed_chars = []
-
-    while current_index < len(text):
-        current_char = text[current_index]
-
-        if current_char == "\\" and current_index + 1 < len(text):
-            parsed_chars.append(text[current_index + 1])
-            current_index += 2
-            continue
-
-        if current_char == '"':
-            return "".join(parsed_chars), current_index + 1
-
-        parsed_chars.append(current_char)
-        current_index += 1
-
-    return None, start_index
-
-def parse_unquoted_value(text, start_index):
-    current_index = start_index
-    parsed_chars = []
-
-    while current_index < len(text):
-        current_char = text[current_index]
-
-        if current_char.isspace() or current_char in {"'", '"', "{", "}"}:
-            break
-
-        if current_char == "\\" and current_index + 1 < len(text):
-            parsed_chars.append(text[current_index + 1])
-            current_index += 2
-            continue
-
-        parsed_chars.append(current_char)
-        current_index += 1
-
-    if not parsed_chars:
-        return None, start_index
-
-    return "".join(parsed_chars), current_index
-
-def parse_shell_word(text, start_index):
-    current_index = start_index
-    parsed_parts = []
-    found_any_part = False
-
-    while current_index < len(text):
-        while current_index < len(text) and text[current_index].isspace():
-            if found_any_part:
-                return "".join(parsed_parts), current_index
-            current_index += 1
-
-        if current_index >= len(text):
-            break
-
-        current_char = text[current_index]
-
-        if current_char == "$" and current_index + 1 < len(text) and text[current_index + 1] in ("'", '"'):
-            current_index += 1
-            current_char = text[current_index]
-
-        if current_char == "'":
-            parsed_value, next_index = parse_single_quoted_value(text, current_index)
-        elif current_char == '"':
-            parsed_value, next_index = parse_double_quoted_value(text, current_index)
-        elif current_char in {"{", "}"}:
-            break
-        else:
-            parsed_value, next_index = parse_unquoted_value(text, current_index)
-
-        if parsed_value is None:
-            break
-
-        parsed_parts.append(parsed_value)
-        found_any_part = True
-        current_index = next_index
-
-        if current_index < len(text) and text[current_index] in {"{", "}"}:
-            break
-
-    if not found_any_part:
-        return None, start_index
-
-    return "".join(parsed_parts), current_index
+def unescape_double_quoted_value(text):
+    return re.sub(r'\\(.)', r'\1', text)
 
 def parse_grub_header(line):
     stripped_line = line.lstrip()
 
-    if stripped_line.startswith("menuentry"):
-        entry_kind = "menuentry"
-        parse_position = len("menuentry")
-    elif stripped_line.startswith("submenu"):
-        entry_kind = "submenu"
-        parse_position = len("submenu")
-    else:
+    title_match = re.match(r'''^(menuentry|submenu)\s+\$?(["'])(.*?)\2''', stripped_line)
+    if not title_match:
         return None
 
-    title, parse_position = parse_shell_word(stripped_line, parse_position)
-    if title is None:
-        return None
+    entry_kind = title_match.group(1)
+    quote_char = title_match.group(2)
+    title = title_match.group(3)
+
+    if quote_char == '"':
+        title = unescape_double_quoted_value(title)
 
     entry_id = None
-    search_position = parse_position
-
-    while True:
-        id_option_index = stripped_line.find("--id", search_position)
-        if id_option_index < 0:
-            break
-
-        id_value, next_position = parse_shell_word(
-            stripped_line,
-            id_option_index + len("--id"),
-        )
-        if id_value is not None:
-            entry_id = id_value
-            break
-
-        search_position = id_option_index + 1
+    id_match = re.search(r'''--id\s+\$?(["'])(.*?)\1''', stripped_line)
+    if id_match:
+        entry_id = id_match.group(2)
+        if id_match.group(1) == '"':
+            entry_id = unescape_double_quoted_value(entry_id)
 
     return entry_kind, title, entry_id
 
@@ -242,16 +137,19 @@ fi
 
 echo "GRUB boot entries found:"
 awk -F '\t' '{printf "%2d. %s\n", $1, $2}' $GRUB_BOOT_ENTRIES
+
 echo
-read -r -p "Enter entry number to set as default: " idx
-if [[ ! $idx =~ ^[0-9]+$ ]]; then
+read -r -p "Enter entry number to set as default: " selected_index
+
+if [[ ! $selected_index =~ ^[0-9]+$ ]]; then
     echo "Invalid selection"
     exit 1
 fi
 
-title=$(awk -F '\t' -v idx="$idx" '$1 == idx {print $2}' $GRUB_BOOT_ENTRIES)
-key=$(awk -F '\t' -v idx="$idx" '$1 == idx {print $3}' $GRUB_BOOT_ENTRIES)
-if [[ -z $key ]]; then
+selected_title=$(awk -F '\t' -v idx="$selected_index" '$1 == idx {print $2}' $GRUB_BOOT_ENTRIES)
+selected_key=$(awk -F '\t' -v idx="$selected_index" '$1 == idx {print $3}' $GRUB_BOOT_ENTRIES)
+
+if [[ -z $selected_key ]]; then
     echo "Invalid selection"
     exit 1
 fi
@@ -262,8 +160,25 @@ else
     echo 'GRUB_DEFAULT=saved' | sudo tee -a /etc/default/grub >/dev/null
 fi
 
-sudo grub-set-default "$key"
+sudo grub-set-default "$selected_key"
 sudo update-grub
 
 saved_entry=$(sudo grub-editenv list | awk -F= '/^saved_entry=/{print $2; exit}')
-echo "Saved entry in grubenv: ${saved_entry:-N/A}"
+
+echo
+echo "Selected entry:"
+echo "    $selected_title"
+
+echo
+echo "Configured key:"
+echo "    $selected_key"
+
+echo
+echo "Saved entry in grubenv:"
+echo "    ${saved_entry:-N/A}"
+
+if [[ $saved_entry != "$selected_key" ]]; then
+    echo
+    echo "Warning: saved_entry does not match the selected key"
+    exit 1
+fi
