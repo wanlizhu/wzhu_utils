@@ -46,7 +46,6 @@ reset_gnome_theme() {
     gsettings reset-recursively org.gnome.desktop.interface
     gsettings reset-recursively org.gnome.desktop.sound 
     gsettings reset-recursively org.gnome.desktop.wm.preferences 
-    gsettings reset-recursively org.gnome.shell.extensions.user-theme
 }
 sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
@@ -267,7 +266,8 @@ find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
     python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
     php-cli php-xml timeshift libx11-dev libgl-dev steam elfutils \
     linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) \
-    linux-tools-generic linux-cloud-tools-generic 
+    linux-tools-generic linux-cloud-tools-generic \
+    drm-info 
 
 # Install debug symbols requirements found in $HOME 
 find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
