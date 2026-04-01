@@ -23,8 +23,6 @@ fi
 if [[ -z "$2" ]]; then 
     print_microbench_output_as_csv "$1"
 else 
-    read -e -i "$(basename $1)" -p "Enter a short name for $(basename $1): " csv1_name 
-    read -e -i "$(basename $2)" -p "Enter a short name for $(basename $2): " csv2_name 
     print_microbench_output_as_csv "$1" >/tmp/csv1
     print_microbench_output_as_csv "$2" >/tmp/csv2
     awk -F, '
@@ -49,5 +47,5 @@ else
             }
             print csv1_col1[FNR], csv1_col2[FNR], $2, ratio, csv1_col3[FNR]
         }
-    ' /tmp/csv1 /tmp/csv2 > ${csv1_name}_vs_${csv2_name}.csv
+    ' /tmp/csv1 /tmp/csv2 
 fi 
