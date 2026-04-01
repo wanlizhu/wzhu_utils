@@ -8,149 +8,154 @@ sudo rm -f $GRUB_BOOT_ENTRIES
 sudo python3 - "$GRUB_CFG" > $GRUB_BOOT_ENTRIES <<'PY'
 import sys
 
-cfg = sys.argv[1]
+def count_braces_outside_quotes(line):
+    open_brace_count = 0
+    close_brace_count = 0
+    current_quote = None
+    is_escaped = False
 
-def parse_quoted(s, pos):
-    if pos >= len(s) or s[pos] not in ("'", '"'):
-        return None, pos
-
-    quote = s[pos]
-    pos += 1
-    out = []
-
-    while pos < len(s):
-        c = s[pos]
-
-        if c == "\\" and pos + 1 < len(s):
-            out.append(s[pos + 1])
-            pos += 2
+    for char in line:
+        if is_escaped:
+            is_escaped = False
             continue
 
-        if c == quote:
-            pos += 1
-            return "".join(out), pos
-
-        out.append(c)
-        pos += 1
-
-    return None, pos
-
-def count_braces_outside_quotes(s):
-    opens = 0
-    closes = 0
-    quote = None
-    escape = False
-
-    for c in s:
-        if escape:
-            escape = False
+        if char == "\\":
+            is_escaped = True
             continue
 
-        if c == "\\":
-            escape = True
+        if current_quote is not None:
+            if char == current_quote:
+                current_quote = None
             continue
 
-        if quote is not None:
-            if c == quote:
-                quote = None
+        if char in ("'", '"'):
+            current_quote = char
             continue
 
-        if c in ("'", '"'):
-            quote = c
+        if char == "{":
+            open_brace_count += 1
+        elif char == "}":
+            close_brace_count += 1
+
+    return open_brace_count, close_brace_count
+
+def parse_first_quoted_value(text, start_index):
+    stripped_length = len(text)
+
+    while start_index < stripped_length and text[start_index].isspace():
+        start_index += 1
+
+    if start_index >= stripped_length or text[start_index] not in ("'", '"'):
+        return None, start_index
+
+    quote_char = text[start_index]
+    start_index += 1
+    parsed_chars = []
+
+    while start_index < stripped_length:
+        current_char = text[start_index]
+
+        if current_char == "\\" and start_index + 1 < stripped_length:
+            parsed_chars.append(text[start_index + 1])
+            start_index += 2
             continue
 
-        if c == "{":
-            opens += 1
-        elif c == "}":
-            closes += 1
+        if current_char == quote_char:
+            return "".join(parsed_chars), start_index + 1
 
-    return opens, closes
+        parsed_chars.append(current_char)
+        start_index += 1
 
-def parse_header(line):
-    i = 0
-    n = len(line)
+    return None, start_index
 
-    while i < n and line[i].isspace():
-        i += 1
+def parse_grub_header(line):
+    stripped_line = line.lstrip()
 
-    if line.startswith("menuentry", i):
-        kind = "menuentry"
-        i += len("menuentry")
-    elif line.startswith("submenu", i):
-        kind = "submenu"
-        i += len("submenu")
+    if stripped_line.startswith("menuentry"):
+        entry_kind = "menuentry"
+        parse_position = len("menuentry")
+    elif stripped_line.startswith("submenu"):
+        entry_kind = "submenu"
+        parse_position = len("submenu")
     else:
         return None
 
-    while i < n and line[i].isspace():
-        i += 1
-
-    title, i = parse_quoted(line, i)
+    title, parse_position = parse_first_quoted_value(stripped_line, parse_position)
     if title is None:
         return None
 
     entry_id = None
-    search = 0
+    search_position = parse_position
 
     while True:
-        j = line.find("--id", search)
-        if j < 0:
+        id_option_index = stripped_line.find("--id", search_position)
+        if id_option_index < 0:
             break
 
-        k = j + len("--id")
-        while k < n and line[k].isspace():
-            k += 1
-
-        value, end = parse_quoted(line, k)
-        if value is not None:
-            entry_id = value
+        id_value, next_position = parse_first_quoted_value(
+            stripped_line,
+            id_option_index + len("--id"),
+        )
+        if id_value is not None:
+            entry_id = id_value
             break
 
-        search = j + 1
+        search_position = id_option_index + 1
 
-    return kind, title, entry_id
+    return entry_kind, title, entry_id
 
-entries = []
-submenu_stack = []
-depth = 0
+def parse_grub_entries(grub_cfg_path):
+    parsed_entries = []
+    submenu_stack = []
+    current_depth = 0
 
-with open(cfg, encoding="utf-8", errors="replace") as f:
-    for raw in f:
-        line = raw.rstrip("\n")
+    with open(grub_cfg_path, encoding="utf-8", errors="replace") as grub_cfg_file:
+        for raw_line in grub_cfg_file:
+            line = raw_line.rstrip("\n")
 
-        while submenu_stack and depth < submenu_stack[-1][1]:
-            submenu_stack.pop()
+            while submenu_stack and current_depth < submenu_stack[-1]["depth"]:
+                submenu_stack.pop()
 
-        parsed = parse_header(line)
-        opens, closes = count_braces_outside_quotes(line)
+            parsed_header = parse_grub_header(line)
+            open_brace_count, close_brace_count = count_braces_outside_quotes(line)
 
-        if parsed is not None:
-            kind, title, entry_id = parsed
+            if parsed_header is not None:
+                entry_kind, title, entry_id = parsed_header
 
-            if kind == "submenu":
-                submenu_stack.append((title, depth + 1))
-            else:
-                path = [x[0] for x in submenu_stack]
-                path.append(title)
-                full_title = ">".join(path)
-                key = entry_id if entry_id else full_title
-                entries.append((full_title, key))
+                if entry_kind == "submenu":
+                    submenu_stack.append({
+                        "title": title,
+                        "depth": current_depth + 1,
+                    })
+                else:
+                    menu_path_parts = [submenu["title"] for submenu in submenu_stack]
+                    menu_path_parts.append(title)
+                    full_title = ">".join(menu_path_parts)
+                    entry_key = entry_id if entry_id else full_title
+                    parsed_entries.append((full_title, entry_key))
 
-        depth += opens - closes
+            current_depth += open_brace_count - close_brace_count
 
-        while submenu_stack and depth < submenu_stack[-1][1]:
-            submenu_stack.pop()
+            while submenu_stack and current_depth < submenu_stack[-1]["depth"]:
+                submenu_stack.pop()
 
-seen = set()
-index = 1
+    return parsed_entries
 
-for full_title, key in entries:
-    pair = (full_title, key)
-    if pair in seen:
-        continue
-    seen.add(pair)
-    print(f"{index}\t{full_title}\t{key}")
-    index += 1
+def print_entries(entries):
+    seen_entries = set()
+    display_index = 1
+
+    for full_title, entry_key in entries:
+        entry_pair = (full_title, entry_key)
+        if entry_pair in seen_entries:
+            continue
+
+        seen_entries.add(entry_pair)
+        print(f"{display_index}\t{full_title}\t{entry_key}")
+        display_index += 1
+
+grub_cfg_path = sys.argv[1]
+print_entries(parse_grub_entries(grub_cfg_path))
 PY
 
 if [[ -e $GRUB_BOOT_ENTRIES ]]; then
