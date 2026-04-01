@@ -4,13 +4,8 @@ set -o pipefail
 GRUB_CFG=/boot/grub/grub.cfg
 GRUB_BOOT_ENTRIES=/tmp/grub_boot_entries.cfg
 
-if [[ ! -r $GRUB_CFG ]]; then
-    echo "Failed to read $GRUB_CFG"
-    exit 1
-fi
-
-rm -f $GRUB_BOOT_ENTRIES
-python3 - "$GRUB_CFG" > $GRUB_BOOT_ENTRIES <<'PY'
+sudo rm -f $GRUB_BOOT_ENTRIES
+sudo python3 - "$GRUB_CFG" > $GRUB_BOOT_ENTRIES <<'PY'
 import sys
 
 cfg = sys.argv[1]
@@ -158,7 +153,9 @@ for full_title, key in entries:
     index += 1
 PY
 
-if [[ ! -s $GRUB_BOOT_ENTRIES ]]; then
+if [[ -e $GRUB_BOOT_ENTRIES ]]; then
+    sudo chmod 666 $GRUB_BOOT_ENTRIES
+else
     echo "Failed to parse $GRUB_CFG"
     exit 1
 fi
