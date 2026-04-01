@@ -38,11 +38,16 @@ else
             next
         }
         FNR == 1 {
-            print csv1_col1[FNR], "numeric 1", "numeric 2", csv1_col3[FNR]
+            print csv1_col1[FNR], "numeric 1", "numeric 2", "num2 vs num1", csv1_col3[FNR]
             next
         }
         {
-            print csv1_col1[FNR], csv1_col2[FNR], $2, csv1_col3[FNR]
+            if (csv1_col2[FNR] + 0 == 0) {
+                ratio = "N/A"
+            } else {
+                ratio = sprintf("%.2f%%", ($2 / csv1_col2[FNR]) * 100)
+            }
+            print csv1_col1[FNR], csv1_col2[FNR], $2, ratio, csv1_col3[FNR]
         }
     ' /tmp/csv1 /tmp/csv2 > ${csv1_name}_vs_${csv2_name}.csv
 fi 
