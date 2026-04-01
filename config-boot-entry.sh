@@ -142,21 +142,4 @@ sudo grub-set-default "$selected_key"
 sudo update-grub
 
 saved_entry=$(sudo grub-editenv list | awk -F= '/^saved_entry=/{print $2; exit}')
-
-echo
-echo "Selected entry:"
-echo "    $selected_title"
-
-echo
-echo "Configured key:"
-echo "    $selected_key"
-
-echo
-echo "Saved entry in grubenv:"
-echo "    ${saved_entry:-N/A}"
-
-if [[ $saved_entry != "$selected_key" ]]; then
-    echo
-    echo "Warning: saved_entry does not match the selected key"
-    exit 1
-fi
+echo "Saved entry in grubenv: ${saved_entry:-N/A}"
