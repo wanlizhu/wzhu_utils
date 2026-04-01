@@ -6,71 +6,49 @@ GRUB_BOOT_ENTRIES=/tmp/grub_boot_entries.cfg
 
 sudo rm -f $GRUB_BOOT_ENTRIES
 sudo python3 - "$GRUB_CFG" > $GRUB_BOOT_ENTRIES <<'PY'
-import re
+import shlex
 import sys
 
 def count_braces_outside_quotes(line):
+    lexer = shlex.shlex(line, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ''
+    lexer.wordchars += '{}'
+
     open_brace_count = 0
     close_brace_count = 0
-    current_quote = None
-    is_escaped = False
 
-    for char in line:
-        if is_escaped:
-            is_escaped = False
-            continue
-
-        if current_quote == '"':
-            if char == "\\":
-                is_escaped = True
-                continue
-            if char == '"':
-                current_quote = None
-            continue
-
-        if current_quote == "'":
-            if char == "'":
-                current_quote = None
-            continue
-
-        if char == '"':
-            current_quote = '"'
-            continue
-
-        if char == "'":
-            current_quote = "'"
-            continue
-
-        if char == "{":
-            open_brace_count += 1
-        elif char == "}":
-            close_brace_count += 1
+    for token in lexer:
+        open_brace_count += token.count('{')
+        close_brace_count += token.count('}')
 
     return open_brace_count, close_brace_count
-
-def unescape_double_quoted_value(text):
-    return re.sub(r'\\(.)', r'\1', text)
 
 def parse_grub_header(line):
     stripped_line = line.lstrip()
 
-    title_match = re.match(r'''^(menuentry|submenu)\s+\$?(["'])(.*?)\2''', stripped_line)
-    if not title_match:
+    if not stripped_line.startswith('menuentry') and not stripped_line.startswith('submenu'):
         return None
 
-    entry_kind = title_match.group(1)
-    quote_char = title_match.group(2)
-    title = title_match.group(3)
+    try:
+        tokens = shlex.split(stripped_line, comments=False, posix=True)
+    except ValueError:
+        return None
 
-    if quote_char == '"':
-        title = unescape_double_quoted_value(title)
+    if len(tokens) < 2:
+        return None
 
+    entry_kind = tokens[0]
+    if entry_kind != 'menuentry' and entry_kind != 'submenu':
+        return None
+
+    title = tokens[1]
     entry_id = None
-    id_match = re.search(r'''--id\s+\$?(["'])(.*?)\1''', stripped_line)
-    if id_match:
-        entry_id = id_match.group(2)
-        if id_match.group(1) == '"':
-            entry_id = unescape_double_quoted_value(entry_id)
+
+    for token_index, token in enumerate(tokens[:-1]):
+        if token == '--id' or token == '$menuentry_id_option':
+            entry_id = tokens[token_index + 1]
+            break
 
     return entry_kind, title, entry_id
 
@@ -79,11 +57,11 @@ def parse_grub_entries(grub_cfg_path):
     submenu_stack = []
     current_depth = 0
 
-    with open(grub_cfg_path, encoding="utf-8", errors="replace") as grub_cfg_file:
+    with open(grub_cfg_path, encoding='utf-8', errors='replace') as grub_cfg_file:
         for raw_line in grub_cfg_file:
-            line = raw_line.rstrip("\n")
+            line = raw_line.rstrip('\n')
 
-            while submenu_stack and current_depth < submenu_stack[-1]["depth"]:
+            while submenu_stack and current_depth < submenu_stack[-1]['depth']:
                 submenu_stack.pop()
 
             parsed_header = parse_grub_header(line)
@@ -92,21 +70,21 @@ def parse_grub_entries(grub_cfg_path):
             if parsed_header is not None:
                 entry_kind, title, entry_id = parsed_header
 
-                if entry_kind == "submenu":
+                if entry_kind == 'submenu':
                     submenu_stack.append({
-                        "title": title,
-                        "depth": current_depth + 1,
+                        'title': title,
+                        'depth': current_depth + 1,
                     })
                 else:
-                    menu_path_parts = [submenu["title"] for submenu in submenu_stack]
+                    menu_path_parts = [submenu['title'] for submenu in submenu_stack]
                     menu_path_parts.append(title)
-                    full_title = ">".join(menu_path_parts)
-                    entry_key = entry_id if entry_id else full_title
+                    full_title = '>'.join(menu_path_parts)
+                    entry_key = full_title
                     parsed_entries.append((full_title, entry_key))
 
             current_depth += open_brace_count - close_brace_count
 
-            while submenu_stack and current_depth < submenu_stack[-1]["depth"]:
+            while submenu_stack and current_depth < submenu_stack[-1]['depth']:
                 submenu_stack.pop()
 
     return parsed_entries
@@ -121,7 +99,7 @@ def print_entries(entries):
             continue
 
         seen_entries.add(entry_pair)
-        print(f"{display_index}\t{full_title}\t{entry_key}")
+        print(f'{display_index}\t{full_title}\t{entry_key}')
         display_index += 1
 
 grub_cfg_path = sys.argv[1]
