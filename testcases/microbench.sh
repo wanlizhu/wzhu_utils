@@ -9,9 +9,9 @@ print_microbench_output_as_csv() {
 
     echo "Test case,numeric,unit" 
     if [[ ! -z $(cat "$1" | grep '\[REST: ') ]]; then 
-        cat "$1" | grep '\[REST: ' | awk -F'[=,\\]]' '{print $2 "," $4 "," $6}'
+        cat "$1" | grep '\[REST: ' | sed 's/: /^/g' | sed 's/ = /^/g' | sed 's/ /^/g' | sed 's/]/^/g' | awk -F'\\^' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
     else
-        cat "$1" | grep '\[Test_case: ' | awk -F' *= *|]|[[:space:]]+' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
+        cat "$1" | grep '\[Test_case: ' | sed 's/test_case=/^/g' | sed 's/, numeric=/^/g' | sed 's/, units=/^/g' | sed 's/]/^/g' | awk -F'\\^' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
     fi 
 }
 
@@ -47,6 +47,8 @@ else
         line1=$(cat /tmp/csv1 | grep "$name2")
         [[ -z $line1 ]] && continue 
         IFS=, read -r name1 value1 unit1 <<< "$line1"
-        echo "$name2,$value1,$value2,$(a_over_b $value2 $value1),$unit2"
+        rate=$(a_over_b $value2 $value1)
+        [[ $rate == "N/A" ]] && continue 
+        echo "$name2,$value1,$value2,$rate,$unit2"
     done </tmp/csv2 
 fi 
