@@ -9,9 +9,9 @@ print_microbench_output_as_csv() {
 
     echo "Test case,numeric,unit" 
     if [[ ! -z $(cat "$1" | grep '\[REST: ') ]]; then 
-        cat "$1" | grep '\[REST: ' | sed 's/: /^/g' | sed 's/ = /^/g' | sed 's/ /^/g' | sed 's/]/^/g' | awk -F'\\^' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
-    else
         cat "$1" | grep '\[Test_case: ' | sed 's/test_case=/^/g' | sed 's/, numeric=/^/g' | sed 's/, units=/^/g' | sed 's/]/^/g' | awk -F'\\^' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
+    else
+        cat "$1" | grep '\[REST: ' | sed 's/: /^/g' | sed 's/ = /^/g' | sed 's/ /^/g' | sed 's/]/^/g' | awk -F'\\^' '{printf "%s,%.0f,%s\n", $2, $3, $4}'
     fi 
 }
 
