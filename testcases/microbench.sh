@@ -17,13 +17,16 @@ print_microbench_output_as_csv() {
 
 a_over_b() {
     python3 -c '
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, InvalidOperation
 import sys
-getcontext().prec = 100
-a = Decimal(sys.argv[1])
-b = Decimal(sys.argv[2])
-result = a / b * 100
-print(f"{result:.2f}%")
+try:
+    getcontext().prec = 100
+    a = Decimal(sys.argv[1])
+    b = Decimal(sys.argv[2])
+    result = a / b * 100
+    print(f"{result:.2f}%")
+except Exception:
+    print("N/A")
 ' $1 $2 
 }
 
