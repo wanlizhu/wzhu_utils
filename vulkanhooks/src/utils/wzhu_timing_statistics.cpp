@@ -75,8 +75,7 @@ static void WZHU_printVulkanApiReportLocked() {
         elapsed_seconds,
         cpu_frames_per_second,
         gpu_frames_per_second,
-        gr.gpu_timestamp_path_enabled.load(std::memory_order_relaxed) ? "on" : "off"
-    );
+        gr.gpu_timestamp_path_enabled.load(std::memory_order_relaxed) ? "on" : "off");
 
     for (uint32_t api_id_index = 0;
          api_id_index < static_cast<uint32_t>(VulkanAPI_ID::Count);
@@ -95,8 +94,7 @@ static void WZHU_printVulkanApiReportLocked() {
             " %s_avg_us=%.2f(n=%" PRIu64 ")",
             WZHU_getVulkanAPIName(static_cast<VulkanAPI_ID>(api_id_index)),
             average_microseconds,
-            sample_count
-        );
+            sample_count);
     }
     std::fprintf(stderr, "\n");
     std::fflush(stderr);
@@ -107,8 +105,7 @@ static void WZHU_printVulkanApiReportLocked() {
 static void WZHU_reportThreadLoop() {
     while (gr.report_thread_should_run.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(
-            std::chrono::milliseconds(static_cast<int>(kVulkanAPI_ReportIntervalSeconds * 1000))
-        );
+            std::chrono::milliseconds(static_cast<int>(kVulkanAPI_ReportIntervalSeconds * 1000)));
         WZHU_printVulkanApiReportLocked();
     }
 }
@@ -216,8 +213,7 @@ void WZHU_sampleGpuTimestamp(WZHU_DeviceDispatchTable* dispatch, VkDevice device
         1,
         &timestamp_info,
         timestamps,
-        max_deviations
-    );
+        max_deviations);
     if (timestamp_result != VK_SUCCESS) {
         return;
     }

@@ -78,8 +78,7 @@ VkDevice WZHU_deviceHandleForQueue(VkQueue queue_handle) {
 }
 
 const VkLayerInstanceCreateInfo* WZHU_findInstanceLayerCreateInfo(
-    const VkInstanceCreateInfo* create_info
-) {
+    const VkInstanceCreateInfo* create_info) {
     for (const VkBaseInStructure* chain = reinterpret_cast<const VkBaseInStructure*>(create_info->pNext);
          chain != nullptr;
          chain = reinterpret_cast<const VkBaseInStructure*>(chain->pNext)) {
@@ -91,8 +90,7 @@ const VkLayerInstanceCreateInfo* WZHU_findInstanceLayerCreateInfo(
 }
 
 const VkLayerDeviceCreateInfo* WZHU_findDeviceLayerCreateInfo(
-    const VkDeviceCreateInfo* create_info
-) {
+    const VkDeviceCreateInfo* create_info) {
     for (const VkBaseInStructure* chain = reinterpret_cast<const VkBaseInStructure*>(create_info->pNext);
          chain != nullptr;
          chain = reinterpret_cast<const VkBaseInStructure*>(chain->pNext)) {
@@ -106,8 +104,7 @@ const VkLayerDeviceCreateInfo* WZHU_findDeviceLayerCreateInfo(
 bool WZHU_extensionNameEnabled(
     const char* extension_name,
     uint32_t enabled_count,
-    const char* const* enabled_names
-) {
+    const char* const* enabled_names) {
     for (uint32_t index = 0; index < enabled_count; ++index) {
         if (enabled_names[index] != nullptr && std::strcmp(enabled_names[index], extension_name) == 0) {
             return true;
@@ -118,8 +115,7 @@ bool WZHU_extensionNameEnabled(
 
 void WZHU_storeInstanceDispatch(
     VkInstance instance_handle,
-    std::unique_ptr<WZHU_InstanceDispatchTable> dispatch_table
-) {
+    std::unique_ptr<WZHU_InstanceDispatchTable> dispatch_table) {
     std::unique_lock<std::shared_mutex> lock(gr.instance_mutex);
     gr.instance_dispatch_by_handle[instance_handle] = std::move(dispatch_table);
 }
@@ -131,8 +127,7 @@ void WZHU_removeInstanceDispatch(VkInstance instance_handle) {
 
 void WZHU_storeInstanceExtras(
     VkInstance instance_handle,
-    std::unique_ptr<WZHU_InstanceExtrasTable> extras_table
-) {
+    std::unique_ptr<WZHU_InstanceExtrasTable> extras_table) {
     std::unique_lock<std::shared_mutex> lock(gr.instance_mutex);
     gr.instance_extras_by_handle[instance_handle] = std::move(extras_table);
 }
@@ -144,8 +139,7 @@ void WZHU_removeInstanceExtras(VkInstance instance_handle) {
 
 void WZHU_storeDeviceDispatch(
     VkDevice device_handle,
-    std::unique_ptr<WZHU_DeviceDispatchTable> dispatch_table
-) {
+    std::unique_ptr<WZHU_DeviceDispatchTable> dispatch_table) {
     std::unique_lock<std::shared_mutex> lock(gr.device_mutex);
     gr.device_dispatch_by_handle[device_handle] = std::move(dispatch_table);
 }

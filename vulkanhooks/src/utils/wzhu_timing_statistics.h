@@ -37,10 +37,7 @@ enum class VulkanAPI_ID : uint32_t {
     Count
 };
 
-static_assert(
-    static_cast<uint32_t>(VulkanAPI_ID::Count) <= kVulkanAPI_ID_BucketCount,
-    "vulkan api id table"
-);
+static_assert(static_cast<uint32_t>(VulkanAPI_ID::Count) <= kVulkanAPI_ID_BucketCount, "vulkan api id table");
 
 void WZHU_startReportThreadOnce();
 void WZHU_recordVulkanAPINanoseconds(VulkanAPI_ID api_id, uint64_t elapsed_nanoseconds);

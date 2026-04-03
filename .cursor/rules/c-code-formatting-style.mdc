@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+Format C/C++ code using code style mentioned in .editorconfig file

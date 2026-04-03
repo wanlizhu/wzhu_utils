@@ -4,77 +4,67 @@
 #include "layer_core/wzhu_layer_dispatch.h"
 #include <cstring>
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetInstanceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     VkInstance instance,
-    const char* name
-) {
+    const char* name) {
     if (name == nullptr) {
         return nullptr;
     }
 
-#define WZHU_RESOLVE_INSTANCE_SYMBOL(symbol_name, handler) \
-    if (std::strcmp(name, symbol_name) == 0) { \
+#define WZHU_RESOLVE_INSTANCE_SYMBOL(symbol_name, handler)    \
+    if (std::strcmp(name, symbol_name) == 0) {                \
         return reinterpret_cast<PFN_vkVoidFunction>(handler); \
     }
 
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateInstance", InterceptCreateInstance);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyInstance", InterceptDestroyInstance);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDevice", InterceptCreateDevice);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyDevice", InterceptDestroyDevice);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetInstanceProcAddr", InterceptGetInstanceProcAddr);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDeviceProcAddr", InterceptGetDeviceProcAddr);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateInstance", IMPL_vkCreateInstance);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyInstance", IMPL_vkDestroyInstance);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDevice", IMPL_vkCreateDevice);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyDevice", IMPL_vkDestroyDevice);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetInstanceProcAddr", IMPL_vkGetInstanceProcAddr);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDeviceProcAddr", IMPL_vkGetDeviceProcAddr);
 
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
-        InterceptGetPhysicalDeviceSurfaceCapabilitiesKHR
-    );
+        IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceSurfaceFormatsKHR",
-        InterceptGetPhysicalDeviceSurfaceFormatsKHR
-    );
+        IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceSurfacePresentModesKHR",
-        InterceptGetPhysicalDeviceSurfacePresentModesKHR
-    );
+        IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceSurfaceSupportKHR",
-        InterceptGetPhysicalDeviceSurfaceSupportKHR
-    );
+        IMPL_vkGetPhysicalDeviceSurfaceSupportKHR);
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXcbSurfaceKHR", InterceptCreateXcbSurfaceKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXcbSurfaceKHR", IMPL_vkCreateXcbSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXlibSurfaceKHR", InterceptCreateXlibSurfaceKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXlibSurfaceKHR", IMPL_vkCreateXlibSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWaylandSurfaceKHR", InterceptCreateWaylandSurfaceKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWaylandSurfaceKHR", IMPL_vkCreateWaylandSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWin32SurfaceKHR", InterceptCreateWin32SurfaceKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWin32SurfaceKHR", IMPL_vkCreateWin32SurfaceKHR);
 #endif
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkCreateDisplayPlaneSurfaceKHR",
-        InterceptCreateDisplayPlaneSurfaceKHR
-    );
+        IMPL_vkCreateDisplayPlaneSurfaceKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceDisplayPropertiesKHR",
-        InterceptGetPhysicalDeviceDisplayPropertiesKHR
-    );
+        IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetPhysicalDeviceDisplayPlanePropertiesKHR",
-        InterceptGetPhysicalDeviceDisplayPlanePropertiesKHR
-    );
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDisplayModePropertiesKHR", InterceptGetDisplayModePropertiesKHR);
+        IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDisplayModePropertiesKHR", IMPL_vkGetDisplayModePropertiesKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetDisplayPlaneSupportedDisplaysKHR",
-        InterceptGetDisplayPlaneSupportedDisplaysKHR
-    );
+        IMPL_vkGetDisplayPlaneSupportedDisplaysKHR);
     WZHU_RESOLVE_INSTANCE_SYMBOL(
         "vkGetDisplayPlaneCapabilitiesKHR",
-        InterceptGetDisplayPlaneCapabilitiesKHR
-    );
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDisplayModeKHR", InterceptCreateDisplayModeKHR);
+        IMPL_vkGetDisplayPlaneCapabilitiesKHR);
+    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDisplayModeKHR", IMPL_vkCreateDisplayModeKHR);
 
 #undef WZHU_RESOLVE_INSTANCE_SYMBOL
 
@@ -85,32 +75,31 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetInstanceProcAddr(
     return dispatchTable->pfn_getInstanceProcAddr(instance, name);
 }
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetDeviceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetDeviceProcAddr(
     VkDevice device,
-    const char* name
-) {
+    const char* name) {
     if (name == nullptr) {
         return nullptr;
     }
 
-#define WZHU_RESOLVE_DEVICE_SYMBOL(symbol_name, handler) \
-    if (std::strcmp(name, symbol_name) == 0) { \
+#define WZHU_RESOLVE_DEVICE_SYMBOL(symbol_name, handler)      \
+    if (std::strcmp(name, symbol_name) == 0) {                \
         return reinterpret_cast<PFN_vkVoidFunction>(handler); \
     }
 
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceProcAddr", InterceptGetDeviceProcAddr);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroyDevice", InterceptDestroyDevice);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue", InterceptGetDeviceQueue);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue2", InterceptGetDeviceQueue2);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkCreateSwapchainKHR", InterceptCreateSwapchainKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroySwapchainKHR", InterceptDestroySwapchainKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetSwapchainImagesKHR", InterceptGetSwapchainImagesKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImageKHR", InterceptAcquireNextImageKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImage2KHR", InterceptAcquireNextImage2KHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueuePresentKHR", InterceptQueuePresentKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit", InterceptQueueSubmit);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit2", InterceptQueueSubmit2);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueBindSparse", InterceptQueueBindSparse);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceProcAddr", IMPL_vkGetDeviceProcAddr);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroyDevice", IMPL_vkDestroyDevice);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue", IMPL_vkGetDeviceQueue);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue2", IMPL_vkGetDeviceQueue2);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkCreateSwapchainKHR", IMPL_vkCreateSwapchainKHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroySwapchainKHR", IMPL_vkDestroySwapchainKHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetSwapchainImagesKHR", IMPL_vkGetSwapchainImagesKHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImageKHR", IMPL_vkAcquireNextImageKHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImage2KHR", IMPL_vkAcquireNextImage2KHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueuePresentKHR", IMPL_vkQueuePresentKHR);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit", IMPL_vkQueueSubmit);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit2", IMPL_vkQueueSubmit2);
+    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueBindSparse", IMPL_vkQueueBindSparse);
 
 #undef WZHU_RESOLVE_DEVICE_SYMBOL
 
@@ -121,9 +110,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetDeviceProcAddr(
     return dispatchTable->pfn_getDeviceProcAddr(device, name);
 }
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetPhysicalDeviceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetPhysicalDeviceProcAddr(
     VkInstance instance,
-    const char* name
-) {
-    return InterceptGetInstanceProcAddr(instance, name);
+    const char* name) {
+    return IMPL_vkGetInstanceProcAddr(instance, name);
 }

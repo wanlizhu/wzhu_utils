@@ -2,235 +2,202 @@
 
 #include <vulkan/vulkan.h>
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateSwapchainKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateSwapchainKHR(
     VkDevice device,
     const VkSwapchainCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSwapchainKHR* out_swapchain
-);
+    VkSwapchainKHR* out_swapchain);
 
-VKAPI_ATTR void VKAPI_CALL InterceptDestroySwapchainKHR(
+VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroySwapchainKHR(
     VkDevice device,
     VkSwapchainKHR swapchain,
-    const VkAllocationCallbacks* allocator
-);
+    const VkAllocationCallbacks* allocator);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetSwapchainImagesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetSwapchainImagesKHR(
     VkDevice device,
     VkSwapchainKHR swapchain,
     uint32_t* image_count,
-    VkImage* images
-);
+    VkImage* images);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptAcquireNextImageKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImageKHR(
     VkDevice device,
     VkSwapchainKHR swapchain,
     uint64_t timeout_nanoseconds,
     VkSemaphore semaphore,
     VkFence fence,
-    uint32_t* image_index
-);
+    uint32_t* image_index);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptAcquireNextImage2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImage2KHR(
     VkDevice device,
     const VkAcquireNextImageInfoKHR* acquire_info,
-    uint32_t* image_index
-);
+    uint32_t* image_index);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptQueuePresentKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueuePresentKHR(
     VkQueue queue,
-    const VkPresentInfoKHR* present_info
-);
+    const VkPresentInfoKHR* present_info);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptQueueSubmit(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit(
     VkQueue queue,
     uint32_t submit_count,
     const VkSubmitInfo* submits,
-    VkFence fence
-);
+    VkFence fence);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptQueueSubmit2(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit2(
     VkQueue queue,
     uint32_t submit_count,
     const VkSubmitInfo2* submits,
-    VkFence fence
-);
+    VkFence fence);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptQueueBindSparse(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueBindSparse(
     VkQueue queue,
     uint32_t bind_info_count,
     const VkBindSparseInfo* bind_infos,
-    VkFence fence
-);
+    VkFence fence);
 
-VKAPI_ATTR void VKAPI_CALL InterceptGetDeviceQueue(
+VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue(
     VkDevice device,
     uint32_t queue_family_index,
     uint32_t queue_index,
-    VkQueue* out_queue
-);
+    VkQueue* out_queue);
 
-VKAPI_ATTR void VKAPI_CALL InterceptGetDeviceQueue2(
+VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue2(
     VkDevice device,
     const VkDeviceQueueInfo2* queue_info,
-    VkQueue* out_queue
-);
+    VkQueue* out_queue);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateInstance(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
     const VkInstanceCreateInfo* create_info,
     const VkAllocationCallbacks* allocator,
-    VkInstance* out_instance
-);
+    VkInstance* out_instance);
 
-VKAPI_ATTR void VKAPI_CALL InterceptDestroyInstance(
+VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyInstance(
     VkInstance instance,
-    const VkAllocationCallbacks* allocator
-);
+    const VkAllocationCallbacks* allocator);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateDevice(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
     VkPhysicalDevice physical_device,
     const VkDeviceCreateInfo* create_info,
     const VkAllocationCallbacks* allocator,
-    VkDevice* out_device
-);
+    VkDevice* out_device);
 
-VKAPI_ATTR void VKAPI_CALL InterceptDestroyDevice(
+VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyDevice(
     VkDevice device,
-    const VkAllocationCallbacks* allocator
-);
+    const VkAllocationCallbacks* allocator);
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetInstanceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     VkInstance instance,
-    const char* name
-);
+    const char* name);
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetDeviceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetDeviceProcAddr(
     VkDevice device,
-    const char* name
-);
+    const char* name);
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InterceptGetPhysicalDeviceProcAddr(
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetPhysicalDeviceProcAddr(
     VkInstance instance,
-    const char* name
-);
+    const char* name);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceSurfaceCapabilitiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface,
-    VkSurfaceCapabilitiesKHR* capabilities
-);
+    VkSurfaceCapabilitiesKHR* capabilities);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceSurfaceFormatsKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface,
     uint32_t* format_count,
-    VkSurfaceFormatKHR* formats
-);
+    VkSurfaceFormatKHR* formats);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceSurfacePresentModesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface,
     uint32_t* mode_count,
-    VkPresentModeKHR* modes
-);
+    VkPresentModeKHR* modes);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceSurfaceSupportKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceSupportKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     uint32_t queue_family_index,
     VkSurfaceKHR surface,
-    VkBool32* supported
-);
+    VkBool32* supported);
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateXcbSurfaceKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateXcbSurfaceKHR(
     VkInstance instance,
     const VkXcbSurfaceCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSurfaceKHR* out_surface
-);
+    VkSurfaceKHR* out_surface);
 #endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateXlibSurfaceKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateXlibSurfaceKHR(
     VkInstance instance,
     const VkXlibSurfaceCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSurfaceKHR* out_surface
-);
+    VkSurfaceKHR* out_surface);
 #endif
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateWaylandSurfaceKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateWaylandSurfaceKHR(
     VkInstance instance,
     const VkWaylandSurfaceCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSurfaceKHR* out_surface
-);
+    VkSurfaceKHR* out_surface);
 #endif
 
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateWin32SurfaceKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateWin32SurfaceKHR(
     VkInstance instance,
     const VkWin32SurfaceCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSurfaceKHR* out_surface
-);
+    VkSurfaceKHR* out_surface);
 #endif
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateDisplayPlaneSurfaceKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayPlaneSurfaceKHR(
     VkInstance instance,
     const VkDisplaySurfaceCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkSurfaceKHR* out_surface
-);
+    VkSurfaceKHR* out_surface);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceDisplayPropertiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     uint32_t* property_count,
-    VkDisplayPropertiesKHR* properties
-);
+    VkDisplayPropertiesKHR* properties);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetPhysicalDeviceDisplayPlanePropertiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     uint32_t* property_count,
-    VkDisplayPlanePropertiesKHR* properties
-);
+    VkDisplayPlanePropertiesKHR* properties);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetDisplayModePropertiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayModePropertiesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkDisplayKHR display,
     uint32_t* property_count,
-    VkDisplayModePropertiesKHR* properties
-);
+    VkDisplayModePropertiesKHR* properties);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetDisplayPlaneSupportedDisplaysKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneSupportedDisplaysKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     uint32_t plane_index,
     uint32_t* display_count,
-    VkDisplayKHR* displays
-);
+    VkDisplayKHR* displays);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptGetDisplayPlaneCapabilitiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneCapabilitiesKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkDisplayModeKHR mode,
     uint32_t plane_index,
-    VkDisplayPlaneCapabilitiesKHR* capabilities
-);
+    VkDisplayPlaneCapabilitiesKHR* capabilities);
 
-VKAPI_ATTR VkResult VKAPI_CALL InterceptCreateDisplayModeKHR(
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayModeKHR(
     VkInstance instance,
     VkPhysicalDevice physical_device,
     VkDisplayKHR display,
     const VkDisplayModeCreateInfoKHR* create_info,
     const VkAllocationCallbacks* allocator,
-    VkDisplayModeKHR* out_mode
-);
+    VkDisplayModeKHR* out_mode);
