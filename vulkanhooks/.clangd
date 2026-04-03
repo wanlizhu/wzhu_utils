@@ -1,0 +1,4 @@
+# See https://clangd.llvm.org/config.html
+Diagnostics:
+  # Include Cleaner: do not warn about includes not "used directly" in a header (e.g. transitive use).
+  UnusedIncludes: None

@@ -2,4 +2,269 @@
 alwaysApply: true
 ---
 
-Format C/C++ code using code style mentioned in .editorconfig file
+Use the C/C++ code style defined in the .editorconfig file as the baseline, and treat the rules in this file as extensions and amendments.
+
+General
+-------
+- Use spaces only, never tabs.
+- Indent with 4 spaces.
+- Treat tab width as 4 only when reading existing code.
+- Preserve semantics; change formatting only unless explicitly asked otherwise.
+
+Indentation
+-----------
+- Do not indent braces relative to the owning statement.
+- For multiline expressions, indent relative to the innermost open parenthesis.
+- Indent wrapped content inside parentheses normally.
+- Do not preserve irregular original indentation inside parentheses; normalize it.
+- Indent namespace contents.
+- Do not indent access specifiers inside classes.
+- Keep preprocessor directives at column 0.
+- Do not preserve irregular comment indentation; normalize it.
+- Indent case labels inside switch blocks.
+- Indent statements under case labels.
+- If a case contains an explicit block, do not add extra indentation beyond the block itself.
+- Indent lambda braces normally when the lambda is used as a parameter.
+- goto labels should be one indent level left of normal statements in the same block.
+
+Brace Placement
+---------------
+- Preserve local/project style for brace placement of namespace, type, function, block, and lambda opening braces if existing style is clear.
+- Do not force scope braces onto isolated lines beyond normal formatting.
+- Empty class/struct bodies must not use `{}` on one line.
+- Empty function bodies must not use `{}` on one line.
+- Keep `else` on the same line as the preceding `}`.
+- Keep `catch` on the same line as the preceding `}`.
+- Keep `while` in `do { ... } while (...)` on the same line as the preceding `}`.
+
+Spacing
+-------
+- No space before function call/declaration `(`.
+- No spaces inside function parameter parentheses.
+- Empty parameter list must be `()`, not `( )`.
+- One space after control-flow keywords: `if (` `for (` `while (` `switch (` `catch (`.
+- No spaces inside control-flow parentheses.
+- No space between lambda capture `[]` and lambda parameter `(`.
+- No spaces inside cast parentheses.
+- No extra space after cast close parenthesis.
+- No spaces inside ordinary expression parentheses.
+- One space before block-opening `{`.
+- Empty braces use `{}`, not `{ }` when single-token form is allowed.
+- No space before initializer-list `{` in `Type{...}`.
+- Use spaces inside initializer-list braces: `{ 1, 2 }`.
+- Preserve readable/aligned spacing inside initializer lists if already present.
+- No space before `[`.
+- No spaces inside `[]`.
+- Empty brackets must be `[]`, not `[ ]`.
+- Keep adjacent bracket groups together: `matrix[i][j]`, not `matrix[i] [j]`.
+- No spaces inside lambda capture brackets.
+- Empty lambda capture must be `[]`, not `[ ]`.
+- No space before comma.
+- One space after comma.
+- No spaces around `.` and `->`.
+- One space before inheritance colon.
+- One space before constructor initializer colon.
+- No space before semicolon.
+- One space after semicolon when followed by another token, e.g. in `for`.
+- No spaces around unary operators.
+- One space around binary operators.
+- One space around assignment operators.
+- Pointer/reference alignment is left: `int* ptr`, `const Foo& ref`.
+- One space around ternary `?` and `:`.
+
+One-line Blocks
+---------------
+- Preserve reasonable one-line blocks when appropriate, e.g. `if (!ok) { return; }`.
+- Expand to multiline when readability clearly benefits.
+
+Includes
+--------
+- Missing includes are suggestions, not hard errors.
+- Removing unused includes is allowed but should be done carefully.
+- Include optimization is a suggestion, not mandatory.
+- Do not auto-sort includes unless explicitly requested.
+- Unsorted includes are acceptable unless project style says otherwise.
+- Include sorting, if done, is case-insensitive.
+- Prefer quoted/local include grouping consistent with project style.
+- Use forward slashes in include paths.
+- Do not invent a custom include policy if the project already has one.
+
+Function Parameter Layout
+-------------------------
+- These rules apply to function declarations and definitions.
+
+1. No parameters:
+    - Keep `()` on the same line.
+    - Example:
+        `void foo();`
+
+2. Exactly one parameter:
+    - Compare the visual length of the parameter against the function name only.
+    - Do not include return type or calling convention in the comparison.
+    - If the parameter is shorter than the function name:
+        - keep it inline: `foo(int value);`
+    - If the parameter is longer than the function name:
+        - break after `(`
+        - put the parameter on the next line
+        - put `)` or `);` on its own next line
+
+3. Two or more parameters:
+    - If the parameter list wraps, put one parameter per line.
+    - Put the closing `)` or `);` on its own line after the last parameter.
+
+4. Wrapped parameter list closing rule:
+    - If parameters span multiple lines, closing `)` must be on its own line.
+    - If the declaration ends with `;`, use `);` on its own line.
+    - If it is a definition, place `)` on its own line before the function body, unless the local brace style clearly requires otherwise.
+
+Examples
+--------
+- Good:
+    VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImage2KHR(
+        VkDevice device,
+        const VkAcquireNextImageInfoKHR* acquire_info,
+        uint32_t* image_index
+    );
+
+- Good:
+    void process(int value);
+
+- Good:
+    VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkSetPrivateDataEXT(
+        const VkDevicePrivateDataCreateInfoEXT* private_data_create_info
+    );
+
+- Good:
+    void foo();
+
+Naming
+------
+Macros
+- Always use UPPER_SNAKE_CASE.
+- Use only uppercase letters, digits, and underscores.
+- Separate words with underscores.
+- Avoid generic/conflicting names such as:
+    - MIN
+    - MAX
+    - ERROR
+    - SUCCESS
+    - CHECK
+    - VERSION
+    - NONE
+    - STATUS
+- Prefer project/module/subsystem prefixes for non-local macros.
+- Good:
+    - NVK_MAX_IMAGE_COUNT
+    - IMPL_VK_DEFAULT_TIMEOUT_NS
+    - DRIVER_LOG_ERROR
+
+Types
+- Use PascalCase for C++ class names, struct names, enum type names, and other user-defined types.
+- Type names should be nouns or noun phrases.
+- Type names should describe what the object is, not what it does.
+- Good:
+    - ImageCache
+    - DeviceMemoryInfo
+    - PresentQueueState
+
+C++ Functions
+- Use camelCase.
+- Prefer verb-noun phrasing for action functions.
+- Names must be descriptive enough to understand intent without reading implementation.
+- Avoid vague names such as:
+    - doStuff
+    - handle
+    - process
+    - run
+- Good:
+    - getName
+    - sendEmail
+    - calculateTotal
+    - updatePresentState
+    - createSwapchainImage
+
+C++ Boolean Functions
+- Use boolean-style prefixes:
+    - is
+    - has
+    - should
+    - can
+    - needs
+- Good:
+    - isValid
+    - hasPermission
+    - shouldRetry
+    - canPresentNow
+    - needsRebuild
+
+C++ Variables
+- Use camelCase for:
+    - local variables
+    - parameters
+    - member variables
+    - other non-type object names
+- Use descriptive names.
+- Boolean variables should read naturally as true/false state.
+- Avoid overly short names except obvious short-lived loop indices.
+- Good:
+    - imageIndex
+    - acquireInfo
+    - totalSize
+    - isEnabled
+    - hasPendingWork
+
+Pure C Functions
+- Use snake_case.
+- Prefer verb-noun phrasing.
+- Names must be descriptive.
+- Good:
+    - get_name
+    - send_email
+    - calculate_total
+    - update_present_state
+
+Pure C Boolean Functions
+- Use prefixes:
+    - is_
+    - has_
+    - should_
+    - can_
+    - needs_
+- Good:
+    - is_valid
+    - has_permission
+    - should_retry
+
+Pure C Variables
+- Use snake_case for:
+    - local variables
+    - parameters
+    - struct fields in pure C
+    - static file-scope variables in pure C
+- Use descriptive names.
+- Boolean variables should read naturally as true/false state.
+- Good:
+    - image_index
+    - acquire_info
+    - total_size
+    - is_enabled
+    - has_pending_work
+
+Language-Based Naming Selection
+-------------------------------
+- Macros in both C and C++: UPPER_SNAKE_CASE
+- C++ classes/structs/types: PascalCase
+- C++ functions: camelCase
+- C++ variables: camelCase
+- Pure C functions: snake_case
+- Pure C variables: snake_case
+
+Operational Priority
+--------------------
+When generating or rewriting code, prioritize in this order:
+1. Preserve semantics
+2. Match existing local/project style where rules explicitly say to preserve local style
+3. Apply hard spacing/indentation rules
+4. Apply function parameter layout rules
+5. Apply naming rules
+6. Avoid unnecessary rewrites outside the requested scope

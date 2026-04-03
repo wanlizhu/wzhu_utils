@@ -1,216 +1,148 @@
-// SPDX-License-Identifier: Apache-2.0
-// Device / queue interceptors; dispatch/registry in layer_core/; timing report in utils/.
-
-#include "wzhu_hooks.h"
-#include "utils/wzhu_timing_statistics.h"
-#include "layer_core/wzhu_layer_dispatch.h"
-#include <chrono>
-
-VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateSwapchainKHR(
-    VkDevice device,
-    const VkSwapchainCreateInfoKHR* create_info,
-    const VkAllocationCallbacks* allocator,
-    VkSwapchainKHR* out_swapchain) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_createSwapchainKhr == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result = dispatchTable->pfn_createSwapchainKhr(
-        device,
-        create_info,
-        allocator,
-        out_swapchain);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::CreateSwapchainKHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
-}
-
-VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroySwapchainKHR(
-    VkDevice device,
-    VkSwapchainKHR swapchain,
-    const VkAllocationCallbacks* allocator) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_destroySwapchainKhr == nullptr) {
-        return;
-    }
-    const auto timeStart = std::chrono::steady_clock::now();
-    dispatchTable->pfn_destroySwapchainKhr(device, swapchain, allocator);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::DestroySwapchainKHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetSwapchainImagesKHR(
-    VkDevice device,
-    VkSwapchainKHR swapchain,
-    uint32_t* image_count,
-    VkImage* images) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_getSwapchainImagesKhr == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result =
-        dispatchTable->pfn_getSwapchainImagesKhr(device, swapchain, image_count, images);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::GetSwapchainImagesKHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImageKHR(
-    VkDevice device,
-    VkSwapchainKHR swapchain,
-    uint64_t timeout_nanoseconds,
-    VkSemaphore semaphore,
-    VkFence fence,
-    uint32_t* image_index) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_acquireNextImageKhr == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result = dispatchTable->pfn_acquireNextImageKhr(
-        device,
-        swapchain,
-        timeout_nanoseconds,
-        semaphore,
-        fence,
-        image_index);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::AcquireNextImageKHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImage2KHR(
-    VkDevice device,
-    const VkAcquireNextImageInfoKHR* acquire_info,
-    uint32_t* image_index) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_acquireNextImage2Khr == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result =
-        dispatchTable->pfn_acquireNextImage2Khr(device, acquire_info, image_index);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::AcquireNextImage2KHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
-}
+#include "hook_device.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueuePresentKHR(
     VkQueue queue,
-    const VkPresentInfoKHR* present_info) {
-    const VkDevice device = WZHU_deviceHandleForQueue(queue);
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_queuePresentKhr == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+    const VkPresentInfoKHR* presentInfo
+) {
+    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueDeviceMap.end()) {
+        return VK_ERROR_UNKNOWN;
     }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result = dispatchTable->pfn_queuePresentKhr(queue, present_info);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::QueuePresentKHR,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-        WZHU_recordPresent();
-        WZHU_sampleGpuTimestamp(dispatchTable, device);
-    }
-    return result;
+    
+    return GET_DEVICE_DISPATCH_TABLE(queueDeviceIt->second, vkQueuePresentKHR)->pfn_vkQueuePresentKHR(queue, presentInfo);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit(
     VkQueue queue,
-    uint32_t submit_count,
+    uint32_t submitCount,
     const VkSubmitInfo* submits,
-    VkFence fence) {
-    const VkDevice device = WZHU_deviceHandleForQueue(queue);
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_queueSubmit == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+    VkFence fence
+) {
+    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueDeviceMap.end()) {
+        return VK_ERROR_UNKNOWN;
     }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result = dispatchTable->pfn_queueSubmit(queue, submit_count, submits, fence);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::QueueSubmit,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
+
+    return GET_DEVICE_DISPATCH_TABLE(queueDeviceIt->second, vkQueueSubmit)->pfn_vkQueueSubmit(queue, submitCount, submits, fence);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit2(
     VkQueue queue,
-    uint32_t submit_count,
+    uint32_t submitCount,
     const VkSubmitInfo2* submits,
-    VkFence fence) {
-    const VkDevice device = WZHU_deviceHandleForQueue(queue);
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_queueSubmit2 == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+    VkFence fence
+) {
+    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueDeviceMap.end()) {
+        return VK_ERROR_UNKNOWN;
     }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result = dispatchTable->pfn_queueSubmit2(queue, submit_count, submits, fence);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::QueueSubmit2,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
+
+    return GET_DEVICE_DISPATCH_TABLE(queueDeviceIt->second, vkQueueSubmit2)->pfn_vkQueueSubmit2(queue, submitCount, submits, fence);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueBindSparse(
     VkQueue queue,
-    uint32_t bind_info_count,
-    const VkBindSparseInfo* bind_infos,
-    VkFence fence) {
-    const VkDevice device = WZHU_deviceHandleForQueue(queue);
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_queueBindSparse == nullptr) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+    uint32_t bindInfoCount,
+    const VkBindSparseInfo* bindInfos,
+    VkFence fence
+) {
+    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueDeviceMap.end()) {
+        return VK_ERROR_UNKNOWN;
     }
-    const auto timeStart = std::chrono::steady_clock::now();
-    const VkResult result =
-        dispatchTable->pfn_queueBindSparse(queue, bind_info_count, bind_infos, fence);
-    const auto timeEnd = std::chrono::steady_clock::now();
-    WZHU_recordVulkanAPINanoseconds(
-        VulkanAPI_ID::QueueBindSparse,
-        std::chrono::duration_cast<std::chrono::nanoseconds>(timeEnd - timeStart).count());
-    return result;
+
+    return GET_DEVICE_DISPATCH_TABLE(queueDeviceIt->second, vkQueueBindSparse)->pfn_vkQueueBindSparse(queue, bindInfoCount, bindInfos, fence);
 }
 
 VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue(
     VkDevice device,
-    uint32_t queue_family_index,
-    uint32_t queue_index,
-    VkQueue* out_queue) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_getDeviceQueue == nullptr) {
-        return;
-    }
-    dispatchTable->pfn_getDeviceQueue(device, queue_family_index, queue_index, out_queue);
-    if (out_queue != nullptr && *out_queue != VK_NULL_HANDLE) {
-        WZHU_registerQueueHandle(*out_queue, device);
+    uint32_t queueFamilyIndex,
+    uint32_t queueIndex,
+    VkQueue* outQueue
+) {
+    GET_DEVICE_DISPATCH_TABLE(device, vkGetDeviceQueue)->pfn_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, outQueue);
+
+    if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE) {
+        g_queueDeviceMap[*outQueue] = device;
     }
 }
 
 VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue2(
     VkDevice device,
-    const VkDeviceQueueInfo2* queue_info,
-    VkQueue* out_queue) {
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_getDeviceQueue2 == nullptr) {
-        return;
-    }
-    dispatchTable->pfn_getDeviceQueue2(device, queue_info, out_queue);
-    if (out_queue != nullptr && *out_queue != VK_NULL_HANDLE) {
-        WZHU_registerQueueHandle(*out_queue, device);
+    const VkDeviceQueueInfo2* queueInfo,
+    VkQueue* outQueue
+) {
+    GET_DEVICE_DISPATCH_TABLE(device, vkGetDeviceQueue2)->pfn_vkGetDeviceQueue2(device, queueInfo, outQueue);
+
+    if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE) {
+        g_queueDeviceMap[*outQueue] = device;
     }
 }
+
+#ifdef HOOK_VULKAN_SWAPCHAIN_API
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateSwapchainKHR(
+    VkDevice device,
+    const VkSwapchainCreateInfoKHR* createInfo,
+    const VkAllocationCallbacks* allocator,
+    VkSwapchainKHR* outSwapchain
+) {
+    return GET_DEVICE_DISPATCH_TABLE(device, vkCreateSwapchainKHR)->pfn_vkCreateSwapchainKHR(
+        device,
+        createInfo,
+        allocator,
+        outSwapchain
+    );
+}
+
+VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroySwapchainKHR(
+    VkDevice device,
+    VkSwapchainKHR swapchain,
+    const VkAllocationCallbacks* allocator
+) {
+    GET_DEVICE_DISPATCH_TABLE(device, vkDestroySwapchainKHR)->pfn_vkDestroySwapchainKHR(device, swapchain, allocator);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetSwapchainImagesKHR(
+    VkDevice device,
+    VkSwapchainKHR swapchain,
+    uint32_t* imageCount,
+    VkImage* images
+) {
+    return GET_DEVICE_DISPATCH_TABLE(device, vkGetSwapchainImagesKHR)->pfn_vkGetSwapchainImagesKHR(
+        device,
+        swapchain,
+        imageCount,
+        images
+    );
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImageKHR(
+    VkDevice device,
+    VkSwapchainKHR swapchain,
+    uint64_t timeoutNanoseconds,
+    VkSemaphore semaphore,
+    VkFence fence,
+    uint32_t* imageIndex
+) {
+    return GET_DEVICE_DISPATCH_TABLE(device, vkAcquireNextImageKHR)->pfn_vkAcquireNextImageKHR(
+        device,
+        swapchain,
+        timeoutNanoseconds,
+        semaphore,
+        fence,
+        imageIndex
+    );
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkAcquireNextImage2KHR(
+    VkDevice device,
+    const VkAcquireNextImageInfoKHR* acquireInfo,
+    uint32_t* imageIndex
+) {
+    return GET_DEVICE_DISPATCH_TABLE(device, vkAcquireNextImage2KHR)->pfn_vkAcquireNextImage2KHR(
+        device,
+        acquireInfo,
+        imageIndex
+    );
+}
+#endif // HOOK_VULKAN_SWAPCHAIN_API

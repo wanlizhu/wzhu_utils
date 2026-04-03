@@ -3,20 +3,17 @@
     "layer": {
         "name": "VK_LAYER_WZHU_profiling",
         "type": "GLOBAL",
-        "library_path": "./libVkLayer_wzhu_profiling.so",
+        "library_path": "@WZHU_LAYER_RELATIVE_LIB_PATH@",
         "api_version": "1.3.280",
         "implementation_version": "1",
         "description": "Low-overhead vulkan profiling layer for nvidia gpu",
+        "disable_environment": {
+            "WZHU_VK": "0"
+        },
         "functions": {
             "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion",
             "vkGetInstanceProcAddr": "vkGetInstanceProcAddr",
             "vkGetDeviceProcAddr": "vkGetDeviceProcAddr"
-        },
-        "enable_environment": {
-            "WZHU_PROFILING": "1"
-        },
-        "disable_environment": {
-            "WZHU_PROFILING": "0"
         }
     }
 }

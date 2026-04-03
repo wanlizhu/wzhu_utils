@@ -1,117 +1,90 @@
-// SPDX-License-Identifier: Apache-2.0
-
-#include "wzhu_hooks.h"
-#include "layer_core/wzhu_layer_dispatch.h"
-#include <cstring>
+#include "hook_dispatch.h"
+#include "hook_device.h"
+#include "hook_instance.h"
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     VkInstance instance,
-    const char* name) {
-    if (name == nullptr) {
-        return nullptr;
-    }
-
-#define WZHU_RESOLVE_INSTANCE_SYMBOL(symbol_name, handler)    \
-    if (std::strcmp(name, symbol_name) == 0) {                \
-        return reinterpret_cast<PFN_vkVoidFunction>(handler); \
-    }
-
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateInstance", IMPL_vkCreateInstance);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyInstance", IMPL_vkDestroyInstance);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDevice", IMPL_vkCreateDevice);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkDestroyDevice", IMPL_vkDestroyDevice);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetInstanceProcAddr", IMPL_vkGetInstanceProcAddr);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDeviceProcAddr", IMPL_vkGetDeviceProcAddr);
-
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
-        IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceSurfaceFormatsKHR",
-        IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceSurfacePresentModesKHR",
-        IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceSurfaceSupportKHR",
-        IMPL_vkGetPhysicalDeviceSurfaceSupportKHR);
-
+    const char* name
+) {
+    if (name == nullptr) { return nullptr; }
+    if (std::strcmp(name, "vkCreateInstance") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateInstance); }
+    if (std::strcmp(name, "vkDestroyInstance") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroyInstance); }
+    if (std::strcmp(name, "vkCreateDevice") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateDevice); }
+    if (std::strcmp(name, "vkDestroyDevice") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroyDevice); }
+    if (std::strcmp(name, "vkGetInstanceProcAddr") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetInstanceProcAddr); }
+    if (std::strcmp(name, "vkGetDeviceProcAddr") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDeviceProcAddr); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceSurfaceFormatsKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceSurfacePresentModesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceSurfaceSupportKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceSurfaceSupportKHR); }
+    if (std::strcmp(name, "vkCreateDisplayPlaneSurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateDisplayPlaneSurfaceKHR); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceDisplayPropertiesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR); }
+    if (std::strcmp(name, "vkGetPhysicalDeviceDisplayPlanePropertiesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR); }
+    if (std::strcmp(name, "vkGetDisplayModePropertiesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDisplayModePropertiesKHR); }
+    if (std::strcmp(name, "vkGetDisplayPlaneSupportedDisplaysKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDisplayPlaneSupportedDisplaysKHR); }
+    if (std::strcmp(name, "vkGetDisplayPlaneCapabilitiesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDisplayPlaneCapabilitiesKHR); }
+    if (std::strcmp(name, "vkCreateDisplayModeKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateDisplayModeKHR); }
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXcbSurfaceKHR", IMPL_vkCreateXcbSurfaceKHR);
+    if (std::strcmp(name, "vkCreateXcbSurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateXcbSurfaceKHR); }
 #endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateXlibSurfaceKHR", IMPL_vkCreateXlibSurfaceKHR);
+    if (std::strcmp(name, "vkCreateXlibSurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateXlibSurfaceKHR); }
 #endif
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWaylandSurfaceKHR", IMPL_vkCreateWaylandSurfaceKHR);
+    if (std::strcmp(name, "vkCreateWaylandSurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateWaylandSurfaceKHR); }
 #endif
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateWin32SurfaceKHR", IMPL_vkCreateWin32SurfaceKHR);
+    if (std::strcmp(name, "vkCreateWin32SurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateWin32SurfaceKHR); }
 #endif
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkCreateDisplayPlaneSurfaceKHR",
-        IMPL_vkCreateDisplayPlaneSurfaceKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceDisplayPropertiesKHR",
-        IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetPhysicalDeviceDisplayPlanePropertiesKHR",
-        IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkGetDisplayModePropertiesKHR", IMPL_vkGetDisplayModePropertiesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetDisplayPlaneSupportedDisplaysKHR",
-        IMPL_vkGetDisplayPlaneSupportedDisplaysKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL(
-        "vkGetDisplayPlaneCapabilitiesKHR",
-        IMPL_vkGetDisplayPlaneCapabilitiesKHR);
-    WZHU_RESOLVE_INSTANCE_SYMBOL("vkCreateDisplayModeKHR", IMPL_vkCreateDisplayModeKHR);
 
-#undef WZHU_RESOLVE_INSTANCE_SYMBOL
-
-    WZHU_InstanceDispatchTable* dispatchTable = WZHU_instanceDispatchTableFor(instance);
-    if (dispatchTable == nullptr || dispatchTable->pfn_getInstanceProcAddr == nullptr) {
+    auto instIt = g_instanceDispatchTableMap.find(instance);
+    if (instIt == g_instanceDispatchTableMap.end()) {
         return nullptr;
     }
-    return dispatchTable->pfn_getInstanceProcAddr(instance, name);
+
+    WZHU_InstanceDispatchTable* dispatchTable = instIt->second.get();
+    if (dispatchTable->pfn_vkGetInstanceProcAddr == nullptr) {
+        return nullptr;
+    }
+
+    return dispatchTable->pfn_vkGetInstanceProcAddr(instance, name);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetDeviceProcAddr(
     VkDevice device,
-    const char* name) {
-    if (name == nullptr) {
+    const char* name
+) {
+    if (name == nullptr) { return nullptr; }
+    if (std::strcmp(name, "vkGetDeviceProcAddr") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDeviceProcAddr); }
+    if (std::strcmp(name, "vkDestroyDevice") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroyDevice); }
+    if (std::strcmp(name, "vkGetDeviceQueue") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDeviceQueue); }
+    if (std::strcmp(name, "vkGetDeviceQueue2") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetDeviceQueue2); }
+    if (std::strcmp(name, "vkCreateSwapchainKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateSwapchainKHR); }
+    if (std::strcmp(name, "vkDestroySwapchainKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroySwapchainKHR); }
+    if (std::strcmp(name, "vkGetSwapchainImagesKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetSwapchainImagesKHR); }
+    if (std::strcmp(name, "vkAcquireNextImageKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkAcquireNextImageKHR); }
+    if (std::strcmp(name, "vkAcquireNextImage2KHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkAcquireNextImage2KHR); }
+    if (std::strcmp(name, "vkQueuePresentKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueuePresentKHR); }
+    if (std::strcmp(name, "vkQueueSubmit") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueueSubmit); }
+    if (std::strcmp(name, "vkQueueSubmit2") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueueSubmit2); }
+    if (std::strcmp(name, "vkQueueBindSparse") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueueBindSparse); }
+
+    auto deviceTableIt = g_deviceDispatchTableMap.find(device);
+    if (deviceTableIt == g_deviceDispatchTableMap.end()) {
+        return nullptr;
+    }
+    
+    WZHU_DeviceDispatchTable* dispatchTable = deviceTableIt->second.get();
+    if (dispatchTable->pfn_vkGetDeviceProcAddr == nullptr) {
         return nullptr;
     }
 
-#define WZHU_RESOLVE_DEVICE_SYMBOL(symbol_name, handler)      \
-    if (std::strcmp(name, symbol_name) == 0) {                \
-        return reinterpret_cast<PFN_vkVoidFunction>(handler); \
-    }
-
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceProcAddr", IMPL_vkGetDeviceProcAddr);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroyDevice", IMPL_vkDestroyDevice);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue", IMPL_vkGetDeviceQueue);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetDeviceQueue2", IMPL_vkGetDeviceQueue2);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkCreateSwapchainKHR", IMPL_vkCreateSwapchainKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkDestroySwapchainKHR", IMPL_vkDestroySwapchainKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkGetSwapchainImagesKHR", IMPL_vkGetSwapchainImagesKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImageKHR", IMPL_vkAcquireNextImageKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkAcquireNextImage2KHR", IMPL_vkAcquireNextImage2KHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueuePresentKHR", IMPL_vkQueuePresentKHR);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit", IMPL_vkQueueSubmit);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueSubmit2", IMPL_vkQueueSubmit2);
-    WZHU_RESOLVE_DEVICE_SYMBOL("vkQueueBindSparse", IMPL_vkQueueBindSparse);
-
-#undef WZHU_RESOLVE_DEVICE_SYMBOL
-
-    WZHU_DeviceDispatchTable* dispatchTable = WZHU_deviceDispatchTableFor(device);
-    if (dispatchTable == nullptr || dispatchTable->pfn_getDeviceProcAddr == nullptr) {
-        return nullptr;
-    }
-    return dispatchTable->pfn_getDeviceProcAddr(device, name);
+    return dispatchTable->pfn_vkGetDeviceProcAddr(device, name);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetPhysicalDeviceProcAddr(
     VkInstance instance,
-    const char* name) {
+    const char* name
+) {
     return IMPL_vkGetInstanceProcAddr(instance, name);
 }
