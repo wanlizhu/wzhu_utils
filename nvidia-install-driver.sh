@@ -73,7 +73,7 @@ run_nvidia_driver_installer() {
             tar -xf $test_pkg || echo_in_red "Failed to unzip $test_pkg"
             cd tests-Linux-$(uname -m) && {
                 cp LockToRatedTdp/LockToRatedTdp $HOME/.local/bin/ && echo_in_green "Installed LockToRatedTdp"
-                cp sanbag-tool/sandbag-tool $HOME/.local/bin/ && echo_in_green "Installed sandbag-tool"
+                cp sandbag-tool/sandbag-tool $HOME/.local/bin/ && echo_in_green "Installed sandbag-tool"
             }
         fi 
         sudo nvidia-smi -pm 1 
