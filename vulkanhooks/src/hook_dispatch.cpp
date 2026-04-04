@@ -50,9 +50,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     }
 
     if (dispatchTable == nullptr) {
-        PFN_vkGetInstanceProcAddr nextGipa = WZHU_getNextGIPA();
-        if (nextGipa != nullptr) {
-            return reinterpret_cast<PFN_vkVoidFunction>(nextGipa(instance, name));
+        PFN_vkGetInstanceProcAddr pfn_vkGetInstanceProcAddr = WZHU_get_pfn_vkGetInstanceProcAddr_inFlight();
+        if (pfn_vkGetInstanceProcAddr != nullptr) {
+            return reinterpret_cast<PFN_vkVoidFunction>(pfn_vkGetInstanceProcAddr(instance, name));
         }
         return nullptr;
     }
