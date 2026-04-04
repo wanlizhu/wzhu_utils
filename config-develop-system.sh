@@ -321,12 +321,16 @@ if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
     ) | sudo tee /etc/apt/sources.list.d/ddebs.sources
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
-if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
-    sudo apt update  
-    sudo apt upgrade -y 
-    sudo apt autoremove -y  
-    echo_in_green "Finished updating apt packages"
-fi  
+if [[ $1 == noupdate ]]; then 
+    echo_in_cyan "Forced to skip updating apt packages"
+else 
+    if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
+        sudo apt update  
+        sudo apt upgrade -y 
+        sudo apt autoremove -y  
+        echo_in_green "Finished updating apt packages"
+    fi  
+fi 
 find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
     build-essential cmake git ninja-build pkg-config meson clang \
     vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
