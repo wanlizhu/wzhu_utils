@@ -58,6 +58,10 @@ config_horizon_for_perftest() {
         sudo `which perfdebug` --lock_loose  set sysclkkHz   1800000
         sudo `which perfdebug` --force_regime ffr 
         sudo `which perfdebug` --getclocks
+        if [[ -z $__GL_DeviceModalityPreference ]]; then 
+            export __GL_DeviceModalityPreference=1
+            echo "export __GL_DeviceModalityPreference=1"
+        fi 
         echo "Finished setting up horizon board for perftest"
     else # The x86_64 proxy system (GB203-as-T254)
         echo_in_cyan "Setting up GB203-as-T254 proxy for perftest ..."
@@ -73,11 +77,6 @@ config_horizon_for_perftest() {
         sudo `which perfdebug` --force_regime ffr 
         sudo `which perfdebug` --getclocks
         echo "Finished setting up GB203-as-T254 proxy for perftest"
-    fi 
-
-    if [[ -z $__GL_DeviceModalityPreference ]]; then 
-        export __GL_DeviceModalityPreference=1
-        echo "export __GL_DeviceModalityPreference=1"
     fi 
 }
 
