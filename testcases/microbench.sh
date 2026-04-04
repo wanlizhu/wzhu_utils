@@ -85,7 +85,7 @@ fi
 if [[ -z $1 ]]; then 
     echo_in_cyan "Saving results to ~/microbench_results[.txt|.csv]"
     [[ $T254_PERFTEST == 1 ]] && config_horizon_for_perftest || nvidia_smi_max_clocks
-    nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt
+    nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt || exit 1
     [[ $T254_PERFTEST == 1 ]] || nvidia_smi_max_clocks reset 
 
     if [[ -s ~/microbench_results.txt ]]; then 
