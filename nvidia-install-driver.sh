@@ -60,7 +60,7 @@ run_nvidia_driver_installer() {
     read -p "Press [Enter] to continue: "
     [[ ! -e $file ]] && { echo_in_red "File doesn't exist: $file"; exit 1; }
     [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && { lsmod | awk '$1 ~ /^nvidia/ {print $1}'; echo_in_red "Failed to unload nvidia modules"; exit 1; }
-    [[ ! -z $(which nvidia-uninstall) ]] && sudo nvidia-uninstall 
+    [[ ! -z $(which nvidia-uninstall) ]] && sudo nvidia-uninstall --no-questions
 
     sudo chmod +x $file 2>/dev/null 
     sudo $file --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
