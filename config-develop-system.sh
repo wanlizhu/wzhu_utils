@@ -68,6 +68,19 @@ print_nvparams() {
         }
     '
 }
+mount_linuxqa() {
+    if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
+        echo "WSL does not support NFS mounting"
+    else 
+        if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
+            [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
+            [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
+            [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+        else
+            echo "NOT inside nvidia domain, skip linuxqa mounting"
+        fi 
+    fi 
+}
 mount_nfs() {
     sudo mkdir -p /mnt/$(basename $1)
     sudo mount -t nfs $1 /mnt/$(basename $1) && echo "Mounted /mnt/$(basename $1)"
@@ -295,25 +308,6 @@ if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/nu
     sudo systemctl start ssh
 fi 
 
-# Mount data dirs
-if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
-    echo "WSL doesn't support NFS mounting"
-else 
-    if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-        read -p "Reconnect to nvidia vpn? [Y/n]: " recon
-        [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
-    fi
-    if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-        [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
-        [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
-        [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
-    else
-        echo "NOT inside nvidia domain, skip NFS mounting"
-    fi 
-fi 
-
-if [[ ! -z $(which collect-system-info.sh) ]]; then 
-    collect-system-info.sh 
-fi 
-
+mount_linuxqa
+collect-system-info.sh 
 exec /usr/bin/bash 
