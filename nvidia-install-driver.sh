@@ -53,7 +53,8 @@ shutdown_graphical_env() {
 run_nvidia_driver_installer() {
     local file=$1 
     local test_pkg=$2
-    [[ $XDG_SESSION_TYPE != tty ]] && { echo_in_red "Must run over SSH"; exit 1; }
+    echo_in_yellow "Must run over SSH connection!"
+    read -p "Press [Enter] to continue: "
     [[ ! -e $file ]] && { echo_in_red "File doesn't exist: $file"; exit 1; }
     [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && { lsmod | awk '$1 ~ /^nvidia/ {print $1}'; echo_in_red "Failed to unload nvidia modules"; exit 1; }
     [[ -z $(which expect) ]] && sudo apt install -y expect 
