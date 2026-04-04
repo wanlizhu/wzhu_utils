@@ -49,7 +49,7 @@ shutdown_graphical_env() {
 }
 
 # Launch a text-based ui for interactive installation 
-install_local_file() {
+run_nvidia_driver_installer() {
     local file=$1 
     local test_pkg=$2
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
@@ -93,10 +93,28 @@ EOF
     }
 }
 
+download_nvidia_driver_installer() {
+    local filename=$(basename $1)
+    local filedir=$(dirname $1)
+    pushd $HOME >/dev/null 
+    sudo rm -rf $filename tests-Linux-$(uname -m).tar
+    wget "$1" && echo "Downloaded installer: $HOME/$filename" || echo "Downloaded installer: N/A"
+    wget "$filedir/tests-Linux-$(uname -m).tar" && echo "Downloaded test pkg: $HOME/tests-Linux-$(uname -m).tar" || echo "Downloaded test pkg: N/A"
+    popd >/dev/null 
+}
+
 # If $1 is an existing file path 
-if [[ -z $1 || -f $1 ]]; then 
+if [[ ! -z $1 ]]; then 
+    installer=$1
+    test_pkg=$2
+    if [[ $installer == "http"* ]]; then 
+        download_nvidia_driver_installer $1 | tee /tmp/log 
+        installer=$(cat /tmp/log | grep "Downloaded installer:" | awk '{print $3}')
+        test_pkg=$(cat /tmp/log | grep "Downloaded test pkg:" | awk '{print $4}')
+    fi 
+
     shutdown_graphical_env || exit 1
-    install_local_file $1 $2 
+    run_nvidia_driver_installer $installer $test_pkg
 fi 
 
 if [[ -f /tmp/cmd ]]; then 
