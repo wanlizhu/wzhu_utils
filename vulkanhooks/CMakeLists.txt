@@ -17,7 +17,10 @@ add_library(VkLayer_wzhu_profiling SHARED
     src/hook_device.cpp
     src/hook_instance.cpp
     src/hook_dispatch.cpp
+    src/utils_device.cpp
 )
+
+target_link_libraries(VkLayer_wzhu_profiling PRIVATE Vulkan::Vulkan)
 
 set_target_properties(VkLayer_wzhu_profiling PROPERTIES
     OUTPUT_NAME "VkLayer_wzhu_profiling"

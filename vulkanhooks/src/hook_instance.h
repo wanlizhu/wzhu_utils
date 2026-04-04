@@ -1,8 +1,10 @@
 #pragma once
 #include "config.h"
 #include "layer_log.h"
+#include "utils_device.h"
 
 PFN_vkGetInstanceProcAddr WZHU_getNextGIPA();
+VkInstance WZHU_instanceForPhysicalDevice(VkPhysicalDevice physicalDevice);
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
     const VkInstanceCreateInfo* createInfo,

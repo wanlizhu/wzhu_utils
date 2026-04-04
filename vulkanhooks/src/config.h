@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 #include <memory>
+#include <map>
 #include <unordered_map>
 #include <cstring>
 #include <string>
@@ -27,6 +28,9 @@ inline void __UnusedVariables__(T&&...) {}
 #define HOOK_VULKAN_SWAPCHAIN_API
 #define DUMP_HOOKED_API
 
+// Dispatch slots only for Vulkan commands this layer implements (IMPL_vk*) and forwards. Other Vulkan
+// entry points can be called directly when linking the loader (Vulkan::Vulkan), same as a normal app,
+// without adding fields here.
 struct WZHU_InstanceDispatchTable {
     // VkInstance returned from pfnNextCreateInstance; use for downstream calls when the loader passes a
     // different dispatchable handle for the same logical instance.
@@ -81,6 +85,8 @@ struct WZHU_DeviceDispatchTable {
 };
 
 extern std::mutex g_instanceDispatchTableMutex;
+extern VkInstance g_selectedInstance;
+extern PFN_vkGetInstanceProcAddr g_pfn_vkGetInstanceProcAddr;
 extern std::unordered_map<VkInstance, std::shared_ptr<WZHU_InstanceDispatchTable>> g_instanceToDispatchTableMap;
 extern std::unordered_map<VkPhysicalDevice, VkInstance> g_physicalDeviceToInstanceMap;
 extern std::unordered_map<VkDevice, std::unique_ptr<WZHU_DeviceDispatchTable>> g_deviceToDispatchTableMap;
@@ -141,5 +147,7 @@ inline WZHU_DeviceDispatchTable* getDeviceDispatchTable(
 #define GET_DEVICE_DISPATCH_TABLE(device, symbol) getDeviceDispatchTable((device), &WZHU_DeviceDispatchTable::pfn_##symbol, __FILE__, __LINE__)
 #define LOAD_INSTANCE_FUNC(pfn_loader, instance, symbol) reinterpret_cast<PFN_##symbol>(pfn_loader((instance), #symbol))
 #define LOAD_DEVICE_FUNC(pfn_loader, device, symbol) reinterpret_cast<PFN_##symbol>(pfn_loader((device), #symbol))
+#define INSTANCE_FUNC(symbol) reinterpret_cast<PFN_##symbol>(g_pfn_vkGetInstanceProcAddr(g_selectedInstance, #symbol))
+
 #define WZHU_LOG(...) fprintf(stderr, "[wzhu] " __VA_ARGS__)
 #define VK_ASSERT(result) if (result != VK_SUCCESS) { WZHU_LOG("VkResult: %s\n", WZHU_VkResult(result)); } 

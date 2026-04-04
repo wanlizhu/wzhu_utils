@@ -1,4 +1,5 @@
 #include "hook_instance.h"
+#include "config.h"
 #include "dump_hooked_api.h"
 #include "layer_log.h"
 #include "vulkan/vulkan_core.h"
@@ -36,9 +37,9 @@ PFN_vkGetInstanceProcAddr WZHU_getNextGIPA() {
     return WZHU_NextGIPA_Scope::next();
 }
 
-static VkInstance WZHU_instanceForPhysicalDevice(VkPhysicalDevice physicalDevice) {
+VkInstance WZHU_instanceForPhysicalDevice(VkPhysicalDevice physicalDevice) {
     std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
-    auto it = g_physicalDeviceToInstanceMap.find(physicalDevice);
+    const auto it = g_physicalDeviceToInstanceMap.find(physicalDevice);
     if (it == g_physicalDeviceToInstanceMap.end()) {
         return VK_NULL_HANDLE;
     }
@@ -105,16 +106,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
     {
         // Lifetime only: ctor/dtor push/pop pfn_vkGetInstanceProcAddr for re-entrant GIPA forwarding.
         WZHU_NextGIPA_Scope gipaScope(pfn_vkGetInstanceProcAddr);
+        WZHU_CPUTimer cpuTimer;
         VkResult createResult = pfn_vkCreateInstance(createInfo, allocator, outInstance);
         if (createResult != VK_SUCCESS || outInstance == nullptr || *outInstance == VK_NULL_HANDLE) {
             WZHU_LOG("Failed to call pfn_vkCreateInstance\n");
             return createResult;
         }
-
-        WZHU_dump_vkCreateInstance(createInfo, allocator, outInstance);
-#ifndef DUMP_HOOKED_API
-        WZHU_LOG("Created vulkan instance %p\n", *outInstance);
-#endif 
+        
+        g_selectedInstance = *outInstance;
+        g_pfn_vkGetInstanceProcAddr = pfn_vkGetInstanceProcAddr;
+        WZHU_dump_vkCreateInstance(createInfo, allocator, outInstance, cpuTimer.endForUsec());
 
         // Register the instance before LOAD_INSTANCE_FUNC: pfn_vkGetInstanceProcAddr or the loader may
         // re-enter IMPL_vkGetInstanceProcAddr before the map exists; WZHU_NextGIPA_Scope covers forwarding.
@@ -267,16 +268,14 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
         layerDeviceLink->u.pLayerInfo = layerDeviceLink->u.pLayerInfo->pNext;
     }
 
-    VkResult createResult = pfn_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice);
-    if (createResult != VK_SUCCESS || outDevice == nullptr || *outDevice == VK_NULL_HANDLE) {
+    WZHU_CPUTimer cpuTimer;
+    VkResult result = pfn_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice);
+    if (result != VK_SUCCESS || outDevice == nullptr || *outDevice == VK_NULL_HANDLE) {
         WZHU_LOG("Failed to create logical device\n");
-        return createResult;
+        return result;
     }
 
-    WZHU_dump_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice);
-#ifndef DUMP_HOOKED_API
-    WZHU_LOG("Created logical device %p\n", *outDevice);
-#endif 
+    WZHU_dump_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice, cpuTimer.endForUsec());
 
     PFN_vkGetDeviceProcAddr deviceProcLoader = pfn_vkGetDeviceProcAddr;
 

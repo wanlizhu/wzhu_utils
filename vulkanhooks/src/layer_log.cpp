@@ -1,4 +1,70 @@
 #include "layer_log.h"
+#include <chrono>
+#include <cstddef>
+#include <cstring>
+#include <ratio>
+#include <string>
+#include <vulkan/vulkan_core.h>
+
+static constexpr std::size_t gk_physicalDeviceFeatureNamesCount = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
+static const char* const gk_physicalDeviceFeatureNames[gk_physicalDeviceFeatureNamesCount] = {
+    "robustBufferAccess",
+    "fullDrawIndexUint32",
+    "imageCubeArray",
+    "independentBlend",
+    "geometryShader",
+    "tessellationShader",
+    "sampleRateShading",
+    "dualSrcBlend",
+    "logicOp",
+    "multiDrawIndirect",
+    "drawIndirectFirstInstance",
+    "depthClamp",
+    "depthBiasClamp",
+    "fillModeNonSolid",
+    "depthBounds",
+    "wideLines",
+    "largePoints",
+    "alphaToOne",
+    "multiViewport",
+    "samplerAnisotropy",
+    "textureCompressionETC2",
+    "textureCompressionASTC_LDR",
+    "textureCompressionBC",
+    "occlusionQueryPrecise",
+    "pipelineStatisticsQuery",
+    "vertexPipelineStoresAndAtomics",
+    "fragmentStoresAndAtomics",
+    "shaderTessellationAndGeometryPointSize",
+    "shaderImageGatherExtended",
+    "shaderStorageImageExtendedFormats",
+    "shaderStorageImageMultisample",
+    "shaderStorageImageReadWithoutFormat",
+    "shaderStorageImageWriteWithoutFormat",
+    "shaderUniformBufferArrayDynamicIndexing",
+    "shaderSampledImageArrayDynamicIndexing",
+    "shaderStorageBufferArrayDynamicIndexing",
+    "shaderStorageImageArrayDynamicIndexing",
+    "shaderClipDistance",
+    "shaderCullDistance",
+    "shaderFloat64",
+    "shaderInt64",
+    "shaderInt16",
+    "shaderResourceResidency",
+    "shaderResourceMinLod",
+    "sparseBinding",
+    "sparseResidencyBuffer",
+    "sparseResidencyImage2D",
+    "sparseResidencyImage3D",
+    "sparseResidency2Samples",
+    "sparseResidency4Samples",
+    "sparseResidency8Samples",
+    "sparseResidency16Samples",
+    "sparseResidencyAliased",
+    "variableMultisampleRate",
+    "inheritedQueries",
+};
+static_assert(sizeof(gk_physicalDeviceFeatureNames) / sizeof(gk_physicalDeviceFeatureNames[0]) == gk_physicalDeviceFeatureNamesCount, "gk_physicalDeviceFeatureNames must match VkPhysicalDeviceFeatures VkBool32 count");
 
 const char* WZHU_VkResult(VkResult result) {
     switch (result) {
@@ -101,6 +167,30 @@ const char* WZHU_VkResult(VkResult result) {
     }
 }
 
+const char* WZHU_VkQueueFlags(VkQueueFlags flags) {
+    static char szbuf[256];
+    memset(szbuf, 0, sizeof(szbuf));
+
+    std::string tmp = "";
+    if (flags & VK_QUEUE_GRAPHICS_BIT) { tmp += (tmp.empty() ? "GFX" : "|GFX"); }
+    if (flags & VK_QUEUE_COMPUTE_BIT) { tmp += (tmp.empty() ? "COMP" : "|COMP"); }
+    if (flags & VK_QUEUE_TRANSFER_BIT) { tmp += (tmp.empty() ? "TRANS" : "|TRANS"); }
+    if (flags & VK_QUEUE_SPARSE_BINDING_BIT) { tmp += (tmp.empty() ? "SPARSE" : "|SPARSE"); }
+#if defined(VK_API_VERSION_1_1)
+    if (flags & VK_QUEUE_PROTECTED_BIT) { tmp += (tmp.empty() ? "PROTECTED" : "|PROTECTED"); }
+#endif
+#if defined(VK_KHR_video_queue)
+    if (flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) { tmp += (tmp.empty() ? "VDEC" : "|VDEC"); }
+#endif
+#if defined(VK_KHR_video_encode_queue)
+    if (flags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) { tmp += (tmp.empty() ? "VENC" : "|VENC"); }
+#endif
+
+    memcpy(szbuf, tmp.c_str(), tmp.size());
+
+    return szbuf;
+}
+
 WZHU_LogTree::WZHU_LogTree() {}
 
 void WZHU_LogTree::push() {
@@ -127,18 +217,105 @@ void WZHU_LogTree::print(const char* fmt, ...) {
     va_end(args);
 }
 
-void WZHU_LogTree::printStringList(const char* name, const char* const* strs, uint32_t count) {
-    fprintf(stderr, "[wzhu] ");
-    for (int i = 0; i < m_indent; ++i) {
-        fputc(' ', stderr);
+void WZHU_LogTree::printStringList(
+    const char* name, 
+    const char* const* strs, 
+    uint32_t count,
+    bool oneline
+) {
+    if (count == 0) {
+        print("%s = []\n", name ? name : "NO_NAME");
+    } else {
+        if (oneline) {
+            fprintf(stderr, "[wzhu] ");
+            for (int i = 0; i < m_indent; ++i) {
+                fputc(' ', stderr);
+            }
+            fprintf(stderr, "%s = [", name ? name : "NO_NAME");
+            if (count >= 1) {
+                fprintf(stderr, "%s", strs[0] ? strs[0] : "NULL");
+            }
+            for (uint32_t i = 1; i < count; i++) {
+                fprintf(stderr, ", %s", strs[i] ? strs[i] : "NULL");
+            }
+            fprintf(stderr, "]\n");
+        } else {
+            print("%s = [\n", name ? name : "NO_NAME");
+            {
+                push();
+                for (uint32_t i = 0; i < count; i++) {
+                    print("%s\n", strs[i] ? strs[i] : "NULL");
+                }
+                pop();
+            }
+            print("]\n");
+        }
+    }
+}
+
+void WZHU_LogTree::printPhysicalDeviceFeatures(
+    const char* name,
+    const VkPhysicalDeviceFeatures* features,
+    bool oneline 
+) {
+    if (features == NULL) {
+        print("%s = []\n", name ? name : "NO_NAME");
+        return;
     }
 
-    fprintf(stderr, "%s = [", name ? name : "NO_NAME");
-    if (count >= 1) {
-        fprintf(stderr, "%s", strs[0] ? strs[0] : "NULL");
+    std::vector<std::string> enabledNames;
+    const VkBool32* elements = (const VkBool32*)features;
+    for (std::size_t i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); ++i) {
+        if (elements[i] == VK_TRUE) {
+            enabledNames.push_back(gk_physicalDeviceFeatureNames[i]);
+        }
     }
-    for (uint32_t i = 1; i < count; i++) {
-        fprintf(stderr, ", %s", strs[i] ? strs[i] : "NULL");
+
+    if (enabledNames.empty()) {
+        print("%s = []\n", name ? name : "NO_NAME");
+    } else {
+        if (oneline) {
+            fprintf(stderr, "[wzhu] ");
+            for (int i = 0; i < m_indent; ++i) {
+                fputc(' ', stderr);
+            }
+            fprintf(stderr, "%s = [", name ? name : "NO_NAME");
+            if (enabledNames.size() >= 1) {
+                fprintf(stderr, "%s", enabledNames[0].c_str());
+            }
+            for (std::size_t i = 1; i < enabledNames.size(); i++) {
+                fprintf(stderr, ", %s", enabledNames[i].c_str());
+            }
+            fprintf(stderr, "]\n");
+        } else {
+            print("%s = [\n", name ? name : "NO_NAME");
+            {
+                push();
+                for (std::size_t i = 0; i < enabledNames.size(); i++) {
+                    print("%s\n", enabledNames[i].c_str());
+                }
+                pop();
+            }
+            print("]\n");
+        }
     }
-    fprintf(stderr, "]\n");
+}
+
+WZHU_CPUTimer::WZHU_CPUTimer() {
+    m_start = std::chrono::high_resolution_clock::now();
+}
+
+uint32_t WZHU_CPUTimer::endForMsec() {
+    auto end = std::chrono::high_resolution_clock::now();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(end - m_start).count();
+}
+
+uint32_t WZHU_CPUTimer::endForUsec() {
+    auto end = std::chrono::high_resolution_clock::now();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::microseconds>(end - m_start).count();
+}
+
+uint32_t WZHU_CPUTimer::endForNsec() {
+    auto end = std::chrono::high_resolution_clock::now();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::nanoseconds>(end - m_start).count();
 }
