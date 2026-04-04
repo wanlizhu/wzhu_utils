@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -o pipefail
 
+T254_PERFTEST=1
+
 print_microbench_output_as_csv() {
     if [[ ! -e "$1" ]]; then 
         echo "Error: result file doesn't exist: $1"
@@ -30,6 +32,19 @@ except Exception:
 ' $1 $2 
 }
 
+setup_horizon_for_perftest() {
+    sandbag_tool_path=$(command -v sandbag-tool)
+    LockToRatedTdp_path=$(command -v LockToRatedTdp)
+    [[ ! -e $sandbag_tool_path ]] && { echo_in_red "Failed to find command sandbag-tool which is available under drivers/unix/testutils/sandbag-tool/_out/..."; exit 1; }
+    [[ ! -e $LockToRatedTdp_path ]] && { echo_in_red "Failed to find command LockToRatedTdp which is available under drivers/unix/testutils/lock-to-rated-tdp/_out/..."; exit 1; }
+
+    if [[ $(uname -m) == aarch64 ]]; then 
+        echo_in_cyan "Setting up horizon board for perftest ..."
+    else # The x86_64 proxy system (GB203-as-T254)
+        echo_in_cyan "Setting up GB203-as-T254 proxy for perftest ..."
+    fi 
+}
+
 if [[ $1 == "-h" || $1 == "--help" ]]; then 
     echo "Usage 1: $(basename $0) -- run for new result"
     echo "Usage 2: $(basename $0) output1 [output2] -- process existing results"
@@ -38,9 +53,9 @@ fi
 
 if [[ -z $1 ]]; then 
     echo_in_cyan "Saving results to ~/microbench_results[.txt|.csv]"
-    nvidia_smi_max_clocks
+    [[ $T254_PERFTEST == 1 ]] && setup_horizon_for_perftest || nvidia_smi_max_clocks
     nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt
-    nvidia_smi_max_clocks reset 
+    [[ $T254_PERFTEST == 1 ]] || nvidia_smi_max_clocks reset 
 
     if [[ -s ~/microbench_results.txt ]]; then 
         $0 $(realpath ~/microbench_results.txt) | tee ~/microbench_results.csv
