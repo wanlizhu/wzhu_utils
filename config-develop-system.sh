@@ -321,7 +321,7 @@ if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
     ) | sudo tee /etc/apt/sources.list.d/ddebs.sources
     sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
-if [[ $1 == noupdate ]]; then 
+if [[ $1 == noupdate || $1 == nopkg ]]; then 
     echo_in_cyan "Forced to skip updating apt packages"
 else 
     if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
@@ -331,17 +331,21 @@ else
         echo_in_green "Finished updating apt packages"
     fi  
 fi 
-find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
-    build-essential cmake git ninja-build pkg-config meson clang \
-    vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
-    btop htop nvtop sysprof pciutils nfs-common openssh-server \
-    libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
-    libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
-    python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
-    php-cli php-xml timeshift libx11-dev libgl-dev steam elfutils \
-    linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) \
-    linux-tools-generic linux-cloud-tools-generic \
-    drm-info 
+if [[ $1 == nopkg ]]; then 
+    echo_in_cyan "Forced to skip installing apt packages"
+else 
+    find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
+        build-essential cmake git ninja-build pkg-config meson clang \
+        vim net-tools mesa-utils vulkan-tools libvulkan-dev screen \
+        btop htop nvtop sysprof pciutils nfs-common openssh-server \
+        libxcb-icccm4 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
+        libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 bsdextrautils \
+        python3-pip python3-pandas cpufrequtils stress-ng glmark2 cifs-utils \
+        php-cli php-xml timeshift libx11-dev libgl-dev steam elfutils \
+        linux-tools-$(uname -r) linux-cloud-tools-$(uname -r) \
+        linux-tools-generic linux-cloud-tools-generic \
+        drm-info 
+fi
 
 # Install flame graph tools
 if [[ -z $(which flamegraph.pl) ]]; then 
