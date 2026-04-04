@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail 
 rm -rf /tmp/cmd 
+source ~/.bashrc_extended
 
 # Installing nvidia drivers on Linux requires to unload all nvidia kernel modules first
 shutdown_graphical_env() {

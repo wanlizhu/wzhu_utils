@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail
 
+source ~/.bashrc_extended
 GRUB_CFG=/boot/grub/grub.cfg
 GRUB_BOOT_ENTRIES=/tmp/grub_boot_entries.cfg
 

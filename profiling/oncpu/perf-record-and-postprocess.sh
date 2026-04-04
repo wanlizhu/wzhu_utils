@@ -2,6 +2,7 @@
 # Called from run-oncpu-profiling.sh in the same dir. Do not run directly.
 # Expects: PID, COMM, RECORD_SECONDS, RECORD_FREQ, UNWIND_METHOD (from run-oncpu-profiling.sh).
 set -o pipefail
+source ~/.bashrc_extended
 
 # Guardian: required variables and values.
 : "${COMM:?perf-record-and-postprocess.sh: COMM must be set (e.g. from run-oncpu-profiling.sh)}"

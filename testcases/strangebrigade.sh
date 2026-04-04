@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -o pipefail
+source ~/.bashrc_extended
 
 _sb_cleanup_sig() {
     echo >&2 "Interrupted; shutting down Steam..."

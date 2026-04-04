@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -o pipefail 
+source ~/.bashrc_extended
 
 if [[ $(login_session_type_seat0) == x11 ]]; then 
     # x11: enable x11vnc 

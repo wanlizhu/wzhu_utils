@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -o pipefail
+source ~/.bashrc_extended
 
 T254_PERFTEST=1
 

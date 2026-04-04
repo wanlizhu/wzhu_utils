@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -o pipefail 
+source ~/.bashrc_extended
 
 if [[ ! -z $(pidof Xorg) ]]; then 
     echo_in_yellow "Found Xorg: $(pidof Xorg)"
