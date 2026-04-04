@@ -32,16 +32,44 @@ except Exception:
 ' $1 $2 
 }
 
-setup_horizon_for_perftest() {
+config_horizon_for_perftest() {
     sandbag_tool_path=$(command -v sandbag-tool)
     LockToRatedTdp_path=$(command -v LockToRatedTdp)
+    perfdebug_path=$(command -v perfdebug)
     [[ ! -e $sandbag_tool_path ]] && { echo_in_red "Failed to find command sandbag-tool which is available under drivers/unix/testutils/sandbag-tool/_out/..."; exit 1; }
     [[ ! -e $LockToRatedTdp_path ]] && { echo_in_red "Failed to find command LockToRatedTdp which is available under drivers/unix/testutils/lock-to-rated-tdp/_out/..."; exit 1; }
+    [[ ! -e $perfdebug_path ]] && { echo_in_red "Failed to find command perfdebug which is available under https://dvstransfer.nvidia.com/dvsshare/dvs-binaries-auto1/SW-apps_Debug_Linux_$(uname -m | sed 's/x86_64/AMD64/g')_Perfdebug/"; exit 1; } 
+    echo "[1] $sandbag_tool_path"
+    echo "[2] $LockToRatedTdp_path"
+    echo "[3] $perfdebug_path"
+    read -p "Press [Enter] to use selected tools: "
 
     if [[ $(uname -m) == aarch64 ]]; then 
         echo_in_cyan "Setting up horizon board for perftest ..."
+        sudo nvidia-smi -pm 1
+        [[ ! -z $(command -v nvidia-persistenced) ]] && sudo nvidia-persistenced
+        sudo `which sandbag-tool` -unsandbag
+        sudo `which LockToRatedTdp` -lock
+        sudo `which perfdebug` --lock_loose  set pstateId P0
+        sudo `which perfdebug` --lock_strict set dramclkkHz  4266000
+        sudo `which perfdebug` --lock_strict set gpcclkkHz   2000000 
+        sudo `which perfdebug` --lock_loose  set xbarclkkHz  1800000 
+        sudo `which perfdebug` --lock_loose  set sysclkkHz   1800000
+        sudo `which perfdebug` --force_regime ffr 
+        sudo `which perfdebug` --getclocks
     else # The x86_64 proxy system (GB203-as-T254)
         echo_in_cyan "Setting up GB203-as-T254 proxy for perftest ..."
+        sudo nvidia-smi -pm 1
+        [[ ! -z $(command -v nvidia-persistenced) ]] && sudo nvidia-persistenced
+        sudo `which sandbag-tool` -unsandbag
+        sudo `which LockToRatedTdp` -lock
+        sudo `which perfdebug` --lock_loose  set pstateId P0
+        sudo `which perfdebug` --lock_strict set dramclkkHz  8000000
+        sudo `which perfdebug` --lock_strict set gpcclkkHz   1875000 
+        sudo `which perfdebug` --lock_loose  set xbarclkkHz  2250000 
+        sudo `which perfdebug` --lock_loose  set sysclkkHz   1695000
+        sudo `which perfdebug` --force_regime ffr 
+        sudo `which perfdebug` --getclocks
     fi 
 }
 
@@ -53,7 +81,7 @@ fi
 
 if [[ -z $1 ]]; then 
     echo_in_cyan "Saving results to ~/microbench_results[.txt|.csv]"
-    [[ $T254_PERFTEST == 1 ]] && setup_horizon_for_perftest || nvidia_smi_max_clocks
+    [[ $T254_PERFTEST == 1 ]] && config_horizon_for_perftest || nvidia_smi_max_clocks
     nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt
     [[ $T254_PERFTEST == 1 ]] || nvidia_smi_max_clocks reset 
 
