@@ -43,22 +43,22 @@ pp() {
     popd
 }
 echo_in_red() {
-    printf '\033[91m%s\033[0m\n' "$*"
+    printf '\e[91m%s\e[0m\n' "$*"
 }
 echo_in_green() {
-    printf '\033[92m%s\033[0m\n' "$*"
+    printf '\e[92m%s\e[0m\n' "$*"
 }
 echo_in_blue() {
-    printf '\033[94m%s\033[0m\n' "$*"
+    printf '\e[94m%s\e[0m\n' "$*"
 }
 echo_in_yellow() {
-    printf '\033[93m%s\033[0m\n' "$*"
+    printf '\e[93m%s\e[0m\n' "$*"
 }
 echo_in_cyan() {
-    printf '\033[96m%s\033[0m\n' "$*"
+    printf '\e[96m%s\e[0m\n' "$*"
 }
 echo_in_magenta() {
-    printf '\033[95m%s\033[0m\n' "$*"
+    printf '\e[95m%s\e[0m\n' "$*"
 }
 reset_gnome_theme() {
     gsettings reset-recursively org.gnome.desktop.interface
