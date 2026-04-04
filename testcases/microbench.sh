@@ -74,6 +74,11 @@ config_horizon_for_perftest() {
         sudo `which perfdebug` --getclocks
         echo "Finished setting up GB203-as-T254 proxy for perftest"
     fi 
+
+    if [[ -z $__GL_DeviceModalityPreference ]]; then 
+        export __GL_DeviceModalityPreference=1
+        echo "export __GL_DeviceModalityPreference=1"
+    fi 
 }
 
 if [[ $1 == "-h" || $1 == "--help" ]]; then 
