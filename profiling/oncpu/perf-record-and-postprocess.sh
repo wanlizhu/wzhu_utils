@@ -20,7 +20,7 @@ sudo rm -rf /tmp/perf.data /tmp/${COMM}_thread*_flamegraph.svg \
   $HOME/system_flamegraph.svg $HOME/${COMM}_flamegraph.svg $HOME/${COMM}_thread*_flamegraph.svg $HOME/${COMM}_flamegraph_tabs.html
 
 # Start sampling
-echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
+echo_in_cyan "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
 sudo perf record $([[ -z $PID ]] && echo "-a" || echo "--pid=$PID") --freq=$RECORD_FREQ -g --call-graph $UNWIND_METHOD -o /tmp/perf.data -- sleep $RECORD_SECONDS
 
 # Post-process perf.data into flame graphs.

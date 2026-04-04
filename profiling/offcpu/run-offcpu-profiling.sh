@@ -19,8 +19,8 @@ while (( $# )); do
  done
 
 if ! sudo -n true 2>/dev/null; then
-    echo "Error: NOPASSWD is NOT enabled for $(id -un)"
-    echo "Aborting"
+    echo_in_red "Error: NOPASSWD is NOT enabled for $(id -un)"
+    echo_in_red "Aborting"
     exit 1
 fi
 
@@ -33,7 +33,7 @@ fi
 
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
-    echo "Wait $WAIT_SECONDS seconds before recording"
+    echo_in_cyan "Wait $WAIT_SECONDS seconds before recording"
     sleep $WAIT_SECONDS
 fi
 
@@ -47,7 +47,7 @@ if [[ ! -z $1 ]]; then
     else
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
-        echo "Launched and detached process $PID"
+        echo_in_green "Launched and detached process $PID"
     fi
 
     # Resolve the command name of the target process.
@@ -56,12 +56,12 @@ if [[ ! -z $1 ]]; then
 
     # Install debug symbol packages for the target process.
     if [[ ! -z $(which find-dbgsym-packages) ]]; then 
-        echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
+        echo_in_cyan "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
         [[ ! -z $(which find-dbgsym-packages) ]] && find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
         [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
     fi 
     if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
-        echo "Installing debug symbols for process $PID..."
+        echo_in_cyan "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
             find_or_install $pkg
         done
@@ -76,7 +76,7 @@ WAKER_PID=
 if [[ $TRACE_WAKERS == true ]]; then
     # Pass PID (main thread) then up to 9 more tids so we catch wakeups for any thread in the process.
     WAKER_TIDS="$PID $(ls /proc/$PID/task 2>/dev/null | grep -v "^${PID}$" | sort -n | head -9 | tr '\n' ' ')"
-    echo "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS seconds -> $HOME/${COMM}_wakers.txt"
+    echo_in_cyan "[Detached] Running waker tracer (bpftrace) for $RECORD_SECONDS seconds -> $HOME/${COMM}_wakers.txt"
     (
         echo "timestamp_sec,waker_pid,waker_comm,waker_tid,woke_tid"
         sudo timeout $RECORD_SECONDS bpftrace "$SCRIPT_DIR/trace-wakers-bpftrace.bt" $WAKER_TIDS 2>>"$HOME/${COMM}_profiling_stderr.log"
@@ -89,7 +89,7 @@ LOCK_PID=
 if [[ $LOCK_CONTENTION == true ]]; then
     if [[ ! -z $(perf lock contention -h 2>&1 | grep "no BUILD_BPF_SKEL") ]]; then
         # perf was built without BPF skeleton; use two-step record then report.
-        echo "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
+        echo_in_cyan "[Detached] Running perf lock record (without BPF) -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
         (
             sudo perf lock record -p $PID -o /tmp/perf_lock_$$.data sleep $RECORD_SECONDS 2>>"$HOME/${COMM}_profiling_stderr.log"
             if [[ -f /tmp/perf_lock_$$.data ]]; then
@@ -101,14 +101,14 @@ if [[ $LOCK_CONTENTION == true ]]; then
         ) &
         LOCK_PID=$!
     else
-        echo "[Detached] Running perf lock contention --use-bpf -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
+        echo_in_cyan "[Detached] Running perf lock contention --use-bpf -p $PID for $RECORD_SECONDS seconds -> $HOME/${COMM}_lock_contention.txt"
         sudo timeout $RECORD_SECONDS perf lock contention --use-bpf -p $PID -a 2>&1 | tee $HOME/${COMM}_lock_contention.txt &
         LOCK_PID=$!
     fi
 fi
 
 # Start sampling (requires a target PID; pass a numeric PID or use steam/command launch above).
-echo "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
+echo_in_cyan "Sampling $COMM ($PID) for $RECORD_SECONDS seconds ..."
 sudo offwaketime-bpfcc -p $PID -f $RECORD_SECONDS >/tmp/offwake.folded || exit 1
 
 # Wait for background jobs (they use the same duration, so they exit on their own).
@@ -169,11 +169,11 @@ if [[ $TRACE_WAKERS == true ]] && [[ -f "$HOME/${COMM}_wakers.txt" ]]; then
             }')
     fi
     if [[ -n "$TOP3" ]]; then
-        echo "Generated $HOME/${COMM}_wakers.txt ($TOP3)"
+        echo_in_green "Generated $HOME/${COMM}_wakers.txt ($TOP3)"
     else
-        echo "Generated $HOME/${COMM}_wakers.txt (no wakeup events captured)"
+        echo_in_green "Generated $HOME/${COMM}_wakers.txt (no wakeup events captured)"
         if [[ -f "$HOME/${COMM}_profiling_stderr.log" ]] && [[ -s "$HOME/${COMM}_profiling_stderr.log" ]]; then
-            echo "  Check for errors: $HOME/${COMM}_profiling_stderr.log"
+            echo_in_red "  Check for errors: $HOME/${COMM}_profiling_stderr.log"
             tail -5 "$HOME/${COMM}_profiling_stderr.log" | sed 's/^/  /'
         fi
     fi
@@ -182,8 +182,8 @@ fi
 # Post-process: show lock contention output
 if [[ $LOCK_CONTENTION == true ]] && [[ -f "$HOME/${COMM}_lock_contention.txt" ]]; then
     if head -1 "$HOME/${COMM}_lock_contention.txt" 2>/dev/null | grep -q "No lock contention"; then
-        echo "Generated $HOME/${COMM}_lock_contention.txt (no lock events; see file for explanation)"
+        echo_in_green "Generated $HOME/${COMM}_lock_contention.txt (no lock events; see file for explanation)"
     else
-        echo "Generated $HOME/${COMM}_lock_contention.txt"
+        echo_in_green "Generated $HOME/${COMM}_lock_contention.txt"
     fi
 fi

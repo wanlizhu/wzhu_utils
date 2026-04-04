@@ -26,8 +26,8 @@ while (( $# )); do
 [[ "$UNWIND_METHOD" == "dwarf" || "$UNWIND_METHOD" == "fp" ]] || { echo "run-oncpu-profiling.sh: UNWIND_METHOD must be 'dwarf' or 'fp'" >&2; exit 1; }
 
 if ! sudo -n true 2>/dev/null; then
-    echo "Error: NOPASSWD is NOT enabled for $(id -un)"
-    echo "Aborting"
+    echo_in_red "Error: NOPASSWD is NOT enabled for $(id -un)"
+    echo_in_red "Aborting"
     exit 1
 fi
 
@@ -48,7 +48,7 @@ echo
 
 # Delay before recording starts.
 if (( WAIT_SECONDS > 0 )); then
-    echo "Wait $WAIT_SECONDS seconds before recording"
+    echo_in_cyan "Wait $WAIT_SECONDS seconds before recording"
     sleep $WAIT_SECONDS
 fi
 
@@ -57,7 +57,7 @@ PID_TO_KILL=
 if [[ ! -z $1 ]]; then
     if [[ $1 =~ ^[0-9]+$ ]]; then
         PID=$1
-        echo "Received PID: $PID"
+        echo_in_cyan "Received PID: $PID"
     elif [[ $1 == steam && ! -z $(pidof steam) ]]; then
         pstree -aspT $(pidof steam)
         read -p "Select steam game PID: " PID
@@ -65,7 +65,7 @@ if [[ ! -z $1 ]]; then
         "$@" >$HOME/profiling-logs.txt 2>&1 &
         PID=$!
         PID_TO_KILL=$PID 
-        echo "Launched and detached process $PID"
+        echo_in_cyan "Launched and detached process $PID"
     fi
 
     # Resolve the command name of the target process.
@@ -75,11 +75,11 @@ if [[ ! -z $1 ]]; then
     # Install debug symbol packages for the target process.
     if [[ $INSTALL_DEBUG_SYMBOL == true && -f $HOME/${COMM}_dbgsym_packages.txt ]]; then
         if [[ ! -z $(which find-dbgsym-packages) ]]; then 
-            echo "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
+            echo_in_cyan "Dumping dbgsym packages to $HOME/${COMM}_dbgsym_packages.txt"
             find-dbgsym-packages $PID 2>/dev/null | tr ' ' '\n' >$HOME/${COMM}_dbgsym_packages.txt
             [[ ! -s $HOME/${COMM}_dbgsym_packages.txt ]] && rm -f $HOME/${COMM}_dbgsym_packages.txt
         fi 
-        echo "Installing debug symbols for process $PID..."
+        echo_in_cyan "Installing debug symbols for process $PID..."
         cat $HOME/${COMM}_dbgsym_packages.txt | while read -r pkg; do
             find_or_install $pkg
         done
@@ -99,5 +99,5 @@ fi
 
 if [[ ! -z $PID_TO_KILL && -d /proc/$PID_TO_KILL ]]; then 
     sudo kill $PID_TO_KILL || sudo kill -9 $PID_TO_KILL
-    echo "Killed $PID_TO_KILL"
+    echo_in_green "Killed $PID_TO_KILL"
 fi 

@@ -109,7 +109,7 @@ PY
 if [[ -e $GRUB_BOOT_ENTRIES ]]; then
     sudo chmod 666 $GRUB_BOOT_ENTRIES
 else
-    echo "Failed to parse $GRUB_CFG"
+    echo_in_red "Failed to parse $GRUB_CFG"
     exit 1
 fi
 
@@ -120,7 +120,7 @@ echo
 read -r -p "Enter entry number to set as default: " selected_index
 
 if [[ ! $selected_index =~ ^[0-9]+$ ]]; then
-    echo "Invalid selection"
+    echo_in_red "Invalid selection"
     exit 1
 fi
 
@@ -128,7 +128,7 @@ selected_title=$(awk -F '\t' -v idx="$selected_index" '$1 == idx {print $2}' $GR
 selected_key=$(awk -F '\t' -v idx="$selected_index" '$1 == idx {print $3}' $GRUB_BOOT_ENTRIES)
 
 if [[ -z $selected_key ]]; then
-    echo "Invalid selection"
+    echo_in_red "Invalid selection"
     exit 1
 fi
 
@@ -142,4 +142,4 @@ sudo grub-set-default "$selected_key"
 sudo update-grub
 
 saved_entry=$(sudo grub-editenv list | awk -F= '/^saved_entry=/{print $2; exit}')
-echo "Saved entry in grubenv: ${saved_entry:-N/A}"
+echo_in_green "Saved entry in grubenv: ${saved_entry:-N/A}"

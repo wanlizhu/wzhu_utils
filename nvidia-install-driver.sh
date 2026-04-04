@@ -20,12 +20,12 @@ shutdown_graphical_env() {
         fi 
         # Check if there is no nvidia module existing 
         if [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]]; then 
-            echo "Failed to unload these modules:"
+            echo_in_red "Failed to unload these modules:"
             lsmod | awk '$1 ~ /^nvidia/ {print $1}'
             return 1
         fi 
     else
-        echo "Found 0 active nvidia kernel module"
+        echo_in_cyan "Found 0 active nvidia kernel module"
     fi 
 
     # Remove existing nvidia modules from initramfs 
@@ -33,13 +33,13 @@ shutdown_graphical_env() {
         kernel_version=${initrd##*/initrd.img-}
         [[ ! -e $initrd ]] && continue
         if ! lsinitramfs $initrd 2>/dev/null | grep -Eq '(^|/)nvidia[^/]*\.ko([.-].*)?$'; then
-            echo "No NVIDIA modules found in initramfs for kernel $kernel_version"
+            echo_in_cyan "No NVIDIA modules found in initramfs for kernel $kernel_version"
             continue
         fi
 
-        echo "Removing NVIDIA modules from /lib/modules/$kernel_version ..."
+        echo_in_cyan "Removing NVIDIA modules from /lib/modules/$kernel_version ..."
         find /lib/modules/$kernel_version -type f | grep -E '/nvidia[^/]*\.ko([.-].*)?$' | while read -r nv_ko_file; do
-            echo rm -f $nv_ko_file 
+            echo "rm -f $nv_ko_file" 
             rm -f $nv_ko_file 
         done
 
@@ -109,7 +109,7 @@ if [[ -f /tmp/cmd ]]; then
 fi 
 
 if [[ $(nvidia-smi) == *"No devices were found"* ]]; then 
-    echo "Reset nvidia gpu device ... [OK]"
+    echo_in_cyan "Reset nvidia gpu device ... [OK]"
     sudo nvidia-smi -r 
     sudo systemctl restart display-manager  
 fi 

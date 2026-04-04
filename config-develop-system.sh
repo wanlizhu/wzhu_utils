@@ -42,6 +42,24 @@ pp() {
     } || git pull
     popd
 }
+echo_in_red() {
+    printf '\033[91m%s\033[0m\n' "$*"
+}
+echo_in_green() {
+    printf '\033[92m%s\033[0m\n' "$*"
+}
+echo_in_blue() {
+    printf '\033[94m%s\033[0m\n' "$*"
+}
+echo_in_yellow() {
+    printf '\033[93m%s\033[0m\n' "$*"
+}
+echo_in_cyan() {
+    printf '\033[96m%s\033[0m\n' "$*"
+}
+echo_in_magenta() {
+    printf '\033[95m%s\033[0m\n' "$*"
+}
 reset_gnome_theme() {
     gsettings reset-recursively org.gnome.desktop.interface
     gsettings reset-recursively org.gnome.desktop.sound 
@@ -50,12 +68,12 @@ reset_gnome_theme() {
 sync_linuxqa_wanliz() {
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/bin ]]; then 
         mkdir -p $HOME/bin
-        echo "/mnt/linuxqa/wanliz/$(uname -m)/bin -> $HOME/"
+        echo_in_cyan "/mnt/linuxqa/wanliz/$(uname -m)/bin -> $HOME/"
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/bin/ $HOME/bin/ 
     fi 
     if [[ -d /mnt/linuxqa/wanliz/$(uname -m)/lib ]]; then 
         mkdir -p $HOME/lib 
-        echo "/mnt/linuxqa/wanliz/$(uname -m)/lib -> $HOME/"
+        echo_in_cyan "/mnt/linuxqa/wanliz/$(uname -m)/lib -> $HOME/"
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
     fi 
 }
@@ -84,20 +102,20 @@ print_nvparams() {
 }
 mount_linuxqa() {
     if [[ -r /proc/sys/kernel/osrelease ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
-        echo "WSL does not support NFS mounting"
+        echo_in_red "WSL does not support NFS mounting"
     else 
         if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-            [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo "Mounted /mnt/linuxqa"
-            [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo "Mounted /mnt/builds"
-            [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo "Mounted /mnt/data"
+            [[ ! -d /mnt/linuxqa/wanliz  ]] && sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa && echo_in_green "Mounted /mnt/linuxqa"
+            [[ ! -d /mnt/builds/release  ]] && sudo mkdir -p /mnt/builds  && sudo mount -t nfs linuxqa:/qa/builds /mnt/builds  && echo_in_green "Mounted /mnt/builds"
+            [[ ! -d /mnt/data/pynv_files ]] && sudo mkdir -p /mnt/data    && sudo mount -t nfs linuxqa:/qa/data   /mnt/data    && echo_in_green "Mounted /mnt/data"
         else
-            echo "NOT inside nvidia domain, skip linuxqa mounting"
+            echo_in_yellow "NOT inside nvidia domain, skip linuxqa mounting"
         fi 
     fi 
 }
 mount_nfs() {
     sudo mkdir -p /mnt/$(basename $1)
-    sudo mount -t nfs $1 /mnt/$(basename $1) && echo "Mounted /mnt/$(basename $1)"
+    sudo mount -t nfs $1 /mnt/$(basename $1) && echo_in_green "Mounted /mnt/$(basename $1)"
 }
 mount_cifs() {
     if [[ "$1" == \\\\* ]]; then 
@@ -111,14 +129,14 @@ mount_cifs() {
     mnt_dir=${share_root/#\/\//\/mnt\/}
     sudo mkdir -p $mnt_dir
     sudo mount -t cifs $share_root $mnt_dir -o username=wanliz,vers=3.0 && {
-        echo "Mounted $mnt_dir" 
+        echo_in_green "Mounted $mnt_dir" 
         [[ -e $mnt_dir/$subpath ]] && echo "$mnt_dir/$subpath"
     }
 }
 system_backup() {
     UUID='0bb172fa-5d90-44ac-b135-52f6520115b1'
     if [[ -z $(sudo blkid -U $UUID) ]]; then 
-        echo "UUID $UUID doesn't exist"
+        echo_in_red "UUID $UUID doesn't exist"
         return 1
     fi 
     sudo blkid -U $UUID
@@ -132,7 +150,8 @@ connect_nvidia_vpn() {
         ./gp_install.sh 
         popd 
     fi 
-    echo "Add Nvidia portal in GUI: nvidia.gpcloudservice.com"
+    echo "Note: Nvidia portal in GUI: nvidia.gpcloudservice.com"
+    read -p "Press [Enter] to connect now: "
     globalprotect connect --portal nvidia.gpcloudservice.com || {
         sudo systemctl restart gpd 
         globalprotect connect --portal nvidia.gpcloudservice.com 
@@ -149,9 +168,27 @@ find_or_install() {
         done
     fi 
 
-    for pkg in "${required_pkgs[@]}"; do 
-        dpkg -s $pkg &>/dev/null && continue 
-        sudo apt install -y $pkg 2>/dev/null 
+    local to_install=0
+    for pkg in "${required_pkgs[@]}"; do
+        dpkg -s "$pkg" &>/dev/null || ((to_install++))
+    done
+
+    local index=0
+    local succeeded_pkgs=()
+    local failed_pkgs=()
+    for pkg in "${required_pkgs[@]}"; do
+        dpkg -s "$pkg" &>/dev/null && continue
+        ((index++))
+        echo_in_cyan "[$index/$to_install] Installing $pkg ..."
+        sudo apt install -y "$pkg" && succeeded_pkgs+=("$pkg") || failed_pkgs+=("$pkg")
+    done
+
+    for pkg in "${succeeded_pkgs[@]}"; do
+        echo_in_green "Installed $pkg"
+    done 
+
+    for pkg in "${failed_pkgs[@]}"; do
+        echo_in_red "Failed to install $pkg"
     done 
 }
 list_login_session() {
@@ -249,6 +286,7 @@ if [[ -d $P4ROOT && ! -f $P4ROOT/.p4ignore ]]; then
     echo "/.p4ignore" >> $P4ROOT/.p4ignore
     echo "/compile_commands.json" >> $P4ROOT/.p4ignore
     echo "/.clangd" >> $P4ROOT/.p4ignore
+    echo_in_green "Generated $P4ROOT/.p4ignore"
 fi 
 
 # Set up kernel params for profiling 
@@ -256,19 +294,23 @@ if [[ ! -f /etc/modprobe.d/nvidia-profiling.conf ]]; then
     echo 'options nvidia NVreg_RegistryDwords="RmProfilerFeature=0x1" NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf >/dev/null
     echo 'options nvidia-drm modeset=1' | sudo tee -a /etc/modprobe.d/nvidia-profiling.conf >/dev/null
     sudo update-initramfs -u -k all 
+    echo_in_green "Generated /etc/modprobe.d/nvidia-profiling.conf"
 fi 
 if [[ ! -f /etc/sysctl.d/99-profiling.conf ]]; then
     echo 'kernel.perf_event_paranoid = 0' | sudo tee /etc/sysctl.d/99-profiling.conf >/dev/null
     echo 'kernel.kptr_restrict = 0' | sudo tee -a /etc/sysctl.d/99-profiling.conf >/dev/null
     sudo sysctl -p /etc/sysctl.d/99-profiling.conf
+    echo_in_green "Generated /etc/sysctl.d/99-profiling.conf"
 fi 
 
 # Install required packages
 if ! dpkg --print-foreign-architectures | grep -qxF i386; then
     sudo dpkg --add-architecture i386
+    echo_in_green "Added architecture i386"
 fi 
 if [[ ! -e /etc/apt/apt.conf.d/99-phased-updates ]]; then 
-    echo 'APT::Get::Always-Include-Phased-Updates "true";' | sudo tee /etc/apt/apt.conf.d/99-phased-updates 
+    echo 'APT::Get::Always-Include-Phased-Updates "true";' | sudo tee /etc/apt/apt.conf.d/99-phased-updates
+    echo_in_green "Generated /etc/apt/apt.conf.d/99-phased-updates" 
 fi 
 if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
     (   echo "Types: deb" 
@@ -277,12 +319,13 @@ if [[ ! -f /etc/apt/sources.list.d/ddebs.sources ]]; then
         echo "Components: main restricted universe multiverse"
         echo "Signed-By: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg"
     ) | sudo tee /etc/apt/sources.list.d/ddebs.sources
-    find_or_install ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
+    sudo apt install -y ubuntu-dbgsym-keyring apt-transport-https ca-certificates apt-file 
 fi 
 if [[ ! -z $(apt list '?upgradable !?phasing' 2>/dev/null) ]]; then 
     sudo apt update  
     sudo apt upgrade -y 
     sudo apt autoremove -y  
+    echo_in_green "Finished updating apt packages"
 fi  
 find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
     build-essential cmake git ninja-build pkg-config meson clang \
@@ -296,18 +339,11 @@ find_or_install debian-goodies libc6-dbg libstdc++6-dbgsym \
     linux-tools-generic linux-cloud-tools-generic \
     drm-info 
 
-# Install debug symbols requirements found in $HOME 
-find . -maxdepth 1 -type f -name '*_dbgsym_packages.txt' -print0 |
-while IFS= read -r -d '' file; do
-    while IFS= read -r pkg; do
-        find_or_install $pkg 
-    done < "$file"
-done
-
 # Install flame graph tools
 if [[ -z $(which flamegraph.pl) ]]; then 
     git clone https://github.com/brendangregg/FlameGraph.git /tmp/fg 
     sudo cp -f /tmp/fg/*.pl /usr/local/bin/
+    echo_in_green "Installed flamegraph.pl into /usr/local/bin/"
 fi 
 
 # Config git env 
@@ -320,6 +356,7 @@ if ! systemctl is-active ssh &>/dev/null || ! systemctl is-enabled ssh &>/dev/nu
     find_or_install openssh-server
     sudo systemctl enable ssh 
     sudo systemctl start ssh
+    echo_in_green "Enabled ssh service"
 fi 
 
 mount_linuxqa

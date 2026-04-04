@@ -75,7 +75,7 @@ run_strangebrigade_benchmark() {
         cat "$benchmark_result_file" | sed '/Frame times (ms):/,$d'
         [[ -d $HOME/screenshots ]] && ls -1 $HOME/screenshots 
     else
-        echo "Error: can't find result file: $benchmark_result_file"
+        echo_in_red "Error: can't find result file: $benchmark_result_file"
     fi 
 
     if [[ -f "${GRAPHICS_CONFIG_FILE}.backup" ]]; then
@@ -85,7 +85,7 @@ run_strangebrigade_benchmark() {
 
 run_kwin_wayland_test() {
     if [[ -z $SSH_CONNECTION ]]; then 
-        echo "Please run this over ssh"; return 1
+        echo_in_red "Please run this over ssh"; return 1
     fi 
     if ! command -v startplasma-wayland >/dev/null; then 
         sudo apt install -y plasma-workspace

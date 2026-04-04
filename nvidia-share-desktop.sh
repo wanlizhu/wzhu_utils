@@ -4,7 +4,7 @@ set -o pipefail
 if [[ $(login_session_type_seat0) == x11 ]]; then 
     # x11: enable x11vnc 
     if ss -ltnp | grep -E "LISTEN.+:5900\b" >/dev/null; then
-        echo "X11 desktop has already shared via x11vnc"
+        echo_in_yellow "X11 desktop has already shared via x11vnc"
     else 
         [[ -z $(which screen) ]] && sudo apt install -y screen 
         [[ -z $(which x11vnc) ]] && sudo apt install -y x11vnc 
@@ -16,19 +16,19 @@ if [[ $(login_session_type_seat0) == x11 ]]; then
 else
     # wayland: enable gnome remote desktop
     if sudo ss -ltnp | grep -qE ':3389\b'; then
-        echo "Wayland desktop has already shared via GNOME RDP"
+        echo_in_yellow "Wayland desktop has already shared via GNOME RDP"
     else 
         exit_on_error=
         if [[ $(cat /sys/module/nvidia_drm/parameters/modeset) != Y ]]; then 
-            echo "Error: can't find required kernel param: nvidia-drm.modeset=1 "
+            echo_in_red "Error: can't find required kernel param: nvidia-drm.modeset=1 "
             exit_on_error=1
         fi 
         if grep -qE '^[[:space:]]*WaylandEnable[[:space:]]*=[[:space:]]*false[[:space:]]*$' /etc/gdm3/custom.conf; then
-            echo "Edit /etc/gdm3/custom.conf to enable wayland first, then restart gdm3"
+            echo_in_red "Edit /etc/gdm3/custom.conf to enable wayland first, then restart gdm3"
             exit_on_error=1
         fi 
         if grep -qE '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*true[[:space:]]*$' /etc/gdm3/custom.conf; then
-            echo "Edit /etc/gdm3/custom.conf to disable automatic login first, then restart gdm3"
+            echo_in_red "Edit /etc/gdm3/custom.conf to disable automatic login first, then restart gdm3"
             exit_on_error=1
         fi 
         if [[ $exit_on_error == 1 ]]; then 
@@ -47,8 +47,8 @@ else
             sudo chmod 0644 $cert_crt
             sudo chown gnome-remote-desktop:gnome-remote-desktop $cert_key $cert_crt
         fi 
-        sudo openssl x509 -in $cert_crt -noout >/dev/null || echo "Bad certificate"
-        sudo openssl pkey -in $cert_key -noout >/dev/null || echo "Bad certificate key"
+        sudo openssl x509 -in $cert_crt -noout >/dev/null || echo_in_red "Bad certificate"
+        sudo openssl pkey -in $cert_key -noout >/dev/null || echo_in_red "Bad certificate key"
         sudo grdctl --system rdp set-tls-key $cert_key
         sudo grdctl --system rdp set-tls-cert $cert_crt
         sudo grdctl --system rdp set-credentials $USER zhujie
@@ -56,10 +56,10 @@ else
         sudo ufw disable || sudo ufw allow 3389/tcp 
         sudo systemctl daemon-reload
         sudo systemctl restart gnome-remote-desktop.service
-        echo "Wait for 3 seconds" && sleep 3
+        echo_in_cyan "Wait for 3 seconds" && sleep 3
         sudo grdctl --system status
         sudo ss -ltnp | grep -E ':3389\b' || {
-            echo "RDP server is not listening on TCP/3389"
+            echo_in_red "RDP server is not listening on TCP/3389"
             sudo systemctl status gnome-remote-desktop.service --no-pager
             sudo journalctl -u gnome-remote-desktop.service -b --no-pager | tail -n 120
         }

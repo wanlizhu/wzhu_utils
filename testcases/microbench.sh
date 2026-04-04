@@ -37,7 +37,7 @@ if [[ $1 == "-h" || $1 == "--help" ]]; then
 fi 
 
 if [[ -z $1 ]]; then 
-    echo "Saving results to ~/microbench_results[.txt|.csv]"
+    echo_in_cyan "Saving results to ~/microbench_results[.txt|.csv]"
     nvidia_smi_max_clocks
     nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt
     nvidia_smi_max_clocks reset 
@@ -45,8 +45,8 @@ if [[ -z $1 ]]; then
     if [[ -s ~/microbench_results.txt ]]; then 
         $0 $(realpath ~/microbench_results.txt) | tee ~/microbench_results.csv
     fi 
-    echo "Generated ~/microbench_results.txt"
-    echo "Generated ~/microbench_results.csv"
+    echo_in_green "Generated ~/microbench_results.txt"
+    echo_in_green "Generated ~/microbench_results.csv"
 else 
     if [[ -z "$2" ]]; then 
         print_microbench_output_as_csv "$1"
