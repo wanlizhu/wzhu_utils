@@ -37,8 +37,22 @@ if [[ $1 == "-h" || $1 == "--help" ]]; then
 fi 
 
 if [[ -z $1 ]]; then 
+    sudo nvidia-smi -pm 1
+    max_gfx_clock=$(nvidia-smi -q -d SUPPORTED_CLOCKS | grep -m1 "Graphics" | grep -oE '[0-9]+' | tail -1)
+    max_mem_clock=$(nvidia-smi -q -d SUPPORTED_CLOCKS | grep -m1 "Memory" | grep -oE '[0-9]+' | tail -1)
+    if (( max_gfx_clock > 1000 && max_mem_clock > 1000 )); then 
+        sudo nvidia-smi -lgc $max_gfx_clock
+        sudo nvidia-smi -lmc $max_mem_clock
+    fi 
+
     echo "Saving results to ~/microbench_results[.txt|.csv]"
     nvperf_vulkan -REST -nullDisplay all | tee ~/microbench_results.txt
+    
+    if (( max_gfx_clock > 1000 && max_mem_clock > 1000 )); then 
+        sudo nvidia-smi --reset-gpu-clocks
+        sudo nvidia-smi --reset-memory-clocks
+    fi 
+
     if [[ -s ~/microbench_results.txt ]]; then 
         $0 $(realpath ~/microbench_results.txt) | tee ~/microbench_results.csv
     fi 
