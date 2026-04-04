@@ -4,8 +4,8 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueuePresentKHR(
     VkQueue queue,
     const VkPresentInfoKHR* presentInfo
 ) {
-    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
-    if (queueDeviceIt == g_queueDeviceMap.end()) {
+    const auto queueDeviceIt = g_queueToDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueToDeviceMap.end()) {
         return VK_ERROR_UNKNOWN;
     }
     
@@ -18,8 +18,8 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit(
     const VkSubmitInfo* submits,
     VkFence fence
 ) {
-    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
-    if (queueDeviceIt == g_queueDeviceMap.end()) {
+    const auto queueDeviceIt = g_queueToDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueToDeviceMap.end()) {
         return VK_ERROR_UNKNOWN;
     }
 
@@ -32,8 +32,8 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueSubmit2(
     const VkSubmitInfo2* submits,
     VkFence fence
 ) {
-    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
-    if (queueDeviceIt == g_queueDeviceMap.end()) {
+    const auto queueDeviceIt = g_queueToDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueToDeviceMap.end()) {
         return VK_ERROR_UNKNOWN;
     }
 
@@ -46,8 +46,8 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueueBindSparse(
     const VkBindSparseInfo* bindInfos,
     VkFence fence
 ) {
-    const auto queueDeviceIt = g_queueDeviceMap.find(queue);
-    if (queueDeviceIt == g_queueDeviceMap.end()) {
+    const auto queueDeviceIt = g_queueToDeviceMap.find(queue);
+    if (queueDeviceIt == g_queueToDeviceMap.end()) {
         return VK_ERROR_UNKNOWN;
     }
 
@@ -63,7 +63,7 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue(
     GET_DEVICE_DISPATCH_TABLE(device, vkGetDeviceQueue)->pfn_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, outQueue);
 
     if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE) {
-        g_queueDeviceMap[*outQueue] = device;
+        g_queueToDeviceMap[*outQueue] = device;
     }
 }
 
@@ -75,7 +75,7 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue2(
     GET_DEVICE_DISPATCH_TABLE(device, vkGetDeviceQueue2)->pfn_vkGetDeviceQueue2(device, queueInfo, outQueue);
 
     if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE) {
-        g_queueDeviceMap[*outQueue] = device;
+        g_queueToDeviceMap[*outQueue] = device;
     }
 }
 

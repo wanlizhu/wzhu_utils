@@ -1,5 +1,46 @@
 #include "hook_instance.h"
 
+#include <mutex>
+
+// GIPA = GetInstanceProcAddr 
+struct WZHU_NextGIPA_Scope {
+    inline static std::mutex s_mutex{};
+    inline static PFN_vkGetInstanceProcAddr s_next = nullptr;
+    PFN_vkGetInstanceProcAddr previous{};
+
+    static PFN_vkGetInstanceProcAddr next() {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        return s_next;
+    }
+
+    WZHU_NextGIPA_Scope(PFN_vkGetInstanceProcAddr next) {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        previous = s_next;
+        s_next = next;
+    }
+
+    ~WZHU_NextGIPA_Scope() {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        s_next = previous;
+    }
+    
+    WZHU_NextGIPA_Scope(const WZHU_NextGIPA_Scope&) = delete;
+    WZHU_NextGIPA_Scope& operator=(const WZHU_NextGIPA_Scope&) = delete;
+};
+
+PFN_vkGetInstanceProcAddr WZHU_getNextGIPA() {
+    return WZHU_NextGIPA_Scope::next();
+}
+
+static VkInstance WZHU_instanceForPhysicalDevice(VkPhysicalDevice physicalDevice) {
+    std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+    const auto it = g_physicalDeviceToInstanceMap.find(physicalDevice);
+    if (it == g_physicalDeviceToInstanceMap.end()) {
+        return VK_NULL_HANDLE;
+    }
+    return it->second;
+}
+
 static const VkLayerInstanceCreateInfo* findLayerInstanceCreateInfo(const VkInstanceCreateInfo* createInfo) {
     for (const VkBaseInStructure* chain = reinterpret_cast<const VkBaseInStructure*>(createInfo->pNext);
         chain != nullptr;
@@ -55,64 +96,129 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
         layerInstanceLink->u.pLayerInfo = layerInstanceLink->u.pLayerInfo->pNext;
     }
 
-    VkResult createResult = pfnNextCreateInstance(createInfo, allocator, outInstance);
-    if (createResult != VK_SUCCESS || outInstance == nullptr || *outInstance == VK_NULL_HANDLE) {
-        return createResult;
-    }
+    {
+        WZHU_NextGIPA_Scope nextGipaScope(pfnNextGetInstanceProcAddr);
+        VkResult createResult = pfnNextCreateInstance(createInfo, allocator, outInstance);
+        if (createResult != VK_SUCCESS || outInstance == nullptr || *outInstance == VK_NULL_HANDLE) {
+            return createResult;
+        }
 
-    // Register the instance before LOAD_INSTANCE_FUNC: pfnNextGetInstanceProcAddr or the loader may
-    // re-enter IMPL_vkGetInstanceProcAddr / surface entry points; GET_INSTANCE_DISPATCH_TABLE and the
-    // tail of IMPL_vkGetInstanceProcAddr require this map entry.
-    auto dispatchTable = std::make_unique<WZHU_InstanceDispatchTable>();
-    dispatchTable->pfn_vkGetInstanceProcAddr = pfnNextGetInstanceProcAddr;
-    g_instanceDispatchTableMap[*outInstance] = std::move(dispatchTable);
-
-    WZHU_InstanceDispatchTable* const dt = g_instanceDispatchTableMap[*outInstance].get();
-    dt->pfn_vkDestroyInstance = LOAD_INSTANCE_FUNC(*outInstance, vkDestroyInstance);
-    dt->pfn_vkCreateDevice = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDevice);
-    dt->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-    dt->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceFormatsKHR);
-    dt->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfacePresentModesKHR);
-    dt->pfn_vkGetPhysicalDeviceSurfaceSupportKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceSupportKHR);
-    dt->pfn_vkCreateDisplayPlaneSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayPlaneSurfaceKHR);
-    dt->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPropertiesKHR);
-    dt->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
-    dt->pfn_vkGetDisplayModePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayModePropertiesKHR);
-    dt->pfn_vkGetDisplayPlaneSupportedDisplaysKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneSupportedDisplaysKHR);
-    dt->pfn_vkGetDisplayPlaneCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneCapabilitiesKHR);
-    dt->pfn_vkCreateDisplayModeKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayModeKHR);
+        // Register the instance before LOAD_INSTANCE_FUNC: pfnNextGetInstanceProcAddr or the loader may
+        // re-enter IMPL_vkGetInstanceProcAddr before the map exists; WZHU_NextGIPA_Scope covers forwarding.
+        auto dispatchTable = std::make_shared<WZHU_InstanceDispatchTable>();
+        dispatchTable->pfn_vkGetInstanceProcAddr = pfnNextGetInstanceProcAddr;
+        WZHU_InstanceDispatchTable* dt = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+            g_instanceToDispatchTableMap[*outInstance] = dispatchTable;
+            dt = g_instanceToDispatchTableMap[*outInstance].get();
+        }
+        dt->canonicalInstance = *outInstance;
+        dt->pfn_vkDestroyInstance = LOAD_INSTANCE_FUNC(*outInstance, vkDestroyInstance);
+        dt->pfn_vkEnumeratePhysicalDevices = LOAD_INSTANCE_FUNC(*outInstance, vkEnumeratePhysicalDevices);
+        dt->pfn_vkCreateDevice = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDevice);
+        dt->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceFormatsKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfacePresentModesKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfaceSupportKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceSupportKHR);
+        dt->pfn_vkCreateDisplayPlaneSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayPlaneSurfaceKHR);
+        dt->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPropertiesKHR);
+        dt->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
+        dt->pfn_vkGetDisplayModePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayModePropertiesKHR);
+        dt->pfn_vkGetDisplayPlaneSupportedDisplaysKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneSupportedDisplaysKHR);
+        dt->pfn_vkGetDisplayPlaneCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneCapabilitiesKHR);
+        dt->pfn_vkCreateDisplayModeKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayModeKHR);
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-    dt->pfn_vkCreateXcbSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXcbSurfaceKHR);
+        dt->pfn_vkCreateXcbSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXcbSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    dt->pfn_vkCreateXlibSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXlibSurfaceKHR);
+        dt->pfn_vkCreateXlibSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXlibSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    dt->pfn_vkCreateWaylandSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWaylandSurfaceKHR);
+        dt->pfn_vkCreateWaylandSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWaylandSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-    dt->pfn_vkCreateWin32SurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWin32SurfaceKHR);
+        dt->pfn_vkCreateWin32SurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWin32SurfaceKHR);
 #endif
 
-    return VK_SUCCESS;
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkEnumeratePhysicalDevices(
+    VkInstance instance,
+    uint32_t* physicalDeviceCount,
+    VkPhysicalDevice* physicalDevices
+) {
+    VkInstance tableKey = instance;
+    {
+        std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+        const auto instIt = g_instanceToDispatchTableMap.find(instance);
+        if (instIt != g_instanceToDispatchTableMap.end() && instIt->second->canonicalInstance != VK_NULL_HANDLE) {
+            tableKey = instIt->second->canonicalInstance;
+        }
+    }
+    const PFN_vkEnumeratePhysicalDevices pfnEnum =
+        GET_INSTANCE_DISPATCH_TABLE(tableKey, vkEnumeratePhysicalDevices)->pfn_vkEnumeratePhysicalDevices;
+    const VkResult result = pfnEnum(instance, physicalDeviceCount, physicalDevices);
+    if (result != VK_SUCCESS) {
+        return result;
+    }
+    if (physicalDevices == nullptr || physicalDeviceCount == nullptr) {
+        return result;
+    }
+    const uint32_t count = *physicalDeviceCount;
+    std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+    for (auto it = g_physicalDeviceToInstanceMap.begin(); it != g_physicalDeviceToInstanceMap.end();) {
+        if (it->second == tableKey) {
+            it = g_physicalDeviceToInstanceMap.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        g_physicalDeviceToInstanceMap[physicalDevices[i]] = tableKey;
+    }
+    return result;
 }
 
 VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyInstance(
     VkInstance instance,
     const VkAllocationCallbacks* allocator
 ) {
-    auto instIt = g_instanceDispatchTableMap.find(instance);
-    if (instIt == g_instanceDispatchTableMap.end()) {
-        return;
+    PFN_vkDestroyInstance pfnDestroy = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+        auto instIt = g_instanceToDispatchTableMap.find(instance);
+        if (instIt == g_instanceToDispatchTableMap.end()) {
+            return;
+        }
+
+        const std::shared_ptr<WZHU_InstanceDispatchTable> table = instIt->second;
+        WZHU_InstanceDispatchTable* dispatchTable = table.get();
+        if (dispatchTable->pfn_vkDestroyInstance == nullptr) {
+            return;
+        }
+
+        pfnDestroy = dispatchTable->pfn_vkDestroyInstance;
+        const VkInstance canonical = dispatchTable->canonicalInstance;
+        for (auto it = g_physicalDeviceToInstanceMap.begin(); it != g_physicalDeviceToInstanceMap.end();) {
+            if (it->second == canonical) {
+                it = g_physicalDeviceToInstanceMap.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = g_instanceToDispatchTableMap.begin(); it != g_instanceToDispatchTableMap.end();) {
+            if (it->second == table) {
+                it = g_instanceToDispatchTableMap.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
-    WZHU_InstanceDispatchTable* dispatchTable = instIt->second.get();
-    if (dispatchTable->pfn_vkDestroyInstance == nullptr) {
-        return;
-    }
-
-    dispatchTable->pfn_vkDestroyInstance(instance, allocator);
-    g_instanceDispatchTableMap.erase(instance);
+    pfnDestroy(instance, allocator);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
@@ -163,7 +269,7 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
     dispatchTable->pfn_vkQueueSubmit2 = LOAD_DEVICE_FUNC(*outDevice, vkQueueSubmit2);
     dispatchTable->pfn_vkQueueBindSparse = LOAD_DEVICE_FUNC(*outDevice, vkQueueBindSparse);
 
-    g_deviceDispatchTableMap[*outDevice] = std::move(dispatchTable);
+    g_deviceToDispatchTableMap[*outDevice] = std::move(dispatchTable);
 
     return VK_SUCCESS;
 }
@@ -172,8 +278,8 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyDevice(
     VkDevice device,
     const VkAllocationCallbacks* allocator
 ) {
-    auto deviceTableIt = g_deviceDispatchTableMap.find(device);
-    if (deviceTableIt == g_deviceDispatchTableMap.end()) {
+    auto deviceTableIt = g_deviceToDispatchTableMap.find(device);
+    if (deviceTableIt == g_deviceToDispatchTableMap.end()) {
         return;
     }
 
@@ -182,27 +288,30 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyDevice(
         return;
     }
 
-    for (auto iter = g_queueDeviceMap.begin(); iter != g_queueDeviceMap.end();) {
+    for (auto iter = g_queueToDeviceMap.begin(); iter != g_queueToDeviceMap.end();) {
         if (iter->second == device) {
-            iter = g_queueDeviceMap.erase(iter);
+            iter = g_queueToDeviceMap.erase(iter);
         } else {
             ++iter;
         }
     }
     
     dispatchTable->pfn_vkDestroyDevice(device, allocator);
-    g_deviceDispatchTableMap.erase(device);
+    g_deviceToDispatchTableMap.erase(device);
 }
 
 
 #ifdef HOOK_VULKAN_SURFACE_API
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     VkSurfaceCapabilitiesKHR* capabilities
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR)->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfaceCapabilitiesKHR)->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         physicalDevice,
         surface,
         capabilities
@@ -210,13 +319,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     uint32_t* formatCount,
     VkSurfaceFormatKHR* formats
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceSurfaceFormatsKHR)->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfaceFormatsKHR)->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR(
         physicalDevice,
         surface,
         formatCount,
@@ -225,13 +337,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     uint32_t* modeCount,
     VkPresentModeKHR* modes
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceSurfacePresentModesKHR)->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfacePresentModesKHR)->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR(
         physicalDevice,
         surface,
         modeCount,
@@ -240,13 +355,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceSupportKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t queueFamilyIndex,
     VkSurfaceKHR surface,
     VkBool32* supported
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceSurfaceSupportKHR)->pfn_vkGetPhysicalDeviceSurfaceSupportKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfaceSupportKHR)->pfn_vkGetPhysicalDeviceSurfaceSupportKHR(
         physicalDevice,
         queueFamilyIndex,
         surface,
@@ -333,12 +451,15 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayPlaneSurfaceKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t* propertyCount,
     VkDisplayPropertiesKHR* properties
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceDisplayPropertiesKHR)->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceDisplayPropertiesKHR)->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR(
         physicalDevice,
         propertyCount,
         properties
@@ -346,12 +467,15 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t* propertyCount,
     VkDisplayPlanePropertiesKHR* properties
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetPhysicalDeviceDisplayPlanePropertiesKHR)->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceDisplayPlanePropertiesKHR)->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
         physicalDevice,
         propertyCount,
         properties
@@ -359,13 +483,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayModePropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayKHR display,
     uint32_t* propertyCount,
     VkDisplayModePropertiesKHR* properties
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetDisplayModePropertiesKHR)->pfn_vkGetDisplayModePropertiesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetDisplayModePropertiesKHR)->pfn_vkGetDisplayModePropertiesKHR(
         physicalDevice,
         display,
         propertyCount,
@@ -374,13 +501,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayModePropertiesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneSupportedDisplaysKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t planeIndex,
     uint32_t* displayCount,
     VkDisplayKHR* displays
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetDisplayPlaneSupportedDisplaysKHR)->pfn_vkGetDisplayPlaneSupportedDisplaysKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetDisplayPlaneSupportedDisplaysKHR)->pfn_vkGetDisplayPlaneSupportedDisplaysKHR(
         physicalDevice,
         planeIndex,
         displayCount,
@@ -389,13 +519,16 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneSupportedDisplaysKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneCapabilitiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayModeKHR mode,
     uint32_t planeIndex,
     VkDisplayPlaneCapabilitiesKHR* capabilities
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkGetDisplayPlaneCapabilitiesKHR)->pfn_vkGetDisplayPlaneCapabilitiesKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetDisplayPlaneCapabilitiesKHR)->pfn_vkGetDisplayPlaneCapabilitiesKHR(
         physicalDevice,
         mode,
         planeIndex,
@@ -404,14 +537,17 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneCapabilitiesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayModeKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayKHR display,
     const VkDisplayModeCreateInfoKHR* createInfo,
     const VkAllocationCallbacks* allocator,
     VkDisplayModeKHR* outMode
 ) {
-    return GET_INSTANCE_DISPATCH_TABLE(instance, vkCreateDisplayModeKHR)->pfn_vkCreateDisplayModeKHR(
+    const VkInstance inst = WZHU_instanceForPhysicalDevice(physicalDevice);
+    if (inst == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return GET_INSTANCE_DISPATCH_TABLE(inst, vkCreateDisplayModeKHR)->pfn_vkCreateDisplayModeKHR(
         physicalDevice,
         display,
         createInfo,

@@ -4,9 +4,10 @@
 #include <memory>
 #include <unordered_map>
 #include <cstring>
-#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #if defined(_WIN32)
 #define WZHU_LAYER_EXPORT __declspec(dllexport)
@@ -22,8 +23,12 @@ inline void __UnusedVariables__(T&&...) {}
 #define HOOK_VULKAN_SWAPCHAIN_API 
 
 struct WZHU_InstanceDispatchTable {
+    // VkInstance returned from pfnNextCreateInstance; use for downstream calls when the loader passes a
+    // different dispatchable handle for the same logical instance.
+    VkInstance canonicalInstance{};
     PFN_vkGetInstanceProcAddr pfn_vkGetInstanceProcAddr{};
     PFN_vkDestroyInstance pfn_vkDestroyInstance{};
+    PFN_vkEnumeratePhysicalDevices pfn_vkEnumeratePhysicalDevices{};
     PFN_vkCreateDevice pfn_vkCreateDevice{};
 
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR{};
@@ -70,9 +75,11 @@ struct WZHU_DeviceDispatchTable {
     PFN_vkQueueBindSparse pfn_vkQueueBindSparse{};
 };
 
-extern std::unordered_map<VkInstance, std::unique_ptr<WZHU_InstanceDispatchTable>> g_instanceDispatchTableMap;
-extern std::unordered_map<VkDevice, std::unique_ptr<WZHU_DeviceDispatchTable>> g_deviceDispatchTableMap;
-extern std::unordered_map<VkQueue, VkDevice> g_queueDeviceMap;
+extern std::mutex g_instanceDispatchTableMutex;
+extern std::unordered_map<VkInstance, std::shared_ptr<WZHU_InstanceDispatchTable>> g_instanceToDispatchTableMap;
+extern std::unordered_map<VkPhysicalDevice, VkInstance> g_physicalDeviceToInstanceMap;
+extern std::unordered_map<VkDevice, std::unique_ptr<WZHU_DeviceDispatchTable>> g_deviceToDispatchTableMap;
+extern std::unordered_map<VkQueue, VkDevice> g_queueToDeviceMap;
 
 inline const char* WZHU_FileName(const char* path) {
     const char* base = path;
@@ -91,9 +98,10 @@ inline WZHU_InstanceDispatchTable* getInstanceDispatchTable(
     const char* file,
     uint32_t line
 ) {
-    const auto instIt = g_instanceDispatchTableMap.find(instance);
-    if (instIt == g_instanceDispatchTableMap.end()) {
-        throw std::runtime_error(std::string("VkInstance has no layer dispatch table (") + WZHU_FileName(file) + ":" + std::to_string(line) + ")");
+    std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
+    const auto instIt = g_instanceToDispatchTableMap.find(instance);
+    if (instIt == g_instanceToDispatchTableMap.end()) {
+        throw std::runtime_error(std::string("VkInstance has no dispatch table (") + WZHU_FileName(file) + ":" + std::to_string(line) + ")");
     }
 
     WZHU_InstanceDispatchTable* dispatchTable = instIt->second.get();
@@ -111,8 +119,8 @@ inline WZHU_DeviceDispatchTable* getDeviceDispatchTable(
     const char* file,
     uint32_t line
 ) {
-    const auto deviceIt = g_deviceDispatchTableMap.find(device);
-    if (deviceIt == g_deviceDispatchTableMap.end()) {
+    const auto deviceIt = g_deviceToDispatchTableMap.find(device);
+    if (deviceIt == g_deviceToDispatchTableMap.end()) {
         throw std::runtime_error(std::string("VkDevice has no dispatch table (") + WZHU_FileName(file) + ":" + std::to_string(line) + ")");
     }
 

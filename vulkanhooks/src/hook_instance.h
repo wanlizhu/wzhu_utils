@@ -1,6 +1,8 @@
 #pragma once
 #include "config.h"
 
+PFN_vkGetInstanceProcAddr WZHU_getNextGIPA();
+
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
     const VkInstanceCreateInfo* createInfo,
     const VkAllocationCallbacks* allocator,
@@ -10,6 +12,12 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
 VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyInstance(
     VkInstance instance,
     const VkAllocationCallbacks* allocator
+);
+
+VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkEnumeratePhysicalDevices(
+    VkInstance instance,
+    uint32_t* physicalDeviceCount,
+    VkPhysicalDevice* physicalDevices
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
@@ -26,14 +34,12 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkDestroyDevice(
 
 #ifdef HOOK_VULKAN_SURFACE_API
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     VkSurfaceCapabilitiesKHR* capabilities
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     uint32_t* formatCount,
@@ -41,7 +47,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceFormatsKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     uint32_t* modeCount,
@@ -49,7 +54,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfacePresentModesKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceSupportKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t queueFamilyIndex,
     VkSurfaceKHR surface,
@@ -100,21 +104,18 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayPlaneSurfaceKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t* propertyCount,
     VkDisplayPropertiesKHR* properties
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t* propertyCount,
     VkDisplayPlanePropertiesKHR* properties
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayModePropertiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayKHR display,
     uint32_t* propertyCount,
@@ -122,7 +123,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayModePropertiesKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneSupportedDisplaysKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     uint32_t planeIndex,
     uint32_t* displayCount,
@@ -130,7 +130,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneSupportedDisplaysKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneCapabilitiesKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayModeKHR mode,
     uint32_t planeIndex,
@@ -138,7 +137,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetDisplayPlaneCapabilitiesKHR(
 );
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayModeKHR(
-    VkInstance instance,
     VkPhysicalDevice physicalDevice,
     VkDisplayKHR display,
     const VkDisplayModeCreateInfoKHR* createInfo,

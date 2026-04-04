@@ -9,6 +9,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     if (name == nullptr) { return nullptr; }
     if (std::strcmp(name, "vkCreateInstance") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateInstance); }
     if (std::strcmp(name, "vkDestroyInstance") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroyInstance); }
+    if (std::strcmp(name, "vkEnumeratePhysicalDevices") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkEnumeratePhysicalDevices); }
     if (std::strcmp(name, "vkCreateDevice") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateDevice); }
     if (std::strcmp(name, "vkDestroyDevice") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkDestroyDevice); }
     if (std::strcmp(name, "vkGetInstanceProcAddr") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkGetInstanceProcAddr); }
@@ -37,12 +38,25 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetInstanceProcAddr(
     if (std::strcmp(name, "vkCreateWin32SurfaceKHR") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkCreateWin32SurfaceKHR); }
 #endif
 
-    auto instIt = g_instanceDispatchTableMap.find(instance);
-    if (instIt == g_instanceDispatchTableMap.end()) {
-        return nullptr;
+    WZHU_InstanceDispatchTable* dispatchTable = nullptr;
+    {
+        std::lock_guard<std::mutex> mapLock(g_instanceDispatchTableMutex);
+        auto instIt = g_instanceToDispatchTableMap.find(instance);
+        if (instIt == g_instanceToDispatchTableMap.end()) {
+            dispatchTable = nullptr;
+        } else {
+            dispatchTable = instIt->second.get();
+        }
     }
 
-    WZHU_InstanceDispatchTable* dispatchTable = instIt->second.get();
+    if (dispatchTable == nullptr) {
+        PFN_vkGetInstanceProcAddr nextGipa = WZHU_getNextGIPA();
+        if (nextGipa != nullptr) {
+            return reinterpret_cast<PFN_vkVoidFunction>(nextGipa(instance, name));
+        }
+        return nullptr;
+    }
+    
     if (dispatchTable->pfn_vkGetInstanceProcAddr == nullptr) {
         return nullptr;
     }
@@ -69,8 +83,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL IMPL_vkGetDeviceProcAddr(
     if (std::strcmp(name, "vkQueueSubmit2") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueueSubmit2); }
     if (std::strcmp(name, "vkQueueBindSparse") == 0) { return reinterpret_cast<PFN_vkVoidFunction>(IMPL_vkQueueBindSparse); }
 
-    auto deviceTableIt = g_deviceDispatchTableMap.find(device);
-    if (deviceTableIt == g_deviceDispatchTableMap.end()) {
+    auto deviceTableIt = g_deviceToDispatchTableMap.find(device);
+    if (deviceTableIt == g_deviceToDispatchTableMap.end()) {
         return nullptr;
     }
     
