@@ -53,16 +53,16 @@ shutdown_graphical_env() {
 run_nvidia_driver_installer() {
     local file=$1 
     local test_pkg=$2
-    [[ $XDG_SESSION_TYPE != tty ]] && return 1
-    [[ -z $file || ! -e $file ]] && return 1
-    [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && return 1
+    [[ $XDG_SESSION_TYPE != tty ]] && { echo_in_red "Must run over SSH"; exit 1; }
+    [[ ! -e $file ]] && { echo_in_red "File doesn't exist: $file"; exit 1; }
+    [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && { lsmod | awk '$1 ~ /^nvidia/ {print $1}'; echo_in_red "Failed to unload nvidia modules"; exit 1; }
     [[ -z $(which expect) ]] && sudo apt install -y expect 
     [[ ! -z $(which nvidia-uninstall) ]] && sudo nvidia-uninstall 
 
     sudo chmod +x $file 2>/dev/null 
     sudo $file --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
         echo_in_green "Installed $file"
-        if [[ ! -z $test_pkg && -e $test_pkg ]]; then 
+        if [[ -e $test_pkg ]]; then 
             sudo rm -rf $HOME/NVIDIA-Linux-$(uname -m)-tests/
             mkdir -p $HOME/NVIDIA-Linux-$(uname -m)-tests
             mkdir -p $HOME/.local/bin
