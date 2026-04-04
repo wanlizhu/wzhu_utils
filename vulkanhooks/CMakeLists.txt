@@ -10,7 +10,8 @@ find_package(Vulkan REQUIRED)
 set(WZHU_VULKAN_INCLUDE "${Vulkan_INCLUDE_DIRS}")
 
 add_library(VkLayer_wzhu_profiling SHARED
-    src/wzhu_layer_entry_points.cpp
+    src/layer_entry_points.cpp
+    src/layer_log.cpp
     src/config.cpp
     src/hook_device.cpp
     src/hook_instance.cpp

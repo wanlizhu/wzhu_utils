@@ -4,10 +4,14 @@
 #include <memory>
 #include <unordered_map>
 #include <cstring>
+#include <string>
 #include <mutex>
 #include <stdexcept>
-#include <string>
 #include <type_traits>
+#include <cstddef>
+#include <cstdarg>
+#include <cstdio>
+#include <vector>
 
 #if defined(_WIN32)
 #define WZHU_LAYER_EXPORT __declspec(dllexport)
@@ -20,7 +24,8 @@ inline void __UnusedVariables__(T&&...) {}
 #define UNUSED_VARS(...) __UnusedVariables__(__VA_ARGS__)
 
 #define HOOK_VULKAN_SURFACE_API
-#define HOOK_VULKAN_SWAPCHAIN_API 
+#define HOOK_VULKAN_SWAPCHAIN_API
+#define DUMP_VULKAN_API 
 
 struct WZHU_InstanceDispatchTable {
     // VkInstance returned from pfnNextCreateInstance; use for downstream calls when the loader passes a
@@ -134,5 +139,7 @@ inline WZHU_DeviceDispatchTable* getDeviceDispatchTable(
 
 #define GET_INSTANCE_DISPATCH_TABLE(instance, symbol) getInstanceDispatchTable((instance), &WZHU_InstanceDispatchTable::pfn_##symbol, __FILE__, __LINE__)
 #define GET_DEVICE_DISPATCH_TABLE(device, symbol) getDeviceDispatchTable((device), &WZHU_DeviceDispatchTable::pfn_##symbol, __FILE__, __LINE__)
-#define LOAD_INSTANCE_FUNC(instance, symbol) reinterpret_cast<PFN_##symbol>(pfnNextGetInstanceProcAddr((instance), #symbol))
-#define LOAD_DEVICE_FUNC(device, symbol) reinterpret_cast<PFN_##symbol>(pfnNextGetDeviceProcAddr((device), #symbol))
+#define LOAD_INSTANCE_FUNC(pfn_loader, instance, symbol) reinterpret_cast<PFN_##symbol>(pfn_loader((instance), #symbol))
+#define LOAD_DEVICE_FUNC(pfn_loader, device, symbol) reinterpret_cast<PFN_##symbol>(pfn_loader((device), #symbol))
+#define WZHU_LOG(...) fprintf(stderr, "[wzhu] " __VA_ARGS__)
+#define VK_ASSERT(result) if (result != VK_SUCCESS) { WZHU_LOG("VkResult: %s\n", WZHU_VkResult(result)); } 

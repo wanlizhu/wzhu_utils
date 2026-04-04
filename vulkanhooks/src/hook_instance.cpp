@@ -1,6 +1,9 @@
 #include "hook_instance.h"
+#include "layer_log.h"
+#include "vulkan/vulkan_core.h"
 
 #include <mutex>
+#include <stdexcept>
 
 // GIPA = GetInstanceProcAddr 
 struct WZHU_NextGIPA_Scope {
@@ -82,12 +85,14 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
 ) {
     const VkLayerInstanceCreateInfo* layerInstanceCreateInfo = findLayerInstanceCreateInfo(createInfo);
     if (layerInstanceCreateInfo == nullptr) {
+        WZHU_LOG("Failed to find VkLayerInstanceCreateInfo from createInfo\n");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    PFN_vkGetInstanceProcAddr pfnNextGetInstanceProcAddr = layerInstanceCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-    PFN_vkCreateInstance pfnNextCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(pfnNextGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance"));
-    if (pfnNextCreateInstance == nullptr) {
+    PFN_vkGetInstanceProcAddr pfn_vkGetInstanceProcAddr = layerInstanceCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+    PFN_vkCreateInstance pfn_vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(pfn_vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance"));
+    if (pfn_vkCreateInstance == nullptr) {
+        WZHU_LOG("Failed to call pfn_vkGetInstanceProcAddr\n");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
@@ -97,16 +102,18 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
     }
 
     {
-        WZHU_NextGIPA_Scope nextGIPAScope(pfnNextGetInstanceProcAddr);
-        VkResult createResult = pfnNextCreateInstance(createInfo, allocator, outInstance);
+        // Lifetime only: ctor/dtor push/pop pfn_vkGetInstanceProcAddr for re-entrant GIPA forwarding.
+        WZHU_NextGIPA_Scope gipaScope(pfn_vkGetInstanceProcAddr);
+        VkResult createResult = pfn_vkCreateInstance(createInfo, allocator, outInstance);
         if (createResult != VK_SUCCESS || outInstance == nullptr || *outInstance == VK_NULL_HANDLE) {
+            WZHU_LOG("Failed to call pfn_vkCreateInstance\n");
             return createResult;
         }
 
-        // Register the instance before LOAD_INSTANCE_FUNC: pfnNextGetInstanceProcAddr or the loader may
+        // Register the instance before LOAD_INSTANCE_FUNC: pfn_vkGetInstanceProcAddr or the loader may
         // re-enter IMPL_vkGetInstanceProcAddr before the map exists; WZHU_NextGIPA_Scope covers forwarding.
         auto dispatchTable = std::make_shared<WZHU_InstanceDispatchTable>();
-        dispatchTable->pfn_vkGetInstanceProcAddr = pfnNextGetInstanceProcAddr;
+        dispatchTable->pfn_vkGetInstanceProcAddr = pfn_vkGetInstanceProcAddr;
         WZHU_InstanceDispatchTable* dt = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
@@ -115,33 +122,34 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
         }
 
         dt->canonicalInstance = *outInstance;
-        dt->pfn_vkDestroyInstance = LOAD_INSTANCE_FUNC(*outInstance, vkDestroyInstance);
-        dt->pfn_vkEnumeratePhysicalDevices = LOAD_INSTANCE_FUNC(*outInstance, vkEnumeratePhysicalDevices);
-        dt->pfn_vkCreateDevice = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDevice);
-        dt->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-        dt->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceFormatsKHR);
-        dt->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfacePresentModesKHR);
-        dt->pfn_vkGetPhysicalDeviceSurfaceSupportKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceSurfaceSupportKHR);
-        dt->pfn_vkCreateDisplayPlaneSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayPlaneSurfaceKHR);
-        dt->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPropertiesKHR);
-        dt->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
-        dt->pfn_vkGetDisplayModePropertiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayModePropertiesKHR);
-        dt->pfn_vkGetDisplayPlaneSupportedDisplaysKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneSupportedDisplaysKHR);
-        dt->pfn_vkGetDisplayPlaneCapabilitiesKHR = LOAD_INSTANCE_FUNC(*outInstance, vkGetDisplayPlaneCapabilitiesKHR);
-        dt->pfn_vkCreateDisplayModeKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateDisplayModeKHR);
+        dt->pfn_vkDestroyInstance = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkDestroyInstance);
+        dt->pfn_vkEnumeratePhysicalDevices = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkEnumeratePhysicalDevices);
+        dt->pfn_vkCreateDevice = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateDevice);
+        dt->pfn_vkGetPhysicalDeviceSurfaceCapabilitiesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfaceFormatsKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceSurfaceFormatsKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfacePresentModesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceSurfacePresentModesKHR);
+        dt->pfn_vkGetPhysicalDeviceSurfaceSupportKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceSurfaceSupportKHR);
+        dt->pfn_vkCreateDisplayPlaneSurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateDisplayPlaneSurfaceKHR);
+        dt->pfn_vkGetPhysicalDeviceDisplayPropertiesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceDisplayPropertiesKHR);
+        dt->pfn_vkGetPhysicalDeviceDisplayPlanePropertiesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetPhysicalDeviceDisplayPlanePropertiesKHR);
+        dt->pfn_vkGetDisplayModePropertiesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetDisplayModePropertiesKHR);
+        dt->pfn_vkGetDisplayPlaneSupportedDisplaysKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetDisplayPlaneSupportedDisplaysKHR);
+        dt->pfn_vkGetDisplayPlaneCapabilitiesKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkGetDisplayPlaneCapabilitiesKHR);
+        dt->pfn_vkCreateDisplayModeKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateDisplayModeKHR);
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-        dt->pfn_vkCreateXcbSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXcbSurfaceKHR);
+        dt->pfn_vkCreateXcbSurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateXcbSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-        dt->pfn_vkCreateXlibSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateXlibSurfaceKHR);
+        dt->pfn_vkCreateXlibSurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateXlibSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-        dt->pfn_vkCreateWaylandSurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWaylandSurfaceKHR);
+        dt->pfn_vkCreateWaylandSurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateWaylandSurfaceKHR);
 #endif
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-        dt->pfn_vkCreateWin32SurfaceKHR = LOAD_INSTANCE_FUNC(*outInstance, vkCreateWin32SurfaceKHR);
+        dt->pfn_vkCreateWin32SurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateWin32SurfaceKHR);
 #endif
 
+        WZHU_LOG("Created vulkan instance %p\n", *outInstance);
         return VK_SUCCESS;
     }
 }
@@ -160,13 +168,13 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkEnumeratePhysicalDevices(
         }
     }
 
-    PFN_vkEnumeratePhysicalDevices pfn_vkEnumeratePhysicalDevices = GET_INSTANCE_DISPATCH_TABLE(tableKey, vkEnumeratePhysicalDevices)->pfn_vkEnumeratePhysicalDevices;
+    WZHU_InstanceDispatchTable* instDispatch = GET_INSTANCE_DISPATCH_TABLE(tableKey, vkEnumeratePhysicalDevices);
+    PFN_vkEnumeratePhysicalDevices pfn_vkEnumeratePhysicalDevices = instDispatch->pfn_vkEnumeratePhysicalDevices;
     VkResult result = pfn_vkEnumeratePhysicalDevices(instance, physicalDeviceCount, physicalDevices);
-    if (result != VK_SUCCESS || physicalDevices == nullptr || physicalDeviceCount == nullptr) {
+    if (result != VK_SUCCESS || physicalDeviceCount == nullptr || physicalDevices == nullptr) {
         return result;
     }
 
-    uint32_t count = *physicalDeviceCount;
     std::lock_guard<std::mutex> lock(g_instanceDispatchTableMutex);
     for (auto it = g_physicalDeviceToInstanceMap.begin(); it != g_physicalDeviceToInstanceMap.end();) {
         if (it->second == tableKey) {
@@ -176,7 +184,7 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkEnumeratePhysicalDevices(
         }
     }
 
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < *physicalDeviceCount; ++i) {
         g_physicalDeviceToInstanceMap[physicalDevices[i]] = tableKey;
     }
 
@@ -229,17 +237,23 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
     VkDevice* outDevice
 ) {
     const VkLayerDeviceCreateInfo* layerDeviceCreateInfo = findLayerDeviceCreateInfo(createInfo);
-    if (layerDeviceCreateInfo == nullptr || 
+    if (layerDeviceCreateInfo == nullptr ||
         layerDeviceCreateInfo->function != VK_LAYER_LINK_INFO ||
         layerDeviceCreateInfo->u.pLayerInfo == nullptr
     ) {
+        WZHU_LOG("Failed to create logical device\n");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    PFN_vkGetInstanceProcAddr pfnNextGetInstanceProcAddr = layerDeviceCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-    PFN_vkGetDeviceProcAddr pfnNextGetDeviceProcAddr = layerDeviceCreateInfo->u.pLayerInfo->pfnNextGetDeviceProcAddr;
-    PFN_vkCreateDevice pfnNextCreateDevice = reinterpret_cast<PFN_vkCreateDevice>(pfnNextGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateDevice"));
-    if (pfnNextCreateDevice == nullptr) {
+    PFN_vkGetInstanceProcAddr pfn_vkGetInstanceProcAddr = layerDeviceCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+    PFN_vkGetDeviceProcAddr pfn_vkGetDeviceProcAddr = layerDeviceCreateInfo->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+    if (pfn_vkGetDeviceProcAddr == nullptr) {
+        WZHU_LOG("pfn_vkGetDeviceProcAddr is null\n");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    PFN_vkCreateDevice pfn_vkCreateDevice = reinterpret_cast<PFN_vkCreateDevice>(pfn_vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateDevice"));
+    if (pfn_vkCreateDevice == nullptr) {
+        WZHU_LOG("Failed to call pfn_vkCreateDevice\n");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
@@ -248,29 +262,33 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
         layerDeviceLink->u.pLayerInfo = layerDeviceLink->u.pLayerInfo->pNext;
     }
 
-    VkResult createResult = pfnNextCreateDevice(physicalDevice, createInfo, allocator, outDevice);
+    VkResult createResult = pfn_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice);
     if (createResult != VK_SUCCESS || outDevice == nullptr || *outDevice == VK_NULL_HANDLE) {
+        WZHU_LOG("Failed to create logical device\n");
         return createResult;
     }
 
+    PFN_vkGetDeviceProcAddr deviceProcLoader = pfn_vkGetDeviceProcAddr;
+
     auto dispatchTable = std::make_unique<WZHU_DeviceDispatchTable>();
-    dispatchTable->pfn_vkGetDeviceProcAddr = pfnNextGetDeviceProcAddr;
+    dispatchTable->pfn_vkGetDeviceProcAddr = deviceProcLoader;
     dispatchTable->device = *outDevice;
     dispatchTable->physicalDevice = physicalDevice;
-    dispatchTable->pfn_vkDestroyDevice = LOAD_DEVICE_FUNC(*outDevice, vkDestroyDevice);
-    dispatchTable->pfn_vkGetDeviceQueue = LOAD_DEVICE_FUNC(*outDevice, vkGetDeviceQueue);
-    dispatchTable->pfn_vkGetDeviceQueue2 = LOAD_DEVICE_FUNC(*outDevice, vkGetDeviceQueue2);
-    dispatchTable->pfn_vkCreateSwapchainKHR = LOAD_DEVICE_FUNC(*outDevice, vkCreateSwapchainKHR);
-    dispatchTable->pfn_vkDestroySwapchainKHR = LOAD_DEVICE_FUNC(*outDevice, vkDestroySwapchainKHR);
-    dispatchTable->pfn_vkGetSwapchainImagesKHR = LOAD_DEVICE_FUNC(*outDevice, vkGetSwapchainImagesKHR);
-    dispatchTable->pfn_vkAcquireNextImageKHR = LOAD_DEVICE_FUNC(*outDevice, vkAcquireNextImageKHR);
-    dispatchTable->pfn_vkAcquireNextImage2KHR = LOAD_DEVICE_FUNC(*outDevice, vkAcquireNextImage2KHR);
-    dispatchTable->pfn_vkQueuePresentKHR = LOAD_DEVICE_FUNC(*outDevice, vkQueuePresentKHR);
-    dispatchTable->pfn_vkQueueSubmit = LOAD_DEVICE_FUNC(*outDevice, vkQueueSubmit);
-    dispatchTable->pfn_vkQueueSubmit2 = LOAD_DEVICE_FUNC(*outDevice, vkQueueSubmit2);
-    dispatchTable->pfn_vkQueueBindSparse = LOAD_DEVICE_FUNC(*outDevice, vkQueueBindSparse);
+    dispatchTable->pfn_vkDestroyDevice = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkDestroyDevice);
+    dispatchTable->pfn_vkGetDeviceQueue = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkGetDeviceQueue);
+    dispatchTable->pfn_vkGetDeviceQueue2 = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkGetDeviceQueue2);
+    dispatchTable->pfn_vkCreateSwapchainKHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkCreateSwapchainKHR);
+    dispatchTable->pfn_vkDestroySwapchainKHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkDestroySwapchainKHR);
+    dispatchTable->pfn_vkGetSwapchainImagesKHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkGetSwapchainImagesKHR);
+    dispatchTable->pfn_vkAcquireNextImageKHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkAcquireNextImageKHR);
+    dispatchTable->pfn_vkAcquireNextImage2KHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkAcquireNextImage2KHR);
+    dispatchTable->pfn_vkQueuePresentKHR = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkQueuePresentKHR);
+    dispatchTable->pfn_vkQueueSubmit = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkQueueSubmit);
+    dispatchTable->pfn_vkQueueSubmit2 = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkQueueSubmit2);
+    dispatchTable->pfn_vkQueueBindSparse = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkQueueBindSparse);
 
     g_deviceToDispatchTableMap[*outDevice] = std::move(dispatchTable);
+    WZHU_LOG("Created logical device %p\n", *outDevice);
 
     return VK_SUCCESS;
 }
@@ -370,9 +388,9 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceSupportKHR(
     }
 
     return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfaceSupportKHR)->pfn_vkGetPhysicalDeviceSurfaceSupportKHR(
-        physicalDevice,
-        queueFamilyIndex,
-        surface,
+        physicalDevice, 
+        queueFamilyIndex, 
+        surface, 
         supported
     );
 }
@@ -557,7 +575,7 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDisplayModeKHR(
     if (inst == VK_NULL_HANDLE) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    
+
     return GET_INSTANCE_DISPATCH_TABLE(inst, vkCreateDisplayModeKHR)->pfn_vkCreateDisplayModeKHR(
         physicalDevice,
         display,

@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+
+I prefer not to use const variables whenever it's possible.
+for variables of function pointer type if the function pointer is defined with PFN_ prefix, define the variable using the same name with PFN_ replaced with pfn_
+never define any namespace (both named and anonymous namespaces) unless you're explicitly asked to do so
+if you need to include any system headers or local/thirdparty headers, you must add includes in config.h which must be directly or indirectly included by the current source file

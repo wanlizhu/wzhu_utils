@@ -1,4 +1,5 @@
 #include "hook_device.h"
+#include "layer_log.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkQueuePresentKHR(
     VkQueue queue,
@@ -74,7 +75,7 @@ VKAPI_ATTR void VKAPI_CALL IMPL_vkGetDeviceQueue2(
 ) {
     GET_DEVICE_DISPATCH_TABLE(device, vkGetDeviceQueue2)->pfn_vkGetDeviceQueue2(device, queueInfo, outQueue);
 
-    if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE) {
+    if (outQueue != nullptr && *outQueue != VK_NULL_HANDLE && queueInfo != nullptr) {
         g_queueToDeviceMap[*outQueue] = device;
     }
 }

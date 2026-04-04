@@ -1,5 +1,6 @@
 #pragma once
 #include "config.h"
+#include "layer_log.h"
 
 PFN_vkGetInstanceProcAddr WZHU_getNextGIPA();
 
