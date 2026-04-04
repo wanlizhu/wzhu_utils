@@ -59,6 +59,20 @@ sync_linuxqa_wanliz() {
         rsync -ah --info=progress2 /mnt/linuxqa/wanliz/$(uname -m)/lib/ $HOME/lib/
     fi 
 }
+nvidia_smi_max_clocks() {
+    if [[ "$1" == reset ]]; then 
+        sudo nvidia-smi --reset-gpu-clocks
+        sudo nvidia-smi --reset-memory-clocks
+    else 
+        max_gfx_clock=$(nvidia-smi -q -d SUPPORTED_CLOCKS | grep -m1 "Graphics" | grep -oE '[0-9]+' | tail -1)
+        max_mem_clock=$(nvidia-smi -q -d SUPPORTED_CLOCKS | grep -m1 "Memory" | grep -oE '[0-9]+' | tail -1)
+        if (( max_gfx_clock > 1000 && max_mem_clock > 1000 )); then 
+            sudo nvidia-smi -pm 1
+            sudo nvidia-smi -lgc $max_gfx_clock
+            sudo nvidia-smi -lmc $max_mem_clock
+        fi 
+    fi 
+}
 print_nvparams() {
     find /etc/modprobe.d -type f -name '*.conf' -print0 |
     xargs -0 awk '
