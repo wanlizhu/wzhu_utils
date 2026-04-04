@@ -13,6 +13,7 @@ add_library(VkLayer_wzhu_profiling SHARED
     src/layer_entry_points.cpp
     src/layer_log.cpp
     src/config.cpp
+    src/dump_hooked_api.cpp
     src/hook_device.cpp
     src/hook_instance.cpp
     src/hook_dispatch.cpp

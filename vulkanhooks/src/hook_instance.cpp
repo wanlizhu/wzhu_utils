@@ -1,4 +1,5 @@
 #include "hook_instance.h"
+#include "dump_hooked_api.h"
 #include "layer_log.h"
 #include "vulkan/vulkan_core.h"
 
@@ -110,6 +111,11 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
             return createResult;
         }
 
+        WZHU_dump_vkCreateInstance(createInfo, allocator, outInstance);
+#ifndef DUMP_HOOKED_API
+        WZHU_LOG("Created vulkan instance %p\n", *outInstance);
+#endif 
+
         // Register the instance before LOAD_INSTANCE_FUNC: pfn_vkGetInstanceProcAddr or the loader may
         // re-enter IMPL_vkGetInstanceProcAddr before the map exists; WZHU_NextGIPA_Scope covers forwarding.
         auto dispatchTable = std::make_shared<WZHU_InstanceDispatchTable>();
@@ -149,7 +155,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateInstance(
         dt->pfn_vkCreateWin32SurfaceKHR = LOAD_INSTANCE_FUNC(pfn_vkGetInstanceProcAddr, *outInstance, vkCreateWin32SurfaceKHR);
 #endif
 
-        WZHU_LOG("Created vulkan instance %p\n", *outInstance);
         return VK_SUCCESS;
     }
 }
@@ -268,6 +273,11 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
         return createResult;
     }
 
+    WZHU_dump_vkCreateDevice(physicalDevice, createInfo, allocator, outDevice);
+#ifndef DUMP_HOOKED_API
+    WZHU_LOG("Created logical device %p\n", *outDevice);
+#endif 
+
     PFN_vkGetDeviceProcAddr deviceProcLoader = pfn_vkGetDeviceProcAddr;
 
     auto dispatchTable = std::make_unique<WZHU_DeviceDispatchTable>();
@@ -288,7 +298,6 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkCreateDevice(
     dispatchTable->pfn_vkQueueBindSparse = LOAD_DEVICE_FUNC(deviceProcLoader, *outDevice, vkQueueBindSparse);
 
     g_deviceToDispatchTableMap[*outDevice] = std::move(dispatchTable);
-    WZHU_LOG("Created logical device %p\n", *outDevice);
 
     return VK_SUCCESS;
 }
@@ -388,9 +397,9 @@ VKAPI_ATTR VkResult VKAPI_CALL IMPL_vkGetPhysicalDeviceSurfaceSupportKHR(
     }
 
     return GET_INSTANCE_DISPATCH_TABLE(inst, vkGetPhysicalDeviceSurfaceSupportKHR)->pfn_vkGetPhysicalDeviceSurfaceSupportKHR(
-        physicalDevice, 
-        queueFamilyIndex, 
-        surface, 
+        physicalDevice,
+        queueFamilyIndex,
+        surface,
         supported
     );
 }

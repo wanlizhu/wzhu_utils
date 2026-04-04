@@ -25,7 +25,7 @@ inline void __UnusedVariables__(T&&...) {}
 
 #define HOOK_VULKAN_SURFACE_API
 #define HOOK_VULKAN_SWAPCHAIN_API
-#define DUMP_VULKAN_API 
+#define DUMP_HOOKED_API
 
 struct WZHU_InstanceDispatchTable {
     // VkInstance returned from pfnNextCreateInstance; use for downstream calls when the loader passes a

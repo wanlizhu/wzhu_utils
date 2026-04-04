@@ -13,6 +13,7 @@ struct WZHU_LogTree {
     void push();
     void pop();
     void print(const char* fmt, ...);
+    void printStringList(const char* name, const char* const* strs, uint32_t count);
 
 private:
     int m_indent = 0;

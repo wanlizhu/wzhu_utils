@@ -126,3 +126,19 @@ void WZHU_LogTree::print(const char* fmt, ...) {
     vfprintf(stderr, fmt, args);
     va_end(args);
 }
+
+void WZHU_LogTree::printStringList(const char* name, const char* const* strs, uint32_t count) {
+    fprintf(stderr, "[wzhu] ");
+    for (int i = 0; i < m_indent; ++i) {
+        fputc(' ', stderr);
+    }
+
+    fprintf(stderr, "%s = [", name ? name : "NO_NAME");
+    if (count >= 1) {
+        fprintf(stderr, "%s", strs[0] ? strs[0] : "NULL");
+    }
+    for (uint32_t i = 1; i < count; i++) {
+        fprintf(stderr, ", %s", strs[i] ? strs[i] : "NULL");
+    }
+    fprintf(stderr, "]\n");
+}
