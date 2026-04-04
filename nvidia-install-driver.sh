@@ -53,6 +53,9 @@ shutdown_graphical_env() {
 run_nvidia_driver_installer() {
     local file=$1 
     local test_pkg=$2
+    echo 
+    echo "$file"
+    [[ -e $test_pkg ]] && echo "$test_pkg"
     echo_in_yellow "Must run over SSH connection!"
     read -p "Press [Enter] to continue: "
     [[ ! -e $file ]] && { echo_in_red "File doesn't exist: $file"; exit 1; }
