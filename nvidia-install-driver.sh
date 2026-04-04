@@ -51,6 +51,7 @@ shutdown_graphical_env() {
 # Launch a text-based ui for interactive installation 
 install_local_file() {
     local file=$1 
+    local test_pkg=$2
     [[ $XDG_SESSION_TYPE != tty ]] && return 1
     [[ -z $file || ! -e $file ]] && return 1
     [[ ! -z $(lsmod | awk '$1 ~ /^nvidia/ {print $1}') ]] && return 1
@@ -59,10 +60,22 @@ install_local_file() {
 
     sudo chmod +x $file 2>/dev/null 
     sudo $file --accept-license --disable-nouveau --no-cc-version-check --install-libglvnd && {
-        # On success, restore the windowing system 
+        echo_in_green "Installed $file"
+        if [[ ! -z $test_pkg && -e $test_pkg ]]; then 
+            sudo rm -rf $HOME/NVIDIA-Linux-$(uname -m)-tests/
+            mkdir -p $HOME/NVIDIA-Linux-$(uname -m)-tests
+            mkdir -p $HOME/.local/bin
+            cd $HOME/NVIDIA-Linux-$(uname -m)-tests
+            tar -xf $test_pkg || echo_in_red "Failed to unzip $test_pkg"
+            cd tests-Linux-$(uname -m) && {
+                cp LockToRatedTdp/LockToRatedTdp $HOME/.local/bin/ && echo_in_green "Installed LockToRatedTdp"
+                cp sanbag-tool/sandbag-tool $HOME/.local/bin/ && echo_in_green "Installed sandbag-tool"
+            }
+        fi 
         sudo nvidia-smi -pm 1 
         sudo systemctl isolate graphical
     } || {
+        echo_in_red "Failed to install $file"
         cat <<'EOF'
 =================================================
 # Fix 1: remove old nvidia kernels from initramfs 
@@ -83,24 +96,7 @@ EOF
 # If $1 is an existing file path 
 if [[ -z $1 || -f $1 ]]; then 
     shutdown_graphical_env || exit 1
-    install_local_file $(realpath $1)
-else 
-    # Fallback to call nvtest script 
-    # [required] Must be inside nvidia domain 
-    if ! ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-        read -p "Reconnect to nvidia vpn? [Y/n]: " recon
-        [[ -z $recon || $recon == y ]] && nvidia-vpn.sh
-    fi
-    if ping -c 1 -W 1 linuxqa >/dev/null 2>&1; then
-        # [required] Must have /mnt/linuxqa mounted 
-        if [[ ! -d /mnt/linuxqa/wanliz ]]; then 
-            sudo mkdir -p /mnt/linuxqa && sudo mount -t nfs linuxqa:/qa/people /mnt/linuxqa
-        fi 
-        if [[ -d /mnt/linuxqa/wanliz ]]; then 
-            shutdown_graphical_env || exit 1
-            sudo -iu root -- bash -lc '[[ ! -d /root/nvt ]] && /mnt/linuxqa/nvt.sh sync; /mnt/linuxqa/nvt.sh drivers "$@"' /usr/bin/bash "$@"
-        fi 
-    fi 
+    install_local_file $1 $2 
 fi 
 
 if [[ -f /tmp/cmd ]]; then 
