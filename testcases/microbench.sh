@@ -49,15 +49,16 @@ config_horizon_for_perftest() {
         echo_in_cyan "Setting up horizon board for perftest ..."
         sudo nvidia-smi -pm 1
         [[ ! -z $(command -v nvidia-persistenced) ]] && sudo nvidia-persistenced
-        sudo `which sandbag-tool` -unsandbag
+        sudo `which sandbag-tool` -unsandbag 
         sudo `which LockToRatedTdp` -lock
-        sudo `which perfdebug` --lock_loose  set pstateId P0
+        sudo `which perfdebug` --lock_loose  set pstateId P0 
         sudo `which perfdebug` --lock_strict set dramclkkHz  4266000
         sudo `which perfdebug` --lock_strict set gpcclkkHz   2000000 
         sudo `which perfdebug` --lock_loose  set xbarclkkHz  1800000 
         sudo `which perfdebug` --lock_loose  set sysclkkHz   1800000
         sudo `which perfdebug` --force_regime ffr 
         sudo `which perfdebug` --getclocks
+        echo "Finished setting up horizon board for perftest"
     else # The x86_64 proxy system (GB203-as-T254)
         echo_in_cyan "Setting up GB203-as-T254 proxy for perftest ..."
         sudo nvidia-smi -pm 1
@@ -71,6 +72,7 @@ config_horizon_for_perftest() {
         sudo `which perfdebug` --lock_loose  set sysclkkHz   1695000
         sudo `which perfdebug` --force_regime ffr 
         sudo `which perfdebug` --getclocks
+        echo "Finished setting up GB203-as-T254 proxy for perftest"
     fi 
 }
 
