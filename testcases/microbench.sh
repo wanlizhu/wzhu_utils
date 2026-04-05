@@ -27,7 +27,7 @@ try:
     a = Decimal(sys.argv[1])
     b = Decimal(sys.argv[2])
     result = a / b
-    print(f"{result}")
+    print(f"{result:.4f}")
 except Exception:
     print("N/A")
 ' $1 $2 
