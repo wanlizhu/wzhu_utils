@@ -101,8 +101,8 @@ else
     if [[ -z "$2" ]]; then 
         print_microbench_output_as_csv "$1"
     else 
-        print_microbench_output_as_csv "$1" >/tmp/csv1
-        print_microbench_output_as_csv "$2" >/tmp/csv2
+        [[ $1 == *".csv" ]] && cp $1 /tmp/csv1 || print_microbench_output_as_csv "$1" >/tmp/csv1
+        [[ $2 == *".csv" ]] && cp $2 /tmp/csv2 || print_microbench_output_as_csv "$2" >/tmp/csv2
         echo "Test case,numeric1,numeric2,numeric2/numeric1,unit"
         while IFS= read -r line2; do 
             [[ $line2 == "Test case"* ]] && continue 
